@@ -332,6 +332,377 @@ class SyncAcceptanceMixin:
         finally:
             db.close()
 
+    def test_sync_push_handles_category_dependency_when_budget_precedes_category(self):
+        from app.db import SessionLocal
+        from app.models import Budget, Category, User
+
+        self._prepare_sync_fixtures()
+        budget_id = "sync-budget-dependency-001"
+        category_id = "new-budget-category"
+        operations = [
+            {
+                "client_op_id": "budget-op-001",
+                "entity": "budgets",
+                "entity_id": budget_id,
+                "type": "upsert",
+                "payload": {
+                    "id": budget_id,
+                    "month": "2026-09",
+                    "category_id": category_id,
+                    "limit": 500,
+                },
+            },
+            {
+                "client_op_id": "budget-category-op-001",
+                "entity": "categories",
+                "entity_id": category_id,
+                "type": "upsert",
+                "payload": {
+                    "id": category_id,
+                    "name": "测试预算分类",
+                    "kind": "expense",
+                },
+            },
+        ]
+
+        db = SessionLocal()
+        try:
+            owner = db.query(User).filter(User.username == "sync-acceptance-owner").one()
+            self.assertIsNone(db.get(Category, category_id))
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": operations}
+        )
+
+        db = SessionLocal()
+        try:
+            category_rows = (
+                db.query(Category)
+                .filter(Category.user_id == owner.id, Category.id == category_id)
+                .all()
+            )
+            budget_rows = (
+                db.query(Budget)
+                .filter(Budget.user_id == owner.id, Budget.id == budget_id)
+                .all()
+            )
+        finally:
+            db.close()
+
+        actual = (
+            f"HTTP status={response.status_code}; body={response.text}; "
+            f"category_rows={len(category_rows)}; budget_rows={len(budget_rows)}"
+        )
+        self.assertEqual(response.status_code, 200, actual)
+        self.assertEqual(
+            [item["client_op_id"] for item in response.json()["accepted"]],
+            ["budget-op-001", "budget-category-op-001"],
+            actual,
+        )
+        self.assertEqual(len(category_rows), 1, actual)
+        self.assertEqual(len(budget_rows), 1, actual)
+        self.assertEqual(budget_rows[0].category_id, category_id, actual)
+
+    def test_sync_rejects_budget_with_truly_missing_category(self):
+        from app.db import SessionLocal
+        from app.models import Budget, Category, User
+
+        self._prepare_sync_fixtures()
+        budget_id = "sync-missing-budget-category-001"
+        category_id = "missing-budget-category"
+        operation = {
+            "client_op_id": "missing-budget-category-op-001",
+            "entity": "budgets",
+            "entity_id": budget_id,
+            "type": "upsert",
+            "payload": {
+                "id": budget_id,
+                "month": "2026-09",
+                "category_id": category_id,
+                "limit": 500,
+            },
+        }
+
+        db = SessionLocal()
+        try:
+            owner = db.query(User).filter(User.username == "sync-acceptance-owner").one()
+            self.assertIsNone(db.get(Category, category_id))
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [operation]}
+        )
+
+        db = SessionLocal()
+        try:
+            category_rows = (
+                db.query(Category)
+                .filter(Category.user_id == owner.id, Category.id == category_id)
+                .all()
+            )
+            budget_rows = (
+                db.query(Budget)
+                .filter(Budget.user_id == owner.id, Budget.id == budget_id)
+                .all()
+            )
+        finally:
+            db.close()
+
+        actual = (
+            f"HTTP status={response.status_code}; body={response.text}; "
+            f"category_rows={len(category_rows)}; budget_rows={len(budget_rows)}"
+        )
+        self.assertGreaterEqual(response.status_code, 400, actual)
+        self.assertLess(response.status_code, 500, actual)
+        self.assertEqual(category_rows, [], actual)
+        self.assertEqual(budget_rows, [], actual)
+
+    def test_sync_rejects_budget_using_another_users_category(self):
+        from app.db import SessionLocal
+        from app.models import Budget, Category, User
+        from app.security import hash_password
+
+        self._prepare_sync_fixtures()
+        budget_id = "sync-foreign-budget-category-001"
+        category_id = "foreign-budget-category"
+        db = SessionLocal()
+        try:
+            owner = db.query(User).filter(User.username == "sync-acceptance-owner").one()
+            foreign_owner = db.query(User).filter(User.username == "sync-budget-foreign-owner").first()
+            if not foreign_owner:
+                foreign_owner = User(
+                    id="sync-budget-foreign-owner-id",
+                    username="sync-budget-foreign-owner",
+                    password_hash=hash_password("sync-password"),
+                    display_name="预算归属测试用户",
+                )
+                db.add(foreign_owner)
+                db.flush()
+            category = db.get(Category, category_id)
+            if not category:
+                category = Category(
+                    id=category_id,
+                    user_id=foreign_owner.id,
+                    name="User B 预算分类",
+                    kind="expense",
+                )
+                db.add(category)
+                db.commit()
+            self.assertEqual(category.user_id, foreign_owner.id)
+            self.assertNotEqual(category.user_id, owner.id)
+        finally:
+            db.close()
+
+        operation = {
+            "client_op_id": "foreign-budget-category-op-001",
+            "entity": "budgets",
+            "entity_id": budget_id,
+            "type": "upsert",
+            "payload": {
+                "id": budget_id,
+                "month": "2026-09",
+                "category_id": category_id,
+                "limit": 500,
+            },
+        }
+        response = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [operation]}
+        )
+
+        db = SessionLocal()
+        try:
+            budget_rows = (
+                db.query(Budget)
+                .filter(Budget.user_id == owner.id, Budget.id == budget_id)
+                .all()
+            )
+        finally:
+            db.close()
+
+        actual = f"HTTP status={response.status_code}; body={response.text}; budget_rows={len(budget_rows)}"
+        self.assertGreaterEqual(response.status_code, 400, actual)
+        self.assertLess(response.status_code, 500, actual)
+        self.assertEqual(budget_rows, [], actual)
+
+    def test_sync_push_rolls_back_entire_batch_when_later_operation_fails(self):
+        from app.db import SessionLocal
+        from app.models import Account, SyncOperation, Transaction, User
+
+        self._prepare_sync_fixtures()
+        account_id = "atomic-account-001"
+        transaction_id = "atomic-tx-001"
+        account_op_id = "atomic-account-op-001"
+        transaction_op_id = "atomic-tx-op-001"
+        operations = [
+            {
+                "client_op_id": account_op_id,
+                "entity": "accounts",
+                "entity_id": account_id,
+                "type": "upsert",
+                "payload": {
+                    "id": account_id,
+                    "name": "原子性测试账户",
+                    "kind": "asset",
+                },
+            },
+            {
+                "client_op_id": transaction_op_id,
+                "entity": "transactions",
+                "entity_id": transaction_id,
+                "type": "upsert",
+                "payload": {
+                    "id": transaction_id,
+                    "type": "expense",
+                    "amount": 9.99,
+                    "currency": "CNY",
+                    "account_id": "definitely-missing-account",
+                    "category_id": "sync-acceptance-food",
+                    "occurred_on": "2026-09-05",
+                },
+            },
+        ]
+
+        db = SessionLocal()
+        try:
+            owner = db.query(User).filter(User.username == "sync-acceptance-owner").one()
+            owner_id = owner.id
+            version_before = owner.sync_version
+            self.assertIsNone(db.get(Account, account_id))
+            self.assertIsNone(db.get(Transaction, transaction_id))
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": operations}
+        )
+
+        db = SessionLocal()
+        try:
+            account_rows = (
+                db.query(Account)
+                .filter(Account.user_id == owner_id, Account.id == account_id)
+                .all()
+            )
+            transaction_rows = (
+                db.query(Transaction)
+                .filter(Transaction.user_id == owner_id, Transaction.id == transaction_id)
+                .all()
+            )
+            sync_operations = (
+                db.query(SyncOperation)
+                .filter(
+                    SyncOperation.user_id == owner_id,
+                    SyncOperation.client_op_id.in_([account_op_id, transaction_op_id]),
+                )
+                .all()
+            )
+            owner_after = db.get(User, owner_id)
+        finally:
+            db.close()
+
+        actual = (
+            f"HTTP status={response.status_code}; body={response.text}; "
+            f"account_rows={len(account_rows)}; transaction_rows={len(transaction_rows)}; "
+            f"sync_operations={len(sync_operations)}; "
+            f"sync_version_before={version_before}; sync_version_after={owner_after.sync_version}"
+        )
+        self.assertGreaterEqual(response.status_code, 400, actual)
+        self.assertLess(response.status_code, 500, actual)
+        self.assertIn("账户不存在: definitely-missing-account", response.text, actual)
+        self.assertEqual(account_rows, [], actual)
+        self.assertEqual(transaction_rows, [], actual)
+        self.assertEqual(sync_operations, [], actual)
+        self.assertEqual(owner_after.sync_version, version_before, actual)
+
+    def test_sync_push_does_not_apply_operations_after_a_failed_operation(self):
+        from app.db import SessionLocal
+        from app.models import Account, SyncOperation, Transaction, User
+
+        self._prepare_sync_fixtures()
+        account_id = "atomic-account-002"
+        transaction_id = "atomic-tx-002"
+        account_op_id = "atomic-account-op-002"
+        transaction_op_id = "atomic-tx-op-002"
+        operations = [
+            {
+                "client_op_id": transaction_op_id,
+                "entity": "transactions",
+                "entity_id": transaction_id,
+                "type": "upsert",
+                "payload": {
+                    "id": transaction_id,
+                    "type": "expense",
+                    "amount": 9.99,
+                    "currency": "CNY",
+                    "account_id": "definitely-missing-account-002",
+                    "category_id": "sync-acceptance-food",
+                    "occurred_on": "2026-09-05",
+                },
+            },
+            {
+                "client_op_id": account_op_id,
+                "entity": "accounts",
+                "entity_id": account_id,
+                "type": "upsert",
+                "payload": {
+                    "id": account_id,
+                    "name": "失败后续账户",
+                    "kind": "asset",
+                },
+            },
+        ]
+
+        db = SessionLocal()
+        try:
+            owner = db.query(User).filter(User.username == "sync-acceptance-owner").one()
+            owner_id = owner.id
+            self.assertIsNone(db.get(Account, account_id))
+            self.assertIsNone(db.get(Transaction, transaction_id))
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": operations}
+        )
+
+        db = SessionLocal()
+        try:
+            account_rows = (
+                db.query(Account)
+                .filter(Account.user_id == owner_id, Account.id == account_id)
+                .all()
+            )
+            transaction_rows = (
+                db.query(Transaction)
+                .filter(Transaction.user_id == owner_id, Transaction.id == transaction_id)
+                .all()
+            )
+            sync_operations = (
+                db.query(SyncOperation)
+                .filter(
+                    SyncOperation.user_id == owner_id,
+                    SyncOperation.client_op_id.in_([account_op_id, transaction_op_id]),
+                )
+                .all()
+            )
+        finally:
+            db.close()
+
+        actual = (
+            f"HTTP status={response.status_code}; body={response.text}; "
+            f"account_rows={len(account_rows)}; transaction_rows={len(transaction_rows)}; "
+            f"sync_operations={len(sync_operations)}"
+        )
+        self.assertGreaterEqual(response.status_code, 400, actual)
+        self.assertLess(response.status_code, 500, actual)
+        self.assertIn("账户不存在: definitely-missing-account-002", response.text, actual)
+        self.assertEqual(account_rows, [], actual)
+        self.assertEqual(transaction_rows, [], actual)
+        self.assertEqual(sync_operations, [], actual)
+
     def test_sync_rejects_transaction_with_truly_missing_category(self):
         from app.db import SessionLocal
         from app.models import Category, Transaction, User
