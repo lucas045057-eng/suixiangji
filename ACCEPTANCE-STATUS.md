@@ -1,6 +1,6 @@
 # 随想记 V1 交付验收状态
 
-日期：2026-09-03
+日期：2026-09-04
 
 ## 交付入口
 
@@ -21,25 +21,33 @@
 | Web 财富与应急金 | PASS | 资产、负债、净资产、目标进度已实现 |
 | Web localStorage 持久化 | PASS | 浏览器刷新后数据保留 |
 | Web PWA 离线资源 | PASS | manifest、Service Worker、静态服务器验证通过 |
-| Flutter 领域规则源码 | DELIVERED / UNVERIFIED | 测试已交付，但本机没有 Dart/Flutter |
-| Flutter 本地仓库与同步队列源码 | DELIVERED / UNVERIFIED | JSON、本地优先、幂等和冲突记录已交付 |
-| Flutter Android 五 Tab | DELIVERED / UNVERIFIED | 源码已交付，未能运行 Flutter widget test |
-| Flutter Windows 宽屏布局 | DELIVERED / UNVERIFIED | 源码已交付，未能运行 Windows build |
-| Android APK | BLOCKED | Android SDK/Flutter 未安装 |
-| Windows 安装包 | BLOCKED | Flutter/Visual Studio C++ 工作负载未安装 |
-| 真实后端联调 | BLOCKED | 交接文档提到的 backend 源码不在当前工作区 |
+| Flutter 领域规则源码 | TESTED | Flutter analyze 通过，Flutter test 47/47 通过 |
+| Flutter 本地仓库与同步队列源码 | TESTED | 本地状态、队列持久化、幂等和冲突测试通过 |
+| Flutter Android 五 Tab | IMPLEMENTED / TESTED | 源码和自动化测试通过，真实 Android 设备未执行 |
+| Flutter Windows 宽屏布局 | IMPLEMENTED / TESTED | 源码和自动化测试通过，真实 Windows 设备未执行 |
+| Android APK | IMPLEMENTED / NOT_RUN | 本批次未重新构建安装包 |
+| Windows 安装包 | IMPLEMENTED / NOT_RUN | 本批次未重新构建安装包 |
+| 自动化同步 SYNC-01~07 | TESTED | 后端同步验收用例和 Flutter 队列测试通过 |
+| 真实后端联调 | BLOCKED | 尚未执行真实 FastAPI + PostgreSQL + Flutter Client 联调 |
+| 真实设备同步 | NOT_RUN | Android 和 Windows 设备步骤尚未由用户执行 |
 | 真实推送 | BLOCKED | Bark/ntfy 未配置 |
 
 ## 实际验证证据
 
-- `npm test`：6/6 PASS
+- `python -m unittest discover -s tests -v`：24/24 PASS
+- `python -m compileall -q app tests`：PASS
+- `flutter analyze`：PASS
+- `flutter test`：47/47 PASS
+- `npm test`：7/7 PASS
 - Web JavaScript 语法检查：PASS
 - Web manifest JSON 解析：PASS
 - Web 桌面自然语言记账闭环：PASS
 - Web 刷新持久化：PASS
 - Web 390×844 移动视口无横向滚动：PASS
-- Flutter/Dart 可执行文件探测：`dart` 与 `flutter` 均 NOT_FOUND
+- Flutter/Dart 可执行文件探测：Flutter 3.47.2、Dart 3.13.2
+- 同步矩阵：见 [SYNC-ACCEPTANCE-MATRIX.md](docs/SYNC-ACCEPTANCE-MATRIX.md)
+- 设备手册：见 [DEVICE-SYNC-ACCEPTANCE.md](docs/DEVICE-SYNC-ACCEPTANCE.md)
 
 ## 不声称通过的项目
 
-未把缺少工具链、后端源码、推送配置或真实 API 联调写成 PASS。Flutter 的测试、analyze、APK 构建和 Windows 构建只能在对应环境补跑。
+未把自动化测试、后端 TestClient 或 Flutter analyze 写成真实设备通过。真实 PostgreSQL 联调、Android/Windows 设备同步、APK/Windows 安装包本批次未执行。

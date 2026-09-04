@@ -175,11 +175,58 @@ class FinanceRepository {
       final result = await api!.push(operations);
       final accepted =
           ((result['accepted'] as List<Object?>?) ?? const <Object?>[])
-              .map((item) => ((item! as Map)['client_op_id']) as String)
-              .toSet();
+              .map((item) => (item! as Map).cast<String, Object?>())
+              .toList();
+      final acceptedByOperation = <String, Map<String, Object?>>{
+        for (final item in accepted) item['client_op_id']! as String: item,
+      };
+      final nextTransactions = [...state.transactions];
+      final nextAccounts = [...state.accounts];
+      final nextBudgets = [...state.budgets];
       for (final operation in operations) {
-        if (accepted.contains(operation.clientOpId))
+        final receipt = acceptedByOperation[operation.clientOpId];
+        if (receipt != null) {
           queue.complete(operation.clientOpId);
+          final serverVersion = (receipt['server_version'] as num?)?.toInt();
+          if (serverVersion == null) continue;
+          if (operation.entity == 'transactions') {
+            final index = nextTransactions
+                .indexWhere((item) => item.id == operation.entityId);
+            if (index >= 0 &&
+                (nextTransactions[index].serverVersion == null ||
+                    serverVersion >= nextTransactions[index].serverVersion!)) {
+              nextTransactions[index] = nextTransactions[index]
+                  .copyWith(serverVersion: serverVersion);
+            }
+          } else if (operation.entity == 'accounts') {
+            final index = nextAccounts
+                .indexWhere((item) => item.id == operation.entityId);
+            if (index >= 0 &&
+                (nextAccounts[index].serverVersion == null ||
+                    serverVersion >= nextAccounts[index].serverVersion!)) {
+              nextAccounts[index] =
+                  nextAccounts[index].copyWith(serverVersion: serverVersion);
+            }
+          } else if (operation.entity == 'budgets') {
+            final index =
+                nextBudgets.indexWhere((item) => item.id == operation.entityId);
+            if (index >= 0 &&
+                (nextBudgets[index].serverVersion == null ||
+                    serverVersion >= nextBudgets[index].serverVersion!)) {
+              final current = nextBudgets[index];
+              nextBudgets[index] = Budget(
+                id: current.id,
+                month: current.month,
+                categoryId: current.categoryId,
+                limit: current.limit,
+                active: current.active,
+                serverVersion: serverVersion,
+                updatedAt: current.updatedAt,
+                deletedAt: current.deletedAt,
+              );
+            }
+          }
+        }
       }
       await persistQueue();
       final conflicts =
@@ -187,6 +234,9 @@ class FinanceRepository {
               .map((item) => 'sync:${(item! as Map)['entity_id']}')
               .toList();
       return state.copyWith(
+          transactions: nextTransactions,
+          accounts: nextAccounts,
+          budgets: nextBudgets,
           conflicts: [...state.conflicts, ...conflicts],
           syncState: SyncState(
               serverVersion: (result['server_version'] as num?)?.toInt() ??

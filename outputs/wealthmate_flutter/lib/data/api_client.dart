@@ -1,9 +1,11 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
 import '../domain/models.dart';
 import 'sync_queue.dart';
+import 'token_store.dart';
 
 enum ApiFailureKind {
   configuration,
@@ -25,16 +27,50 @@ class ApiFailure implements Exception {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, this.token, http.Client? client})
-      : client = client ?? http.Client();
+  ApiClient({
+    required this.baseUrl,
+    this.token,
+    http.Client? client,
+    TokenStore? tokenStore,
+    this.onAuthExpired,
+  })  : client = client ?? http.Client(),
+        tokenStore = tokenStore ?? SecureTokenStore();
 
   final String? baseUrl;
   String? token;
   final http.Client client;
+  final TokenStore tokenStore;
+  FutureOr<void> Function()? onAuthExpired;
+
+  Future<bool> restoreToken() async {
+    if (token != null && token!.isNotEmpty) return true;
+    final restored = await tokenStore.read();
+    if (restored == null || restored.isEmpty) return false;
+    token = restored;
+    return true;
+  }
+
+  Future<void> saveToken(String value) async {
+    if (value.isEmpty) return;
+    token = value;
+    await tokenStore.write(value);
+  }
+
+  Future<void> logout() async {
+    token = null;
+    await tokenStore.clear();
+  }
 
   Future<Map<String, Object?>> login(String username, String password) async {
-    return _requestMap('POST', '/auth/login',
+    final result = await _requestMap('POST', '/auth/login',
         body: {'username': username, 'password': password}, includeAuth: false);
+    final accessToken =
+        result['access_token'] as String? ?? result['token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const ApiFailure(ApiFailureKind.server, '登录响应中没有访问令牌');
+    }
+    await saveToken(accessToken);
+    return result;
   }
 
   Future<UserProfile> fetchProfile() async {
@@ -50,11 +86,11 @@ class ApiClient {
       if (displayName != null) 'display_name': displayName,
       if (username != null) 'username': username,
       if (quickMemories != null)
-        'quick_memories':
-            quickMemories.map((item) => item.toJson()).toList(),
+        'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
     });
     final accessToken = json['access_token'] as String?;
-    if (accessToken != null && accessToken.isNotEmpty) token = accessToken;
+    if (accessToken != null && accessToken.isNotEmpty)
+      await saveToken(accessToken);
     return UserProfile.fromJson(json);
   }
 
@@ -65,7 +101,8 @@ class ApiClient {
       'new_password': newPassword,
     });
     final accessToken = json['access_token'] as String?;
-    if (accessToken != null && accessToken.isNotEmpty) token = accessToken;
+    if (accessToken != null && accessToken.isNotEmpty)
+      await saveToken(accessToken);
     return UserProfile.fromJson(json);
   }
 
@@ -222,8 +259,14 @@ class ApiClient {
         'DELETE' => await client.delete(uri, headers: headers),
         _ => await client.get(uri, headers: headers),
       };
-      if (response.statusCode < 200 || response.statusCode >= 300)
-        throw _failureForStatus(response.statusCode);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final failure = _failureForStatus(response.statusCode);
+        if (response.statusCode == 401 && includeAuth) {
+          await logout();
+          await onAuthExpired?.call();
+        }
+        throw failure;
+      }
       final decoded = jsonDecode(response.body);
       return (decoded as Map).cast<String, Object?>();
     } on ApiFailure {

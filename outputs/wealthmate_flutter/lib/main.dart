@@ -18,6 +18,7 @@ Future<void> main() async {
   final api = baseUrl.isEmpty
       ? null
       : ApiClient(baseUrl: baseUrl, token: token.isEmpty ? null : token);
+  if (api != null) await api.restoreToken();
   final repository = FinanceRepository(
     local: LocalRepository(DriftKeyValueStore(database)),
     queue: SyncQueue(),
@@ -28,11 +29,35 @@ Future<void> main() async {
   runApp(WealthMateApp(store: store, api: api));
 }
 
-class WealthMateApp extends StatelessWidget {
+class WealthMateApp extends StatefulWidget {
   const WealthMateApp({required this.store, this.api, super.key});
 
   final FinanceStore store;
   final ApiClient? api;
+
+  @override
+  State<WealthMateApp> createState() => _WealthMateAppState();
+}
+
+class _WealthMateAppState extends State<WealthMateApp> {
+  late bool authenticated;
+
+  @override
+  void initState() {
+    super.initState();
+    authenticated = widget.api == null || widget.api!.token != null;
+    widget.api?.onAuthExpired = _handleAuthExpired;
+  }
+
+  @override
+  void dispose() {
+    widget.api?.onAuthExpired = null;
+    super.dispose();
+  }
+
+  void _handleAuthExpired() {
+    if (mounted) setState(() => authenticated = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,11 +65,11 @@ class WealthMateApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: '随想记',
       theme: wealthMateTheme(),
-      home: api == null || api!.token != null
-          ? AppShell(store: store)
+      home: widget.api == null || authenticated
+          ? AppShell(store: widget.store, onLoggedOut: _handleAuthExpired)
           : LoginPage(
-              api: api!,
-              onLoggedIn: () => runApp(WealthMateApp(store: store, api: api))),
+              api: widget.api!,
+              onLoggedIn: () => setState(() => authenticated = true)),
     );
   }
 }

@@ -10,23 +10,24 @@
 - 自然语言金额/分类/账户解析和 85% 确认门
 - local repository、幂等同步队列、软删除、过期更新冲突记录
 - API client：auth、accounts、categories、transactions、stats、wealth、budgets、agent、sync 资源边界
+- 平台安全 Token 存储、App 重启恢复和 401 自动清除登录状态
 - Android 五 Tab：首页、账本、统计、财富、我的
 - Windows 宽屏左侧导航 + 中间内容 + 右侧详情面板
 - 手工记账、自然语言草稿确认、编辑、软删除、预算/财富/设置页
 - 单元测试与 Widget 测试源文件
 
-## 验收矩阵（2026-09-03）
+## 验收矩阵（2026-09-04）
 
 | 检查项 | 状态 | 事实 |
 |---|---|---|
-| Dart/Flutter 可执行文件 | BLOCKED | 本机未找到 `dart` 或 `flutter` |
-| `flutter pub get` | BLOCKED | Flutter SDK 未安装 |
-| `dart format --output=none --set-exit-if-changed .` | BLOCKED | Dart SDK 未安装 |
-| `flutter analyze` | BLOCKED | Flutter SDK 未安装 |
-| `flutter test` | BLOCKED | Flutter SDK 未安装；测试文件已交付 |
-| `flutter build apk --debug` | BLOCKED | Flutter SDK 与 Android SDK 未安装 |
-| `flutter build windows --debug` | BLOCKED | Flutter SDK 与 Visual Studio C++ 工作负载未安装 |
-| 后端真实联调 | BLOCKED | 交接文档所述 `backend/` 源码不在当前工作区 |
+| Dart/Flutter 可执行文件 | TESTED | Flutter 3.47.2、Dart 3.13.2 |
+| `flutter pub get` | TESTED | 依赖解析成功，含 `flutter_secure_storage` |
+| `dart format --output=none --set-exit-if-changed .` | NOT_RUN | 本批次未执行格式检查 |
+| `flutter analyze` | TESTED | 无问题 |
+| `flutter test` | TESTED | 47/47 通过 |
+| `flutter build apk --debug` | NOT_RUN | 本批次未重新构建 |
+| `flutter build windows --debug` | NOT_RUN | 本批次未重新构建 |
+| 后端真实联调 | BLOCKED | 尚未执行真实 FastAPI + PostgreSQL + Flutter Client 联调 |
 | 真实推送 | BLOCKED | Bark/ntfy 未配置，未作任何成功声称 |
 
 源码级检查已做：所有测试引用的模型、规则、仓库、状态和页面文件均已建立；未把缺少工具链的项目写成 PASS。

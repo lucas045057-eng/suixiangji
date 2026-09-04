@@ -83,14 +83,8 @@ class _LoginPageState extends State<LoginPage> {
       message = null;
     });
     try {
-      final result = await widget.api
+      await widget.api
           .login(usernameController.text.trim(), passwordController.text);
-      final accessToken =
-          result['access_token'] as String? ?? result['token'] as String?;
-      if (accessToken == null || accessToken.isEmpty) {
-        throw const ApiFailure(ApiFailureKind.server, '登录响应中没有访问令牌');
-      }
-      widget.api.token = accessToken;
       if (mounted) widget.onLoggedIn();
     } on ApiFailure catch (failure) {
       if (mounted) setState(() => message = failure.message);

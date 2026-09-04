@@ -8,9 +8,10 @@ import 'category_management_page.dart';
 import 'profile_settings_page.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({required this.store, super.key});
+  const SettingsPage({required this.store, this.onLoggedOut, super.key});
 
   final FinanceStore store;
+  final VoidCallback? onLoggedOut;
 
   @override
   Widget build(BuildContext context) {
@@ -41,9 +42,8 @@ class SettingsPage extends StatelessWidget {
                           title: Text(store.profile?.displayName ?? '林默',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
-                          subtitle: Text(store.isDemoMode
-                              ? '本地演示 · 尚未配置同步服务'
-                              : '同步服务已配置'),
+                          subtitle: Text(
+                              store.isDemoMode ? '本地演示 · 尚未配置同步服务' : '同步服务已配置'),
                           onTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                   builder: (_) =>
@@ -119,8 +119,7 @@ class SettingsPage extends StatelessWidget {
                                   onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute<void>(
                                           builder: (_) => AccountDetailPage(
-                                              store: store,
-                                              account: account))))
+                                              store: store, account: account))))
                             ])),
                   ])),
                   const SizedBox(height: 12),
@@ -161,6 +160,19 @@ class SettingsPage extends StatelessWidget {
                         subtitle: const Text('会覆盖当前本地演示数据'),
                         onTap: () => _confirmRestore(context)),
                   ])),
+                  if (!store.isDemoMode) ...[
+                    const SizedBox(height: 12),
+                    Card(
+                        child: ListTile(
+                            leading: const Icon(Icons.logout,
+                                color: Color(0xFFB65B55)),
+                            title: const Text('退出登录'),
+                            subtitle: const Text('只清除登录凭据，不删除本地财务数据'),
+                            onTap: () async {
+                              await store.repository.api!.logout();
+                              if (context.mounted) onLoggedOut?.call();
+                            })),
+                  ],
                   const SizedBox(height: 18),
                   const Text(
                       'API 基址与 JWT 通过构建参数注入：WEALTHMATE_API_BASE_URL / WEALTHMATE_API_TOKEN。当前缺少配置时，客户端只运行离线演示，不会伪造同步成功。',

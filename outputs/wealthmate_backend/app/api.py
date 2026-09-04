@@ -168,13 +168,13 @@ def _attach_latest_rate(db: Session, values: dict) -> dict:
 def _save_tx(db: Session, user: User, values: dict, *, deleted: bool = False, server_version: int | None = None) -> Transaction:
     if values["kind"] != "transfer" and not values.get("account_id"):
         raise HTTPException(status_code=422, detail="非转账账目必须选择账户")
+    row = db.get(Transaction, values["id"])
+    if row and row.user_id != user.id:
+        raise HTTPException(status_code=404, detail="账目不存在")
     for field in ("account_id", "from_account_id", "to_account_id"):
         account_id = values.get(field)
         if account_id and (not db.get(Account, account_id) or db.get(Account, account_id).user_id != user.id):
             raise HTTPException(status_code=422, detail=f"账户不存在: {account_id}")
-    row = db.get(Transaction, values["id"])
-    if row and row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="账目不存在")
     if not row:
         row = Transaction(id=values["id"], user_id=user.id, **{key: value for key, value in values.items() if key != "id"})
         db.add(row)

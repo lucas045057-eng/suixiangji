@@ -2,8 +2,10 @@ import os
 import tempfile
 import unittest
 
+from test_sync_acceptance import SyncAcceptanceMixin
 
-class ApiContractTest(unittest.TestCase):
+
+class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tempdir = tempfile.TemporaryDirectory()
@@ -61,6 +63,7 @@ class ApiContractTest(unittest.TestCase):
         backup = self.client.get("/backup/export", headers=self.headers)
         self.assertEqual(backup.status_code, 200, backup.text)
         self.assertGreaterEqual(len(backup.json()["transactions"]), 3)
+        self.assertNotIn("access_token", backup.json())
 
     def test_sync_retry_returns_same_server_version(self):
         operation = {"client_op_id": "device-2:1", "entity": "transactions", "entity_id": "sync-tx", "type": "upsert", "payload": {"id": "sync-tx", "type": "expense", "amount": 9, "currency": "CNY", "account_id": "wallet", "occurred_on": "2026-09-03"}}
@@ -219,6 +222,7 @@ class ApiContractTest(unittest.TestCase):
         self.__class__.headers = {"authorization": f"Bearer {restored.json()['access_token']}"}
 
     def test_password_change_requires_current_password_and_updates_login(self):
+        old_headers = dict(self.headers)
         rejected = self.client.post(
             "/auth/password",
             headers=self.headers,
@@ -232,6 +236,8 @@ class ApiContractTest(unittest.TestCase):
             json={"current_password": "test-password", "new_password": "new-test-password"},
         )
         self.assertEqual(changed.status_code, 200, changed.text)
+        old_token_response = self.client.get("/auth/me", headers=old_headers)
+        self.assertEqual(old_token_response.status_code, 401, old_token_response.text)
         login = self.client.post(
             "/auth/login", json={"username": "test-user", "password": "new-test-password"}
         )

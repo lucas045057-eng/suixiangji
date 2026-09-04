@@ -11,9 +11,10 @@ import 'stats_page.dart';
 import 'wealth_page.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({required this.store, super.key});
+  const AppShell({required this.store, this.onLoggedOut, super.key});
 
   final FinanceStore store;
+  final VoidCallback? onLoggedOut;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -42,7 +43,7 @@ class _AppShellState extends State<AppShell> {
       1 => LedgerPage(store: widget.store),
       2 => StatsPage(store: widget.store),
       3 => WealthPage(store: widget.store),
-      _ => SettingsPage(store: widget.store),
+      _ => SettingsPage(store: widget.store, onLoggedOut: widget.onLoggedOut),
     };
   }
 
