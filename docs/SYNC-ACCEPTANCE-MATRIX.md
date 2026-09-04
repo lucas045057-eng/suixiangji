@@ -6,7 +6,7 @@
 
 | ID | 场景 | 自动化 | 集成 | Android | Windows |
 |---|---|---|---|---|---|
-| SYNC-01 | 在线新增 | PASS | BLOCKED | NOT_RUN | NOT_RUN |
+| SYNC-01 | 在线新增 | PASS | PASS | NOT_RUN | NOT_RUN |
 | SYNC-02 | 离线 10 笔后恢复 | PASS | BLOCKED | NOT_RUN | NOT_RUN |
 | SYNC-03 | 离线修改 | PASS | BLOCKED | NOT_RUN | NOT_RUN |
 | SYNC-04 | 离线删除 | PASS | BLOCKED | NOT_RUN | NOT_RUN |
@@ -28,6 +28,6 @@
 ## 判定边界
 
 - `PASS` 只表示对应自动化测试通过。
-- `BLOCKED` 表示尚未启动真实 FastAPI + PostgreSQL + Flutter Client 联调环境。
+- `BLOCKED` 表示该具体场景尚未在真实 FastAPI + PostgreSQL + Flutter Client 联调环境中完成。
 - `NOT_RUN` 表示本次没有实际操作 Android 或 Windows 设备。
 - 本矩阵不把 WebSocket 计入同步主链路；Batch 1 仍使用 REST push/pull。

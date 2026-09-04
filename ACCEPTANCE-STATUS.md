@@ -25,10 +25,10 @@
 | Flutter 本地仓库与同步队列源码 | TESTED | 本地状态、队列持久化、幂等和冲突测试通过 |
 | Flutter Android 五 Tab | IMPLEMENTED / TESTED | 源码和自动化测试通过，真实 Android 设备未执行 |
 | Flutter Windows 宽屏布局 | IMPLEMENTED / TESTED | 源码和自动化测试通过，真实 Windows 设备未执行 |
-| Android APK | IMPLEMENTED / NOT_RUN | 本批次未重新构建安装包 |
-| Windows 安装包 | IMPLEMENTED / NOT_RUN | 本批次未重新构建安装包 |
+| Android APK | IMPLEMENTED / TESTED | 使用 `http://192.168.1.15:18000` 构建成功；真实设备未安装验证 |
+| Windows 安装包 | IMPLEMENTED / BLOCKED | 构建缺少 Visual Studio ATL 头文件 `atlstr.h` |
 | 自动化同步 SYNC-01~07 | TESTED | 后端同步验收用例和 Flutter 队列测试通过 |
-| 真实后端联调 | BLOCKED | 尚未执行真实 FastAPI + PostgreSQL + Flutter Client 联调 |
+| 真实后端联调 | INTEGRATION VERIFIED | 真实 PostgreSQL + FastAPI + Flutter API Client 核心链路通过 |
 | 真实设备同步 | NOT_RUN | Android 和 Windows 设备步骤尚未由用户执行 |
 | 真实推送 | BLOCKED | Bark/ntfy 未配置 |
 
@@ -38,6 +38,8 @@
 - `python -m compileall -q app tests`：PASS
 - `flutter analyze`：PASS
 - `flutter test`：47/47 PASS
+- 真实 Flutter API Client 集成测试：PASS（真实局域网地址访问）
+- PostgreSQL 容器：healthy；FastAPI `/health`：PASS
 - `npm test`：7/7 PASS
 - Web JavaScript 语法检查：PASS
 - Web manifest JSON 解析：PASS
@@ -50,4 +52,4 @@
 
 ## 不声称通过的项目
 
-未把自动化测试、后端 TestClient 或 Flutter analyze 写成真实设备通过。真实 PostgreSQL 联调、Android/Windows 设备同步、APK/Windows 安装包本批次未执行。
+未把自动化测试、后端 TestClient 或 Flutter analyze 写成真实设备通过。Android/Windows 设备同步尚未由用户执行；Windows 安装包因 ATL 组件缺失未构建。
