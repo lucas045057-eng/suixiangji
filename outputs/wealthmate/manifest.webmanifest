@@ -1,0 +1,11 @@
+{
+  "name": "随想记",
+  "short_name": "随想记",
+  "description": "个人记账、预算与财富规划空间",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fbfcfa",
+  "theme_color": "#12201d"
+}

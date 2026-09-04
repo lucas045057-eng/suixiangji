@@ -1,0 +1,28 @@
+# Local secrets and runtime data
+.env
+outputs/wealthmate_backend/.env
+outputs/wealthmate_backend/*.db
+outputs/wealthmate_backend/data/
+
+# Flutter and platform-generated files
+**/.dart_tool/
+**/build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/android/.gradle/
+**/android/.kotlin/
+**/windows/flutter/ephemeral/
+**/ios/Flutter/ephemeral/
+**/*.iml
+**/.idea/
+
+# Python caches and local environments
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Local delivery binaries are kept outside source control
+outputs/*.apk
+outputs/*.zip
+work/

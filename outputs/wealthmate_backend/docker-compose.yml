@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wealthmate
+      POSTGRES_USER: wealthmate
+      POSTGRES_PASSWORD: ${WEALTHMATE_DB_PASSWORD:-change-me}
+    volumes:
+      - wealthmate_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wealthmate -d wealthmate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WEALTHMATE_DATABASE_URL: ${WEALTHMATE_DATABASE_URL:-postgresql+psycopg://wealthmate:change-me@db:5432/wealthmate}
+    ports:
+      - "18000:8000"
+
+volumes:
+  wealthmate_pgdata:

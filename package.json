@@ -1,0 +1,8 @@
+{
+  "name": "suixiangji-mvp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/wealthmate.test.mjs"
+  }
+}
