@@ -241,8 +241,8 @@ def _save_account(db: Session, user: User, values: dict, *, deleted: bool = Fals
 
 
 def _order_sync_operations(operations: list) -> list:
-    """Place account/category upserts before transaction upserts without moving deletes."""
-    priority = {"accounts": 0, "categories": 0, "transactions": 1}
+    """Place entity dependencies before dependent upserts without moving deletes."""
+    priority = {"accounts": 0, "categories": 0, "transactions": 1, "budgets": 1}
     indexed_upserts = [
         (index, operation)
         for index, operation in enumerate(operations)
@@ -489,6 +489,11 @@ def _save_budget(db: Session, user: User, values: dict, *, server_version: int |
     row = db.get(Budget, values["id"])
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
+    category_id = values.get("category_id")
+    if category_id:
+        category = db.get(Category, category_id)
+        if not category or category.user_id != user.id:
+            raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
     data = {
         "month": values["month"],
         "category_id": values["category_id"],
