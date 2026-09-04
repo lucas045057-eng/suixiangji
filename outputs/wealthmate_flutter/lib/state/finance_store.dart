@@ -10,7 +10,8 @@ import '../domain/models.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({required this.repository, FinanceState? initialState})
-      : _state = initialState ?? DemoData.create();
+      : _state = initialState ??
+            (repository.api == null ? DemoData.create() : const FinanceState());
 
   final FinanceRepository repository;
   FinanceState _state;

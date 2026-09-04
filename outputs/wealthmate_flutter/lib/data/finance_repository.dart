@@ -252,13 +252,36 @@ class FinanceRepository {
       return state.copyWith(syncState: const SyncState(error: '离线演示/待配置'));
     try {
       final remote = await api!.pullChanges(state.syncState.serverVersion);
-      final merged = mergePulledBudgets(
-          mergePulledCategories(
-              mergePulledAccounts(
-                  mergePulled(state, remote.transactions), remote.accounts),
-              remote.categories),
-          remote.budgets);
-      final next = merged.copyWith(
+      final freshBootstrap = _isFreshBootstrap(state);
+      var nextState = freshBootstrap
+          ? state.copyWith(
+              transactions: remote.transactions,
+              accounts: remote.accounts,
+              categories: remote.categories,
+              budgets: remote.budgets,
+            )
+          : mergePulledBudgets(
+              mergePulledCategories(
+                  mergePulledAccounts(
+                      mergePulled(state, remote.transactions), remote.accounts),
+                  remote.categories),
+              remote.budgets);
+      if (freshBootstrap) {
+        final activeAccounts = nextState.accounts
+            .where((item) => item.deletedAt == null)
+            .toList(growable: false);
+        final preferredAccounts = activeAccounts
+            .where((item) => item.isDefaultPayment)
+            .toList(growable: false);
+        final defaultAccount = preferredAccounts.length == 1
+            ? preferredAccounts.single
+            : activeAccounts.length == 1
+                ? activeAccounts.single
+                : null;
+        if (defaultAccount != null)
+          nextState = nextState.copyWith(defaultAccountId: defaultAccount.id);
+      }
+      final next = nextState.copyWith(
           syncState: SyncState(
         serverVersion: remote.serverVersion,
         lastSyncedAt: DateTime.now().toIso8601String(),
@@ -268,5 +291,20 @@ class FinanceRepository {
     } on ApiFailure catch (failure) {
       return state.copyWith(syncState: SyncState(error: failure.message));
     }
+  }
+
+  bool _isFreshBootstrap(FinanceState state) {
+    return state.syncState.serverVersion == 0 &&
+        state.defaultAccountId == null &&
+        state.accounts.isEmpty &&
+        state.categories.isEmpty &&
+        state.transactions.isEmpty &&
+        state.budgets.isEmpty &&
+        state.exchangeRates.isEmpty &&
+        state.goals.isEmpty &&
+        state.reports.isEmpty &&
+        state.conflicts.isEmpty &&
+        state.quickMemories.isEmpty &&
+        queue.pending().isEmpty;
   }
 }
