@@ -317,9 +317,11 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> dict:
     if not user:
         user = User(id=str(uuid4()), username=payload.username, password_hash=hash_password(payload.password), display_name=payload.username)
         db.add(user)
-        db.commit()
+        current_version = user.sync_version or 0
         for name, kind in (("餐饮", "expense"), ("交通", "expense"), ("住房", "expense"), ("工资", "income"), ("购物", "expense")):
-            db.add(Category(id=str(uuid4()), user_id=user.id, name=name, kind=kind))
+            current_version += 1
+            db.add(Category(id=str(uuid4()), user_id=user.id, name=name, kind=kind, server_version=current_version))
+        user.sync_version = current_version
         db.commit()
     return {"access_token": create_token(user.id, user.username, user.auth_version or 0), "token_type": "bearer", "user_id": user.id, "username": user.username, "display_name": user.display_name or user.username}
 
