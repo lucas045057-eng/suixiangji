@@ -51,7 +51,23 @@ class LocalRepository {
 
   static const storageKey = 'wealthmate-finance-state-v1';
   static const queueStorageKey = 'wealthmate-sync-queue-v1';
+  static const ownerStorageKey = 'wealthmate-local-owner-user-id-v1';
   final KeyValueStore store;
+
+  Future<String?> loadOwnerUserId() async {
+    final raw = await store.read(ownerStorageKey);
+    final owner = raw?.trim();
+    return owner == null || owner.isEmpty ? null : owner;
+  }
+
+  Future<void> saveOwnerUserId(String userId) async {
+    await store.write(ownerStorageKey, userId.trim());
+  }
+
+  Future<void> clearFinanceStateAndQueue() async {
+    await save(const FinanceState());
+    await store.write(queueStorageKey, jsonEncode(const <Object?>[]));
+  }
 
   Future<FinanceState?> load() async {
     final raw = await store.read(storageKey);

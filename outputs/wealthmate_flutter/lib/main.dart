@@ -56,6 +56,7 @@ class _WealthMateAppState extends State<WealthMateApp> {
   }
 
   void _handleAuthExpired() {
+    widget.store.clearAuthenticatedSession();
     if (mounted) setState(() => authenticated = false);
   }
 

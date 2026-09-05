@@ -46,6 +46,10 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    if (repository.api != null && !repository.isLocalOwnerBound) {
+      notifyListeners();
+      return;
+    }
     final loaded = await repository.load();
     if (loaded != null) _state = loaded;
     notifyListeners();
@@ -55,6 +59,8 @@ class FinanceStore extends ChangeNotifier {
     if (repository.api == null || repository.api!.token == null) return;
     try {
       final profile = await repository.api!.fetchProfile();
+      final loaded = await repository.loadForUser(profile.id);
+      _state = loaded ?? const FinanceState();
       _profile = profile;
       final memories = <String, QuickMemory>{
         for (final memory in _state.quickMemories) memory.key: memory,
@@ -229,7 +235,8 @@ class FinanceStore extends ChangeNotifier {
       try {
         final remoteDraft = await repository.api!.postAgentDraft(text);
         _draft = localDraft.copyWith(
-          amount: remoteDraft.amount > 0 ? remoteDraft.amount : localDraft.amount,
+          amount:
+              remoteDraft.amount > 0 ? remoteDraft.amount : localDraft.amount,
           type: remoteDraft.type,
           date: remoteDraft.date.isEmpty ? localDraft.date : remoteDraft.date,
           note: remoteDraft.note.isEmpty ? localDraft.note : remoteDraft.note,
@@ -257,8 +264,7 @@ class FinanceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> rememberDraftChoice(
-      String sourceText, AgentDraft draft) async {
+  Future<void> rememberDraftChoice(String sourceText, AgentDraft draft) async {
     final key = FinanceRules.quickMemoryKey(sourceText);
     if (key.isEmpty || draft.categoryId == null || draft.accountId == null)
       return;
@@ -267,11 +273,10 @@ class FinanceStore extends ChangeNotifier {
         categoryId: draft.categoryId,
         accountId: draft.accountId,
         updatedAt: DateTime.now().toIso8601String());
-    _state = _state.copyWith(
-        quickMemories: [
-          ..._state.quickMemories.where((item) => item.key != key),
-          memory
-        ]);
+    _state = _state.copyWith(quickMemories: [
+      ..._state.quickMemories.where((item) => item.key != key),
+      memory
+    ]);
     await repository.save(_state);
     if (repository.api != null) {
       try {
@@ -391,6 +396,20 @@ class FinanceStore extends ChangeNotifier {
     _state = await repository.pullChanges(_state);
     _message = _state.syncState.error ??
         (_state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步');
+    notifyListeners();
+  }
+
+  void clearAuthenticatedSession() {
+    _profile = null;
+    _draft = null;
+    _draftSourceText = null;
+    _message = null;
+    _budgetAlerts = const [];
+    _metricsState = null;
+    _metricsMonth = null;
+    _metricsCache = null;
+    repository.unbindLocalOwner();
+    _state = const FinanceState();
     notifyListeners();
   }
 

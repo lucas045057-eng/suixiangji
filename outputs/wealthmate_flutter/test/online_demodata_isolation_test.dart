@@ -166,7 +166,7 @@ Future<FinanceStore> bootstrappedOnlineStore(
   expect(store.isDemoMode, isFalse);
   expect(storage.values, isEmpty);
 
-  await store.load();
+  await store.loadProfile();
   await store.sync();
   return store;
 }

@@ -208,21 +208,21 @@ void main() {
     final transaction = repositoryTransaction();
     final repository = FinanceRepository(
       local: LocalRepository(MemoryKeyValueStore()),
-      queue: SyncQueue([
-        SyncOperation(
-          clientOpId: transaction.clientOpId,
-          entity: 'transactions',
-          entityId: transaction.id,
-          type: SyncOperationType.upsert,
-          payload: transaction.toJson(),
-        )
-      ]),
+      queue: SyncQueue(),
       api: ApiClient(
         baseUrl: 'http://example.test',
         token: 'test-token',
         client: SyncPushClient(),
       ),
     );
+    await repository.ensureLocalOwner('repository-test-user');
+    repository.queue.enqueue(SyncOperation(
+      clientOpId: transaction.clientOpId,
+      entity: 'transactions',
+      entityId: transaction.id,
+      type: SyncOperationType.upsert,
+      payload: transaction.toJson(),
+    ));
 
     final next =
         await repository.pushPending(FinanceState(transactions: [transaction]));

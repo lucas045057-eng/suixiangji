@@ -9,8 +9,40 @@ class FinanceRepository {
   final LocalRepository local;
   final SyncQueue queue;
   final ApiClient? api;
+  String? _localOwnerUserId;
+
+  String? get localOwnerUserId => _localOwnerUserId;
+
+  bool get isLocalOwnerBound => _localOwnerUserId != null;
+
+  Future<FinanceState?> loadForUser(String userId) async {
+    await ensureLocalOwner(userId);
+    return load();
+  }
+
+  Future<void> ensureLocalOwner(String userId) async {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) {
+      throw ArgumentError.value(userId, 'userId', '用户身份不能为空');
+    }
+    final storedOwner = await local.loadOwnerUserId();
+    if (storedOwner != normalizedUserId) {
+      await local.clearFinanceStateAndQueue();
+      queue.replace(const []);
+    }
+    await local.saveOwnerUserId(normalizedUserId);
+    _localOwnerUserId = normalizedUserId;
+  }
+
+  void unbindLocalOwner() {
+    _localOwnerUserId = null;
+  }
 
   Future<FinanceState?> load() async {
+    if (api != null && !isLocalOwnerBound) {
+      queue.replace(const []);
+      return null;
+    }
     queue.replace(await local.loadQueue());
     return local.load();
   }
@@ -168,6 +200,10 @@ class FinanceRepository {
   Future<FinanceState> pushPending(FinanceState state) async {
     if (api == null)
       return state.copyWith(syncState: const SyncState(error: '离线演示/待配置'));
+    if (!isLocalOwnerBound) {
+      return state.copyWith(
+          syncState: const SyncState(error: '当前用户身份尚未确认，暂不上传本地数据'));
+    }
     if (queue.pending().isEmpty)
       return state.copyWith(syncState: const SyncState(error: null));
     try {
@@ -250,6 +286,10 @@ class FinanceRepository {
   Future<FinanceState> pullChanges(FinanceState state) async {
     if (api == null)
       return state.copyWith(syncState: const SyncState(error: '离线演示/待配置'));
+    if (!isLocalOwnerBound) {
+      return state.copyWith(
+          syncState: const SyncState(error: '当前用户身份尚未确认，暂不下载本地数据'));
+    }
     try {
       final remote = await api!.pullChanges(state.syncState.serverVersion);
       final freshBootstrap = _isFreshBootstrap(state);

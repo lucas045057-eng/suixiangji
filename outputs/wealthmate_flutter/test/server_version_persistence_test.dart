@@ -140,6 +140,7 @@ void main() {
         queue: SyncQueue(),
         client: client,
       );
+      await firstRepository.ensureLocalOwner('server-version-test-user');
       final firstState =
           await firstRepository.pullChanges(const FinanceState());
       expect(firstState.syncState.serverVersion, 50);
@@ -152,7 +153,8 @@ void main() {
         queue: SyncQueue(),
         client: client,
       );
-      final restored = await restartedRepository.load();
+      final restored =
+          await restartedRepository.loadForUser('server-version-test-user');
       await restartedRepository.pullChanges(restored!);
 
       expect(client.requestedSinceVersions, [0, 50]);
@@ -172,6 +174,7 @@ void main() {
       client: client,
     );
     final store = FinanceStore(repository: repository);
+    await repository.ensureLocalOwner('fresh-online-user');
 
     expect(store.state.syncState.serverVersion, 0);
     await store.sync();
