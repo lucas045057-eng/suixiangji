@@ -50,14 +50,25 @@ class SyncQueue {
   final List<SyncOperation> _items = [];
 
   void enqueue(SyncOperation operation) {
+    final entityIndex = _items.indexWhere((item) =>
+        item.entity == operation.entity && item.entityId == operation.entityId);
+    if (entityIndex >= 0) {
+      final existing = _items[entityIndex];
+      if (existing.clientOpId == operation.clientOpId &&
+          existing.type == SyncOperationType.upsert &&
+          operation.type == SyncOperationType.upsert) {
+        // A pending create/edit shares one client operation identity. Keep
+        // that identity while replacing the complete latest snapshot.
+        _items[entityIndex] = operation;
+        return;
+      }
+    }
     if (_items.any((item) => item.clientOpId == operation.clientOpId)) return;
     // Only the latest mutation for an entity needs to travel over the wire.
     // This prevents an offline create/update followed by delete from replaying
     // stale operations and keeps the queue idempotent at entity level.
-    final index = _items.indexWhere((item) =>
-        item.entity == operation.entity && item.entityId == operation.entityId);
-    if (index >= 0) {
-      _items[index] = operation;
+    if (entityIndex >= 0) {
+      _items[entityIndex] = operation;
     } else {
       _items.add(operation);
     }
