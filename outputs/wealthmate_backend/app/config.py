@@ -1,10 +1,12 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "随想记 V1 API"
+    git_sha: str = Field(default="unknown", validation_alias=AliasChoices("APP_GIT_SHA", "WEALTHMATE_GIT_SHA"))
     database_url: str = "sqlite:///./wealthmate.db"
     jwt_secret: str = "change-this-before-deployment"
     jwt_expire_minutes: int = 60 * 24 * 30

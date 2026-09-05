@@ -297,7 +297,12 @@ def _json_metrics(value):
 
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "suixiangji-v1", "server_time": datetime.now(timezone.utc)}
+    return {
+        "status": "ok",
+        "service": "suixiangji-v1",
+        "git_sha": get_settings().git_sha,
+        "server_time": datetime.now(timezone.utc),
+    }
 
 
 @router.post("/auth/login")
