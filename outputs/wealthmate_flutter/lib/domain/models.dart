@@ -618,7 +618,14 @@ class FinanceState {
         'conflicts': conflicts,
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
         'default_account_id': defaultAccountId,
+        'sync_state': {'server_version': syncState.serverVersion},
       };
+
+  static int _serverVersionFromJson(Object? value) {
+    if (value is! Map) return 0;
+    final serverVersion = value['server_version'];
+    return serverVersion is num ? serverVersion.toInt() : 0;
+  }
 
   factory FinanceState.fromJson(Map<String, Object?> json) => FinanceState(
         schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 1,
@@ -662,6 +669,8 @@ class FinanceState {
                     (item! as Map).cast<String, Object?>()))
                 .toList(),
         defaultAccountId: json['default_account_id'] as String?,
+        syncState: SyncState(
+            serverVersion: _serverVersionFromJson(json['sync_state'])),
       );
 }
 
