@@ -317,6 +317,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> dict:
     if not user:
         user = User(id=str(uuid4()), username=payload.username, password_hash=hash_password(payload.password), display_name=payload.username)
         db.add(user)
+        db.flush()
         current_version = user.sync_version or 0
         for name, kind in (("餐饮", "expense"), ("交通", "expense"), ("住房", "expense"), ("工资", "income"), ("购物", "expense")):
             current_version += 1

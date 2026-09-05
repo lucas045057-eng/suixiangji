@@ -20,16 +20,36 @@ class ServerSeedVersionInvariantRedTest(unittest.TestCase):
             import os
 
             from fastapi.testclient import TestClient
+
+            mode = os.environ["SEED_VERSION_INVARIANT_MODE"]
+            if mode == "postgresql_style_login":
+                from sqlalchemy import event
+                from sqlalchemy.engine import Engine
+
+                @event.listens_for(Engine, "connect")
+                def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+                    if dbapi_connection.__class__.__module__.startswith("sqlite3"):
+                        cursor = dbapi_connection.cursor()
+                        cursor.execute("PRAGMA foreign_keys=ON")
+                        cursor.close()
+
             from app.main import app
             from app.db import SessionLocal
             from app.models import Account, Budget, Category, Transaction, User
 
-            mode = os.environ["SEED_VERSION_INVARIANT_MODE"]
             username = "seed-version-user"
             password = "seed-version-password"
 
             def rows(db):
-                owner = db.query(User).filter(User.username == username).one()
+                owner = db.query(User).filter(User.username == username).first()
+                if owner is None:
+                    return {
+                        "user": None,
+                        "accounts": [],
+                        "categories": [],
+                        "transactions": [],
+                        "budgets": [],
+                    }
                 return {
                     "user": {
                         "id": owner.id,
@@ -54,13 +74,16 @@ class ServerSeedVersionInvariantRedTest(unittest.TestCase):
                 }
 
             result = {}
-            with TestClient(app) as client:
+            with TestClient(app, raise_server_exceptions=False) as client:
                 login = client.post(
                     "/auth/login",
                     json={"username": username, "password": password},
                 )
                 result["login_status"] = login.status_code
-                login_body = login.json()
+                try:
+                    login_body = login.json()
+                except ValueError:
+                    login_body = {"detail": login.text}
                 result["login_user_id"] = login_body.get("user_id")
                 if login.status_code == 200:
                     headers = {"authorization": "Bearer " + login_body["access_token"]}
@@ -189,6 +212,13 @@ class ServerSeedVersionInvariantRedTest(unittest.TestCase):
         self.assertEqual(result["login_status"], 200, actual)
         self.assertEqual(result["full_pull_status"], 200, actual)
         self.assertGreater(len(result["full_pull_body"]["categories"]), 0, actual)
+
+    def test_default_category_initialization_respects_database_foreign_keys(self):
+        result = self._probe("postgresql_style_login")
+        actual = json.dumps(result, ensure_ascii=False)
+
+        self.assertEqual(result["login_status"], 200, actual)
+        self.assertEqual(result["full_pull_status"], 200, actual)
 
     def test_initial_entities_have_positive_server_versions(self):
         result = self._probe("login_bootstrap")
