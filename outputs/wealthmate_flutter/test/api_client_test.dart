@@ -8,6 +8,7 @@ import 'package:wealthmate_flutter/data/token_store.dart';
 
 class MemoryTokenStore implements TokenStore {
   String? value;
+  String? lastVerifiedUserId;
   var clearCount = 0;
 
   @override
@@ -21,6 +22,16 @@ class MemoryTokenStore implements TokenStore {
     value = null;
     clearCount++;
   }
+
+  @override
+  Future<String?> readLastVerifiedUserId() async => lastVerifiedUserId;
+
+  @override
+  Future<void> writeLastVerifiedUserId(String userId) async =>
+      lastVerifiedUserId = userId;
+
+  @override
+  Future<void> clearLastVerifiedUserId() async => lastVerifiedUserId = null;
 }
 
 class ResponseClient extends http.BaseClient {
@@ -59,7 +70,9 @@ void main() {
   });
 
   test('an authenticated 401 clears the token and notifies the app', () async {
-    final tokenStore = MemoryTokenStore()..value = 'stale-jwt';
+    final tokenStore = MemoryTokenStore()
+      ..value = 'stale-jwt'
+      ..lastVerifiedUserId = 'user-a';
     var expired = false;
     final api = ApiClient(
       baseUrl: 'http://example.test',
@@ -73,12 +86,15 @@ void main() {
 
     expect(api.token, isNull);
     expect(tokenStore.value, isNull);
+    expect(tokenStore.lastVerifiedUserId, isNull);
     expect(tokenStore.clearCount, 1);
     expect(expired, isTrue);
   });
 
-  test('logout clears only the stored authentication token', () async {
-    final tokenStore = MemoryTokenStore()..value = 'jwt-2';
+  test('logout clears the access token and verified user identity', () async {
+    final tokenStore = MemoryTokenStore()
+      ..value = 'jwt-2'
+      ..lastVerifiedUserId = 'user-a';
     final api = ApiClient(
       baseUrl: 'http://example.test',
       token: 'jwt-2',
@@ -89,6 +105,7 @@ void main() {
 
     expect(api.token, isNull);
     expect(tokenStore.value, isNull);
+    expect(tokenStore.lastVerifiedUserId, isNull);
     expect(tokenStore.clearCount, 1);
   });
 }

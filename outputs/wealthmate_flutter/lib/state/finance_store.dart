@@ -47,8 +47,7 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> load() async {
     if (repository.api != null && !repository.isLocalOwnerBound) {
-      notifyListeners();
-      return;
+      await repository.restoreLocalOwnerForVerifiedSession();
     }
     final loaded = await repository.load();
     if (loaded != null) _state = loaded;

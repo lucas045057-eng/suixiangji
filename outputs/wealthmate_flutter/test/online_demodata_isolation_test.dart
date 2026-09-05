@@ -6,6 +6,7 @@ import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/finance_repository.dart';
 import 'package:wealthmate_flutter/data/local_repository.dart';
 import 'package:wealthmate_flutter/data/sync_queue.dart';
+import 'package:wealthmate_flutter/data/token_store.dart';
 import 'package:wealthmate_flutter/domain/models.dart';
 import 'package:wealthmate_flutter/state/finance_store.dart';
 
@@ -53,6 +54,30 @@ class MemoryKeyValueStore implements KeyValueStore {
 
   @override
   Future<void> write(String key, String value) async => values[key] = value;
+}
+
+class MemoryTokenStore implements TokenStore {
+  String? token;
+  String? lastVerifiedUserId;
+
+  @override
+  Future<String?> read() async => token;
+
+  @override
+  Future<void> write(String value) async => token = value;
+
+  @override
+  Future<void> clear() async => token = null;
+
+  @override
+  Future<String?> readLastVerifiedUserId() async => lastVerifiedUserId;
+
+  @override
+  Future<void> writeLastVerifiedUserId(String userId) async =>
+      lastVerifiedUserId = userId;
+
+  @override
+  Future<void> clearLastVerifiedUserId() async => lastVerifiedUserId = null;
 }
 
 class OnlineDemoDataClient extends http.BaseClient {
@@ -153,6 +178,7 @@ class OnlineDemoDataClient extends http.BaseClient {
 
 Future<FinanceStore> bootstrappedOnlineStore(
     OnlineDemoDataClient client, MemoryKeyValueStore storage) async {
+  final tokenStore = MemoryTokenStore()..token = 'online-demo-token';
   final repository = FinanceRepository(
     local: LocalRepository(storage),
     queue: SyncQueue(),
@@ -160,6 +186,7 @@ Future<FinanceStore> bootstrappedOnlineStore(
       baseUrl: 'http://online-demo.test',
       token: 'online-demo-token',
       client: client,
+      tokenStore: tokenStore,
     ),
   );
   final store = FinanceStore(repository: repository);

@@ -38,10 +38,25 @@ class FinanceRepository {
     _localOwnerUserId = null;
   }
 
+  Future<bool> restoreLocalOwnerForVerifiedSession() async {
+    if (api == null || api!.token == null || api!.token!.trim().isEmpty) {
+      return false;
+    }
+    final verifiedUserId = api!.lastVerifiedUserId?.trim();
+    if (verifiedUserId == null || verifiedUserId.isEmpty) return false;
+    final storedOwner = await local.loadOwnerUserId();
+    if (storedOwner == null || storedOwner != verifiedUserId) return false;
+    _localOwnerUserId = storedOwner;
+    return true;
+  }
+
   Future<FinanceState?> load() async {
     if (api != null && !isLocalOwnerBound) {
-      queue.replace(const []);
-      return null;
+      final restored = await restoreLocalOwnerForVerifiedSession();
+      if (!restored) {
+        queue.replace(const []);
+        return null;
+      }
     }
     queue.replace(await local.loadQueue());
     return local.load();
