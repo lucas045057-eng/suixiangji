@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'api_client.dart';
 import 'local_repository.dart';
 import 'sync_queue.dart';
@@ -134,7 +136,8 @@ class FinanceRepository {
         nextTransactions.firstWhere((item) => item.id == transactionId);
     final next = state.copyWith(transactions: nextTransactions);
     queue.enqueue(SyncOperation(
-      clientOpId: '${deleted.clientOpId}:delete',
+      clientOpId:
+          'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
       entity: 'transactions',
       entityId: transactionId,
       type: SyncOperationType.delete,
