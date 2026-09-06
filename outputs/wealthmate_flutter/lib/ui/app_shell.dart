@@ -30,7 +30,10 @@ class _AppShellState extends State<AppShell> {
     _pageCache = List<Widget?>.filled(5, null);
     _pageCache[0] = _buildPage(0);
     if (!widget.store.isDemoMode) {
-      unawaited(widget.store.loadProfile().then((_) => widget.store.sync()));
+      unawaited(widget.store.loadProfile().then((authenticated) async {
+        if (!authenticated) return;
+        await widget.store.sync();
+      }));
     }
   }
 

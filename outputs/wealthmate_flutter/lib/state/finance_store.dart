@@ -54,8 +54,8 @@ class FinanceStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadProfile() async {
-    if (repository.api == null || repository.api!.token == null) return;
+  Future<bool> loadProfile() async {
+    if (repository.api == null || repository.api!.token == null) return false;
     try {
       final profile = await repository.api!.fetchProfile();
       final loaded = await repository.loadForUser(profile.id);
@@ -68,10 +68,13 @@ class FinanceStore extends ChangeNotifier {
       _state = _state.copyWith(quickMemories: memories.values.toList());
       await repository.save(_state);
       _message = null;
+      notifyListeners();
+      return true;
     } on ApiFailure catch (failure) {
       _message = failure.message;
+      notifyListeners();
+      return false;
     }
-    notifyListeners();
   }
 
   Future<bool> updateProfile({String? displayName, String? username}) async {
@@ -407,8 +410,6 @@ class FinanceStore extends ChangeNotifier {
     _metricsState = null;
     _metricsMonth = null;
     _metricsCache = null;
-    repository.unbindLocalOwner();
-    _state = const FinanceState();
     notifyListeners();
   }
 
