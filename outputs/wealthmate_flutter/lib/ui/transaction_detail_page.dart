@@ -14,9 +14,24 @@ class TransactionDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isIncome = transaction.type == TransactionType.income;
-    final currency = transaction.currency.toUpperCase();
-    final converted = transaction.cnyAmount;
+    return ListenableBuilder(
+        listenable: store,
+        builder: (context, _) {
+          final current = store.state.transactions
+              .where((item) => item.id == transaction.id)
+              .firstOrNull;
+          if (current == null) {
+            return const Scaffold(
+                body: Center(child: Text('这笔账目已不存在')));
+          }
+          return _buildDetail(context, current);
+        });
+  }
+
+  Widget _buildDetail(BuildContext context, FinanceTransaction value) {
+    final isIncome = value.type == TransactionType.income;
+    final currency = value.currency.toUpperCase();
+    final converted = value.cnyAmount;
     return Scaffold(
       appBar: AppBar(
         title: const Text('账目详情'),
@@ -50,7 +65,7 @@ class TransactionDetailPage extends StatelessWidget {
                           fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   Text(
-                      '${isIncome ? '+' : '-'}${transaction.amount.toStringAsFixed(transaction.amount.truncateToDouble() == transaction.amount ? 0 : 2)} $currency',
+                      '${isIncome ? '+' : '-'}${value.amount.toStringAsFixed(value.amount.truncateToDouble() == value.amount ? 0 : 2)} $currency',
                       style: const TextStyle(
                           fontSize: 30, fontWeight: FontWeight.w800)),
                   if (converted != null && currency != 'CNY') ...[
@@ -66,25 +81,25 @@ class TransactionDetailPage extends StatelessWidget {
           const SizedBox(height: 14),
           Card(
               child: Column(children: [
-            _detailRow('发生时间', _occurredLabel(transaction)),
-            _detailRow('分类', categoryName(store.state, transaction.categoryId)),
+            _detailRow('发生时间', _occurredLabel(value)),
+            _detailRow('分类', categoryName(store.state, value.categoryId)),
             _detailRow(
-                '支付账户/平台', accountName(store.state, transaction.accountId)),
+                '支付账户/平台', accountName(store.state, value.accountId)),
             _detailRow(
-                '原始金额', '${transaction.amount.toStringAsFixed(2)} $currency'),
+                '原始金额', '${value.amount.toStringAsFixed(2)} $currency'),
             _detailRow('人民币金额', converted == null ? '待补充汇率' : money(converted)),
-            _detailRow('汇率状态', _exchangeLabel(transaction)),
+            _detailRow('汇率状态', _exchangeLabel(value)),
             _detailRow(
-                '备注', transaction.note.isEmpty ? '无备注' : transaction.note),
+                '备注', value.note.isEmpty ? '无备注' : value.note),
           ])),
-          if (transaction.type == TransactionType.transfer) ...[
+          if (value.type == TransactionType.transfer) ...[
             const SizedBox(height: 14),
             Card(
                 child: Column(children: [
               _detailRow(
-                  '转出账户', accountName(store.state, transaction.fromAccountId)),
+                  '转出账户', accountName(store.state, value.fromAccountId)),
               _detailRow(
-                  '转入账户', accountName(store.state, transaction.toAccountId))
+                  '转入账户', accountName(store.state, value.toAccountId))
             ])),
           ],
         ],
@@ -125,10 +140,17 @@ class TransactionDetailPage extends StatelessWidget {
   }
 
   Future<void> _edit(BuildContext context) async {
+    final current = store.state.transactions
+        .where((item) => item.id == transaction.id)
+        .firstOrNull;
+    if (current == null) {
+      if (context.mounted) Navigator.pop(context);
+      return;
+    }
     await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => TransactionForm(store: store, initial: transaction));
+        builder: (_) => TransactionForm(store: store, initial: current));
   }
 
   Future<void> _delete(BuildContext context) async {
