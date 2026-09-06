@@ -924,6 +924,77 @@ class SyncAcceptanceMixin:
         self.assertEqual(row["note"], "离线修改")
         self.assertGreater(row["server_version"], version)
 
+    def test_sync_accepts_new_operation_for_existing_transaction(self):
+        from app.db import SessionLocal
+        from app.models import Transaction
+
+        self._prepare_sync_fixtures()
+        create = self._operation("synced-edit-operation", amount=22.02, note="before")
+        create["client_op_id"] = "sync-acceptance:synced-edit:create"
+        created = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [create]}
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        create_version = created.json()["accepted"][0]["server_version"]
+
+        edit = self._operation("synced-edit-operation", amount=23.03, note="edited")
+        edit["client_op_id"] = "sync-acceptance:synced-edit:edit"
+        edit["payload"]["server_version"] = create_version
+        edited = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [edit]}
+        )
+
+        db = SessionLocal()
+        try:
+            rows = db.query(Transaction).filter(
+                Transaction.id == "sync-acceptance-tx-synced-edit-operation"
+            ).all()
+        finally:
+            db.close()
+
+        actual = f"HTTP status={edited.status_code}; body={edited.text}; rows={len(rows)}"
+        self.assertEqual(edited.status_code, 200, actual)
+        self.assertFalse(edited.json()["conflicts"], actual)
+        self.assertEqual(len(rows), 1, actual)
+        self.assertEqual(float(rows[0].amount), 23.03, actual)
+        self.assertEqual(rows[0].note, "edited", actual)
+        self.assertGreater(rows[0].server_version, create_version, actual)
+
+    def test_sync_replays_edit_operation_idempotently(self):
+        self._prepare_sync_fixtures()
+        create = self._operation("replayed-edit-operation", amount=22.02, note="before")
+        create["client_op_id"] = "sync-acceptance:replayed-edit:create"
+        created = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [create]}
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        create_version = created.json()["accepted"][0]["server_version"]
+
+        edit = self._operation("replayed-edit-operation", amount=23.03, note="edited")
+        edit["client_op_id"] = "sync-acceptance:replayed-edit:edit"
+        edit["payload"]["server_version"] = create_version
+        first_edit = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [edit]}
+        )
+        self.assertEqual(first_edit.status_code, 200, first_edit.text)
+        edit_version = first_edit.json()["accepted"][0]["server_version"]
+
+        replay = self.client.post(
+            "/sync/push", headers=self.sync_headers, json={"operations": [edit]}
+        )
+        self.assertEqual(replay.status_code, 200, replay.text)
+        self.assertFalse(replay.json()["accepted"][0]["created"])
+        self.assertEqual(replay.json()["accepted"][0]["server_version"], edit_version)
+
+        rows = self.client.get("/transactions", headers=self.sync_headers).json()["items"]
+        row = next(
+            item
+            for item in rows
+            if item["id"] == "sync-acceptance-tx-replayed-edit-operation"
+        )
+        self.assertEqual(row["amount"], 23.03)
+        self.assertEqual(row["server_version"], edit_version)
+
     def test_sync_04_offline_delete_is_a_server_soft_delete(self):
         self._prepare_sync_fixtures()
         created = self.client.post(

@@ -252,23 +252,42 @@ class _TransactionFormState extends State<TransactionForm> {
 
   Future<void> _saveManual() async {
     if (!formKey.currentState!.validate()) return;
-    final id =
-        widget.initial?.id ?? 'tx-${DateTime.now().microsecondsSinceEpoch}';
-    final transaction = FinanceTransaction(
-      id: id,
-      date: date,
-      occurredAt: occurredAt,
-      type: type == 'income' ? TransactionType.income : TransactionType.expense,
-      amount: double.parse(amountController.text),
-      currency: currency.isEmpty ? 'CNY' : currency,
-      categoryId: categoryId,
-      accountId: accountId,
-      note: noteController.text.trim().isEmpty
-          ? categoryName(widget.store.state, categoryId)
-          : noteController.text.trim(),
-      clientOpId: widget.initial?.clientOpId ?? id,
-    );
-    if (widget.initial == null) {
+    final existing = widget.initial;
+    final id = existing?.id ?? 'tx-${DateTime.now().microsecondsSinceEpoch}';
+    final clientOpId = existing == null
+        ? id
+        : 'edit-${DateTime.now().microsecondsSinceEpoch}';
+    final note = noteController.text.trim().isEmpty
+        ? categoryName(widget.store.state, categoryId)
+        : noteController.text.trim();
+    final transaction = existing?.copyWith(
+          date: date,
+          occurredAt: occurredAt,
+          type: type == 'income'
+              ? TransactionType.income
+              : TransactionType.expense,
+          amount: double.parse(amountController.text),
+          currency: currency.isEmpty ? 'CNY' : currency,
+          categoryId: categoryId,
+          accountId: accountId,
+          note: note,
+          clientOpId: clientOpId,
+        ) ??
+        FinanceTransaction(
+          id: id,
+          date: date,
+          occurredAt: occurredAt,
+          type: type == 'income'
+              ? TransactionType.income
+              : TransactionType.expense,
+          amount: double.parse(amountController.text),
+          currency: currency.isEmpty ? 'CNY' : currency,
+          categoryId: categoryId,
+          accountId: accountId,
+          note: note,
+          clientOpId: clientOpId,
+        );
+    if (existing == null) {
       await widget.store.addTransaction(transaction);
     } else {
       await widget.store.updateTransaction(transaction);
