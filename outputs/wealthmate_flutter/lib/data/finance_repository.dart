@@ -10,6 +10,7 @@ class FinanceRepository {
   final SyncQueue queue;
   final ApiClient? api;
   String? _localOwnerUserId;
+  final Set<String> _pendingConflictClientOpIds = <String>{};
 
   String? get localOwnerUserId => _localOwnerUserId;
 
@@ -286,15 +287,26 @@ class FinanceRepository {
         }
       }
       await persistQueue();
-      final conflicts =
+      final conflictItems =
           ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
-              .map((item) => 'sync:${(item! as Map)['entity_id']}')
+              .map((item) => (item! as Map).cast<String, Object?>())
               .toList();
+      _pendingConflictClientOpIds
+        ..clear()
+        ..addAll(conflictItems
+            .map((item) => item['client_op_id'])
+            .whereType<String>());
+      final conflicts =
+          conflictItems.map((item) => 'sync:${item['entity_id']}').toList();
       final nextState = state.copyWith(
           transactions: nextTransactions,
           accounts: nextAccounts,
           budgets: nextBudgets,
-          conflicts: [...state.conflicts, ...conflicts],
+          conflicts: [
+            ...state.conflicts,
+            for (final conflict in conflicts)
+              if (!state.conflicts.contains(conflict)) conflict,
+          ],
           syncState: SyncState(
               serverVersion: (result['server_version'] as num?)?.toInt() ??
                   state.syncState.serverVersion,
@@ -319,7 +331,16 @@ class FinanceRepository {
           syncState: const SyncState(error: '当前用户身份尚未确认，暂不下载本地数据'));
     }
     try {
-      final remote = await api!.pullChanges(state.syncState.serverVersion);
+      final conflictOperations = _pendingConflictOperations(state);
+      final pullSince = conflictOperations.isEmpty
+          ? state.syncState.serverVersion
+          : _minimumConflictBaseVersion(
+              conflictOperations, state.syncState.serverVersion);
+      final remote = await api!.pullChanges(pullSince);
+      if (conflictOperations.isNotEmpty) {
+        return await _completeConflictRecovery(
+            state, remote, conflictOperations);
+      }
       final freshBootstrap = _isFreshBootstrap(state);
       var nextState = freshBootstrap
           ? state.copyWith(
@@ -357,8 +378,99 @@ class FinanceRepository {
       await local.save(next);
       return next;
     } on ApiFailure catch (failure) {
-      return state.copyWith(syncState: SyncState(error: failure.message));
+      return state.copyWith(
+          syncState: state.syncState.copyWith(error: failure.message));
     }
+  }
+
+  List<SyncOperation> _pendingConflictOperations(FinanceState state) {
+    final queued = queue.pending();
+    if (_pendingConflictClientOpIds.isNotEmpty) {
+      final byOperation = queued
+          .where((operation) =>
+              _pendingConflictClientOpIds.contains(operation.clientOpId))
+          .toList(growable: false);
+      if (byOperation.isNotEmpty) return byOperation;
+    }
+    final entityIds = state.conflicts
+        .where((item) => item.startsWith('sync:'))
+        .map((item) => item.substring('sync:'.length))
+        .toSet();
+    return queued
+        .where((operation) => entityIds.contains(operation.entityId))
+        .toList(growable: false);
+  }
+
+  int _minimumConflictBaseVersion(
+      List<SyncOperation> operations, int fallback) {
+    final versions = operations
+        .map((operation) => operation.payload['server_version'])
+        .whereType<num>()
+        .map((value) => value.toInt())
+        .toList(growable: false);
+    if (versions.isEmpty) return fallback;
+    return versions.reduce((a, b) => a < b ? a : b);
+  }
+
+  Future<FinanceState> _completeConflictRecovery(FinanceState state,
+      PullResult remote, List<SyncOperation> conflictOperations) async {
+    bool hasAuthoritativeEntity(SyncOperation operation) {
+      switch (operation.entity) {
+        case 'transactions':
+          return remote.transactions
+              .any((item) => item.id == operation.entityId);
+        case 'accounts':
+          return remote.accounts.any((item) => item.id == operation.entityId);
+        case 'categories':
+          return remote.categories.any((item) => item.id == operation.entityId);
+        case 'budgets':
+          return remote.budgets.any((item) => item.id == operation.entityId);
+        default:
+          return false;
+      }
+    }
+
+    if (conflictOperations
+        .any((operation) => !hasAuthoritativeEntity(operation))) {
+      return state.copyWith(
+          syncState: state.syncState.copyWith(error: '冲突数据尚未恢复，请稍后重试'));
+    }
+
+    var nextState = mergePulledBudgets(
+        mergePulledCategories(
+            mergePulledAccounts(
+                mergePulled(state, remote.transactions), remote.accounts),
+            remote.categories),
+        remote.budgets);
+    final resolvedEntityIds = <String>{
+      for (final operation in conflictOperations) operation.entityId,
+    };
+    final remainingConflicts = state.conflicts.where((conflict) {
+      if (conflict.startsWith('sync:')) {
+        return !resolvedEntityIds.contains(conflict.substring('sync:'.length));
+      }
+      if (conflict.startsWith('transactions:')) {
+        return !resolvedEntityIds
+            .contains(conflict.substring('transactions:'.length));
+      }
+      return true;
+    }).toList(growable: false);
+    for (final operation in conflictOperations) {
+      queue.complete(operation.clientOpId);
+      _pendingConflictClientOpIds.remove(operation.clientOpId);
+    }
+    await persistQueue();
+    final nextVersion = state.syncState.serverVersion > remote.serverVersion
+        ? state.syncState.serverVersion
+        : remote.serverVersion;
+    nextState = nextState.copyWith(
+        conflicts: remainingConflicts,
+        syncState: SyncState(
+          serverVersion: nextVersion,
+          lastSyncedAt: DateTime.now().toIso8601String(),
+        ));
+    await local.save(nextState);
+    return nextState;
   }
 
   bool _isFreshBootstrap(FinanceState state) {
