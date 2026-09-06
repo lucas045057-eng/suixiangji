@@ -219,8 +219,14 @@ class FinanceRepository {
       return state.copyWith(
           syncState: const SyncState(error: '当前用户身份尚未确认，暂不上传本地数据'));
     }
-    if (queue.pending().isEmpty)
-      return state.copyWith(syncState: const SyncState(error: null));
+    if (queue.pending().isEmpty) {
+      return state.copyWith(
+        syncState: state.syncState.copyWith(
+          isSyncing: false,
+          error: null,
+        ),
+      );
+    }
     try {
       final operations = queue.pending();
       final result = await api!.push(operations);
@@ -284,7 +290,7 @@ class FinanceRepository {
           ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
               .map((item) => 'sync:${(item! as Map)['entity_id']}')
               .toList();
-      return state.copyWith(
+      final nextState = state.copyWith(
           transactions: nextTransactions,
           accounts: nextAccounts,
           budgets: nextBudgets,
@@ -293,8 +299,15 @@ class FinanceRepository {
               serverVersion: (result['server_version'] as num?)?.toInt() ??
                   state.syncState.serverVersion,
               lastSyncedAt: DateTime.now().toIso8601String()));
+      await local.save(nextState);
+      return nextState;
     } on ApiFailure catch (failure) {
-      return state.copyWith(syncState: SyncState(error: failure.message));
+      return state.copyWith(
+        syncState: state.syncState.copyWith(
+          isSyncing: false,
+          error: failure.message,
+        ),
+      );
     }
   }
 
