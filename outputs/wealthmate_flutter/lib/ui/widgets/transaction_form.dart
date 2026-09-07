@@ -252,6 +252,8 @@ class _TransactionFormState extends State<TransactionForm> {
 
   Future<void> _saveManual() async {
     if (!formKey.currentState!.validate()) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await WidgetsBinding.instance.endOfFrame;
     final existing = widget.initial;
     final id = existing?.id ?? 'tx-${DateTime.now().microsecondsSinceEpoch}';
     final clientOpId = existing == null
