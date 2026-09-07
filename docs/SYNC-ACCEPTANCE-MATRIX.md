@@ -31,3 +31,12 @@
 - `BLOCKED` 表示尚未启动真实 FastAPI + PostgreSQL + Flutter Client 联调环境。
 - `NOT_RUN` 表示本次没有实际操作 Android 或 Windows 设备。
 - 本矩阵不把 WebSocket 计入同步主链路；Batch 1 仍使用 REST push/pull。
+
+## Final checkpoint addendum
+
+本文件保留早期 Batch 1 的自动化/联调状态记录。最终双端回归已经完成，最新矩阵、冲突验证和发布指纹见 [sync-test-matrix.md](sync-test-matrix.md) 与 [release-checkpoint.md](release-checkpoint.md)。
+
+```text
+FINAL SYNC REGRESSION = PASS
+SYNC RECOVERY RELEASE CHECKPOINT = PASS
+```

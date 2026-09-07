@@ -41,4 +41,12 @@ flutter build windows --release --dart-define=WEALTHMATE_API_BASE_URL=http://服
 
 完整部署和验收记录见 [随想记 V1.2 部署说明](outputs/WEALTHMATE-V1-DEPLOYMENT.md) 和 [验收状态](outputs/ACCEPTANCE-STATUS.md)。
 
+## Sync Status
+
+Core local-first multi-device synchronization has completed bidirectional CRUD, offline queue, idempotency, conflict recovery, tombstone propagation, restart persistence and final dual-device regression.
+
+Verified checkpoint: `sync-v1.0-rc1`
+
+详细架构、恢复报告、测试矩阵和构建指纹见 [`docs/`](docs/)、[同步架构](docs/sync-architecture.md)、[恢复报告](docs/sync-recovery-report.md) 和 [发布检查点](docs/release-checkpoint.md)。
+
 内部 Flutter 包名、数据库名和环境变量仍保留 `wealthmate` 标识，仅用于兼容现有构建和数据，不影响产品显示名称“随想记”。
