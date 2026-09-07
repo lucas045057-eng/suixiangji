@@ -6,6 +6,12 @@ abstract class TokenStore {
   Future<void> write(String token);
 
   Future<void> clear();
+
+  Future<String?> readLastVerifiedUserId() async => null;
+
+  Future<void> writeLastVerifiedUserId(String userId) async {}
+
+  Future<void> clearLastVerifiedUserId() async {}
 }
 
 class SecureTokenStore implements TokenStore {
@@ -13,6 +19,7 @@ class SecureTokenStore implements TokenStore {
       : _storage = storage ?? FlutterSecureStorage();
 
   static const key = 'suixiangji.access_token';
+  static const lastVerifiedUserIdKey = 'suixiangji.last_verified_user_id';
   final FlutterSecureStorage _storage;
 
   @override
@@ -23,4 +30,16 @@ class SecureTokenStore implements TokenStore {
 
   @override
   Future<void> clear() => _storage.delete(key: key);
+
+  @override
+  Future<String?> readLastVerifiedUserId() =>
+      _storage.read(key: lastVerifiedUserIdKey);
+
+  @override
+  Future<void> writeLastVerifiedUserId(String userId) =>
+      _storage.write(key: lastVerifiedUserIdKey, value: userId.trim());
+
+  @override
+  Future<void> clearLastVerifiedUserId() =>
+      _storage.delete(key: lastVerifiedUserIdKey);
 }

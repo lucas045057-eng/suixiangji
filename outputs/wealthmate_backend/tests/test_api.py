@@ -147,6 +147,12 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         self.assertFalse(historical["active"])
 
     def test_budget_create_update_and_month_filter_round_trip(self):
+        category = self.client.post(
+            "/categories",
+            headers=self.headers,
+            json={"id": "food", "name": "餐饮", "kind": "expense"},
+        )
+        self.assertEqual(category.status_code, 200, category.text)
         created = self.client.post(
             "/budgets",
             headers=self.headers,

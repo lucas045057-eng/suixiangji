@@ -175,6 +175,11 @@ def _save_tx(db: Session, user: User, values: dict, *, deleted: bool = False, se
         account_id = values.get(field)
         if account_id and (not db.get(Account, account_id) or db.get(Account, account_id).user_id != user.id):
             raise HTTPException(status_code=422, detail=f"账户不存在: {account_id}")
+    category_id = values.get("category_id")
+    if category_id:
+        category = db.get(Category, category_id)
+        if not category or category.user_id != user.id:
+            raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
     if not row:
         row = Transaction(id=values["id"], user_id=user.id, **{key: value for key, value in values.items() if key != "id"})
         db.add(row)
@@ -235,6 +240,29 @@ def _save_account(db: Session, user: User, values: dict, *, deleted: bool = Fals
     return row
 
 
+def _order_sync_operations(operations: list) -> list:
+    """Place entity dependencies before dependent upserts without moving deletes."""
+    priority = {"accounts": 0, "categories": 0, "transactions": 1, "budgets": 1}
+    indexed_upserts = [
+        (index, operation)
+        for index, operation in enumerate(operations)
+        if operation.type == "upsert" and operation.entity in priority
+    ]
+    ordered_upserts = iter(
+        operation
+        for _, operation in sorted(
+            indexed_upserts,
+            key=lambda item: (priority[item[1].entity], item[0]),
+        )
+    )
+    return [
+        next(ordered_upserts)
+        if operation.type == "upsert" and operation.entity in priority
+        else operation
+        for operation in operations
+    ]
+
+
 def _records(db: Session, user: User) -> list[TransactionRecord]:
     account_names = {row.id: row.name for row in db.query(Account).filter(Account.user_id == user.id).all()}
     return [
@@ -269,7 +297,12 @@ def _json_metrics(value):
 
 @router.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "suixiangji-v1", "server_time": datetime.now(timezone.utc)}
+    return {
+        "status": "ok",
+        "service": "suixiangji-v1",
+        "git_sha": get_settings().git_sha,
+        "server_time": datetime.now(timezone.utc),
+    }
 
 
 @router.post("/auth/login")
@@ -284,9 +317,12 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> dict:
     if not user:
         user = User(id=str(uuid4()), username=payload.username, password_hash=hash_password(payload.password), display_name=payload.username)
         db.add(user)
-        db.commit()
+        db.flush()
+        current_version = user.sync_version or 0
         for name, kind in (("餐饮", "expense"), ("交通", "expense"), ("住房", "expense"), ("工资", "income"), ("购物", "expense")):
-            db.add(Category(id=str(uuid4()), user_id=user.id, name=name, kind=kind))
+            current_version += 1
+            db.add(Category(id=str(uuid4()), user_id=user.id, name=name, kind=kind, server_version=current_version))
+        user.sync_version = current_version
         db.commit()
     return {"access_token": create_token(user.id, user.username, user.auth_version or 0), "token_type": "bearer", "user_id": user.id, "username": user.username, "display_name": user.display_name or user.username}
 
@@ -461,6 +497,11 @@ def _save_budget(db: Session, user: User, values: dict, *, server_version: int |
     row = db.get(Budget, values["id"])
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
+    category_id = values.get("category_id")
+    if category_id:
+        category = db.get(Category, category_id)
+        if not category or category.user_id != user.id:
+            raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
     data = {
         "month": values["month"],
         "category_id": values["category_id"],
@@ -764,7 +805,8 @@ async def monthly_report(month: str, force: bool = False, db: Session = Depends(
 def sync_push(payload: SyncPushIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
     accepted = []
     conflicts = []
-    for operation in payload.operations:
+    ordered_operations = _order_sync_operations(payload.operations)
+    for operation in ordered_operations:
         previous = db.query(SyncOperation).filter(SyncOperation.user_id == user.id, SyncOperation.client_op_id == operation.client_op_id).first()
         if previous:
             accepted.append({"client_op_id": operation.client_op_id, "entity_id": previous.entity_id, "server_version": previous.server_version, "created": False})
@@ -800,8 +842,24 @@ def sync_push(payload: SyncPushIn, db: Session = Depends(get_db), user: User = D
             row = _save_budget(db, user, data, server_version=user.sync_version)
         db.add(SyncOperation(user_id=user.id, client_op_id=operation.client_op_id, entity=operation.entity, entity_id=operation.entity_id, server_version=user.sync_version))
         accepted.append({"client_op_id": operation.client_op_id, "entity_id": operation.entity_id, "server_version": user.sync_version, "created": True})
+        if operation.entity in {"accounts", "categories"} and operation.type == "upsert":
+            db.flush()
     db.commit()
-    return {"accepted": accepted, "conflicts": conflicts, "server_version": user.sync_version}
+    accepted_by_operation = {item["client_op_id"]: item for item in accepted}
+    conflicts_by_operation = {item["client_op_id"]: item for item in conflicts}
+    return {
+        "accepted": [
+            accepted_by_operation[operation.client_op_id]
+            for operation in payload.operations
+            if operation.client_op_id in accepted_by_operation
+        ],
+        "conflicts": [
+            conflicts_by_operation[operation.client_op_id]
+            for operation in payload.operations
+            if operation.client_op_id in conflicts_by_operation
+        ],
+        "server_version": user.sync_version,
+    }
 
 
 @router.get("/sync/pull")

@@ -38,15 +38,18 @@ class ApiClient {
 
   final String? baseUrl;
   String? token;
+  String? lastVerifiedUserId;
   final http.Client client;
   final TokenStore tokenStore;
   FutureOr<void> Function()? onAuthExpired;
 
   Future<bool> restoreToken() async {
-    if (token != null && token!.isNotEmpty) return true;
-    final restored = await tokenStore.read();
-    if (restored == null || restored.isEmpty) return false;
-    token = restored;
+    if (token == null || token!.isEmpty) {
+      final restored = await tokenStore.read();
+      if (restored == null || restored.isEmpty) return false;
+      token = restored;
+    }
+    lastVerifiedUserId = await tokenStore.readLastVerifiedUserId();
     return true;
   }
 
@@ -58,7 +61,16 @@ class ApiClient {
 
   Future<void> logout() async {
     token = null;
+    lastVerifiedUserId = null;
     await tokenStore.clear();
+    await tokenStore.clearLastVerifiedUserId();
+  }
+
+  Future<void> saveLastVerifiedUserId(String userId) async {
+    final normalizedUserId = userId.trim();
+    if (normalizedUserId.isEmpty) return;
+    lastVerifiedUserId = normalizedUserId;
+    await tokenStore.writeLastVerifiedUserId(normalizedUserId);
   }
 
   Future<Map<String, Object?>> login(String username, String password) async {
@@ -75,7 +87,9 @@ class ApiClient {
 
   Future<UserProfile> fetchProfile() async {
     final json = await _requestMap('GET', '/auth/me');
-    return UserProfile.fromJson(json);
+    final profile = UserProfile.fromJson(json);
+    await saveLastVerifiedUserId(profile.id);
+    return profile;
   }
 
   Future<UserProfile> updateProfile(

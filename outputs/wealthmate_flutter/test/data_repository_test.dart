@@ -98,6 +98,56 @@ void main() {
     expect(queue.pending().single.clientOpId, 'op-1');
   });
 
+  test('sync queue replaces a pending operation with its latest snapshot', () {
+    final queue = SyncQueue();
+    final first = SyncOperation(
+      clientOpId: 'op-1',
+      entity: 'transactions',
+      entityId: 'tx-1',
+      type: SyncOperationType.upsert,
+      payload: repositoryTransaction(note: 'before-edit').toJson(),
+    );
+    final latest = SyncOperation(
+      clientOpId: 'op-1',
+      entity: 'transactions',
+      entityId: 'tx-1',
+      type: SyncOperationType.upsert,
+      payload: repositoryTransaction(note: 'after-edit')
+          .copyWith(amount: 8.9)
+          .toJson(),
+    );
+
+    queue.enqueue(first);
+    queue.enqueue(latest);
+
+    expect(queue.pending(), hasLength(1));
+    expect(queue.pending().single.clientOpId, 'op-1');
+    expect(queue.pending().single.payload['amount'], 8.9);
+    expect(queue.pending().single.payload['note'], 'after-edit');
+  });
+
+  test('sync queue keeps different entities isolated', () {
+    final queue = SyncQueue();
+    queue.enqueue(SyncOperation(
+      clientOpId: 'account-op',
+      entity: 'accounts',
+      entityId: 'account-1',
+      type: SyncOperationType.upsert,
+      payload: const {'id': 'account-1', 'name': '账户'},
+    ));
+    queue.enqueue(SyncOperation(
+      clientOpId: 'transaction-op',
+      entity: 'transactions',
+      entityId: 'tx-1',
+      type: SyncOperationType.upsert,
+      payload: const {'id': 'tx-1', 'amount': 8.9},
+    ));
+
+    expect(queue.pending(), hasLength(2));
+    expect(queue.pending().map((item) => item.entity),
+        containsAll(<String>['accounts', 'transactions']));
+  });
+
   test('ten offline transactions stay visible and queued locally', () async {
     final repository = FinanceRepository(
       local: LocalRepository(MemoryKeyValueStore()),
@@ -171,6 +221,43 @@ void main() {
     expect(operation.createdAt, '2026-09-04T10:00:00+08:00');
   });
 
+  test('latest pending edit payload survives queue persistence reload',
+      () async {
+    final storage = MemoryKeyValueStore();
+    final repository = FinanceRepository(
+      local: LocalRepository(storage),
+      queue: SyncQueue(),
+    );
+    repository.queue.enqueue(SyncOperation(
+      clientOpId: 'persist:tx-1',
+      entity: 'transactions',
+      entityId: 'tx-1',
+      type: SyncOperationType.upsert,
+      payload: repositoryTransaction(note: 'before-edit').toJson(),
+    ));
+    repository.queue.enqueue(SyncOperation(
+      clientOpId: 'persist:tx-1',
+      entity: 'transactions',
+      entityId: 'tx-1',
+      type: SyncOperationType.upsert,
+      payload: repositoryTransaction(note: 'after-edit')
+          .copyWith(amount: 8.9)
+          .toJson(),
+    ));
+    await repository.persistQueue();
+
+    final restarted = FinanceRepository(
+      local: LocalRepository(storage),
+      queue: SyncQueue(),
+    );
+    await restarted.load();
+
+    final operation = restarted.queue.pending().single;
+    expect(operation.clientOpId, 'persist:tx-1');
+    expect(operation.payload['amount'], 8.9);
+    expect(operation.payload['note'], 'after-edit');
+  });
+
   test('a real Drift SQLite file keeps the queue after database recreation',
       () async {
     final directory = await Directory.systemTemp.createTemp('suixiangji-sync-');
@@ -208,21 +295,21 @@ void main() {
     final transaction = repositoryTransaction();
     final repository = FinanceRepository(
       local: LocalRepository(MemoryKeyValueStore()),
-      queue: SyncQueue([
-        SyncOperation(
-          clientOpId: transaction.clientOpId,
-          entity: 'transactions',
-          entityId: transaction.id,
-          type: SyncOperationType.upsert,
-          payload: transaction.toJson(),
-        )
-      ]),
+      queue: SyncQueue(),
       api: ApiClient(
         baseUrl: 'http://example.test',
         token: 'test-token',
         client: SyncPushClient(),
       ),
     );
+    await repository.ensureLocalOwner('repository-test-user');
+    repository.queue.enqueue(SyncOperation(
+      clientOpId: transaction.clientOpId,
+      entity: 'transactions',
+      entityId: transaction.id,
+      type: SyncOperationType.upsert,
+      payload: transaction.toJson(),
+    ));
 
     final next =
         await repository.pushPending(FinanceState(transactions: [transaction]));
