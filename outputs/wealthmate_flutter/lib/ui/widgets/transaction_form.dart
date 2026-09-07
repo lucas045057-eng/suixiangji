@@ -256,39 +256,52 @@ class _TransactionFormState extends State<TransactionForm> {
     await WidgetsBinding.instance.endOfFrame;
     final existing = widget.initial;
     final id = existing?.id ?? 'tx-${DateTime.now().microsecondsSinceEpoch}';
-    final clientOpId = existing == null
-        ? id
-        : 'edit-${DateTime.now().microsecondsSinceEpoch}';
+    final clientOpId =
+        existing == null ? id : 'edit-${DateTime.now().microsecondsSinceEpoch}';
+    final amount = double.parse(amountController.text);
+    final normalizedCurrency =
+        (currency.isEmpty ? 'CNY' : currency).trim().toUpperCase();
+    final isCny = normalizedCurrency == 'CNY';
+    final exchangeRate = isCny ? 1.0 : existing?.exchangeRate;
+    final convertedAmount = isCny
+        ? amount
+        : exchangeRate != null && exchangeRate > 0
+            ? _roundCurrencyAmount(amount * exchangeRate)
+            : null;
+    final conversionStatus = convertedAmount == null ? 'pending' : 'ready';
     final note = noteController.text.trim().isEmpty
         ? categoryName(widget.store.state, categoryId)
         : noteController.text.trim();
-    final transaction = existing?.copyWith(
-          date: date,
-          occurredAt: occurredAt,
-          type: type == 'income'
-              ? TransactionType.income
-              : TransactionType.expense,
-          amount: double.parse(amountController.text),
-          currency: currency.isEmpty ? 'CNY' : currency,
-          categoryId: categoryId,
-          accountId: accountId,
-          note: note,
-          clientOpId: clientOpId,
-        ) ??
-        FinanceTransaction(
-          id: id,
-          date: date,
-          occurredAt: occurredAt,
-          type: type == 'income'
-              ? TransactionType.income
-              : TransactionType.expense,
-          amount: double.parse(amountController.text),
-          currency: currency.isEmpty ? 'CNY' : currency,
-          categoryId: categoryId,
-          accountId: accountId,
-          note: note,
-          clientOpId: clientOpId,
-        );
+    final transaction = FinanceTransaction(
+      id: id,
+      date: date,
+      occurredAt: occurredAt,
+      type: type == 'income' ? TransactionType.income : TransactionType.expense,
+      amount: amount,
+      currency: normalizedCurrency,
+      cnyAmount: convertedAmount,
+      exchangeRate: exchangeRate,
+      exchangeRateDate: isCny
+          ? existing?.exchangeRateDate
+          : convertedAmount == null
+              ? null
+              : existing?.exchangeRateDate,
+      exchangeRateSource: isCny
+          ? existing?.exchangeRateSource ?? 'CNY fixed rate'
+          : convertedAmount == null
+              ? null
+              : existing?.exchangeRateSource,
+      conversionStatus: conversionStatus,
+      categoryId: categoryId,
+      accountId: accountId,
+      fromAccountId: existing?.fromAccountId,
+      toAccountId: existing?.toAccountId,
+      note: note,
+      clientOpId: clientOpId,
+      serverVersion: existing?.serverVersion,
+      updatedAt: existing?.updatedAt,
+      deletedAt: existing?.deletedAt,
+    );
     if (existing == null) {
       await widget.store.addTransaction(transaction);
     } else {
@@ -296,6 +309,9 @@ class _TransactionFormState extends State<TransactionForm> {
     }
     if (mounted) Navigator.pop(context);
   }
+
+  static double _roundCurrencyAmount(double value) =>
+      (value * 100).roundToDouble() / 100;
 
   static String _dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';

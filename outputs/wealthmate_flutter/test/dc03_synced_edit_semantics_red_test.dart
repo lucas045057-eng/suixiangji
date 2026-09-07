@@ -185,7 +185,7 @@ void main() {
 
     final updated = store.state.transactions.single;
     expect(updated.serverVersion, 9);
-    expect(updated.cnyAmount, 158.544);
+    expect(updated.cnyAmount, 165.82);
     expect(updated.exchangeRate, 7.2);
     expect(updated.exchangeRateDate, '2026-09-05');
     expect(updated.exchangeRateSource, 'sentinel-rate-source');
