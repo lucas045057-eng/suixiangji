@@ -5,6 +5,7 @@ import 'package:wealthmate_flutter/data/token_store.dart';
 
 class IntegrationTokenStore implements TokenStore {
   String? value;
+  String? lastVerifiedUserId;
 
   @override
   Future<String?> read() async => value;
@@ -14,6 +15,16 @@ class IntegrationTokenStore implements TokenStore {
 
   @override
   Future<void> clear() async => value = null;
+
+  @override
+  Future<String?> readLastVerifiedUserId() async => lastVerifiedUserId;
+
+  @override
+  Future<void> writeLastVerifiedUserId(String userId) async =>
+      lastVerifiedUserId = userId.trim();
+
+  @override
+  Future<void> clearLastVerifiedUserId() async => lastVerifiedUserId = null;
 }
 
 void main() {
