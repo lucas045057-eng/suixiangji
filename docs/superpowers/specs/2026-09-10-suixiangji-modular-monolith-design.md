@@ -4,6 +4,14 @@
 **范围**：`outputs/wealthmate_flutter`、`outputs/wealthmate_backend`、必要的架构文档与测试  
 **实施方式**：当前本地目录原地修改，分支为 `refactor/modular-monolith`；不 push、不创建 PR、不连接线上环境。
 
+本轮执行的额外硬约束：
+
+- 以职责边界和依赖方向为拆分依据，不为凑目录机械搬移文件。
+- 第一轮不拆 SQLAlchemy `app/models.py`；它继续作为唯一的 ORM 模型定义与 metadata 注册入口。业务模块可以按职责引用其中的模型，但本轮不新增重复的 SQLAlchemy Model 定义。
+- `LocalStateSession` 是 Flutter 本地聚合状态的唯一串行写入口；任何 Feature Store、Repository、同步恢复和 demo 恢复都必须通过它提交状态写入，禁止旁路直接持久化或并发覆盖。
+- Sync 阶段只抽取边界、接口和唯一 Coordinator，不重新设计、优化或改变现有同步算法、排序规则、冲突策略和协议字段。
+- 每个 Phase 完成后必须先执行完整回归、检查并报告 diff，得到阶段结果后才进入下一 Phase。
+
 ## 1. 目标与不变项
 
 本次工作只整理代码边界，不增加产品功能，不改变用户可见行为、核心页面流程、现有 API Contract 或同步协议。重构完成后，Flutter 页面依赖所属业务模块的 Store/Repository，后端路由只处理 HTTP 边界，业务规则进入 Service/Domain；跨模块同步仍由唯一的公共 Sync Engine/Coordinator 负责。
@@ -97,6 +105,8 @@ lib/
 
 公共设施只提供技术能力：HTTP transport、Token store、Drift 数据库、通用本地状态存取和唯一 SyncCoordinator。业务 Repository 通过这些设施访问本地与远端，UI 不直接访问 HTTP 或数据库。
 
+目标目录中可能出现的模块级 `models.py` 属于后续演进形态；本轮第一轮重构不创建或移动 SQLAlchemy 模型文件，先以职责边界、Router/Service、Flutter Store/Repository 和公共基础设施为拆分重点。
+
 `FinanceState` 在第一阶段作为兼容的持久化聚合 DTO 保留，不把它继续当作所有业务规则的拥有者。各模块 Store 只拥有自己的状态切片和用例；如果必须写入现有聚合快照，通过一个无业务规则的本地状态会话完成。`FinanceStore` 最终固定为薄兼容门面/应用会话协调器并标记为 deprecated；它不再包含领域规则和资源 CRUD，业务页面不再依赖它承载具体业务。
 
 `ApiClient` 拆为无业务含义的 `ApiTransport` 与各模块 RemoteDataSource。旧 `ApiClient` 暂时作为兼容门面委托给这些 DataSource，避免一次性破坏既有测试和外部构造代码。
@@ -157,7 +167,7 @@ app/
 
 `main.py` 只负责应用生命周期、公共中间件和各模块 Router 注册。`core/dependencies.py` 提供当前用户、数据库 Session 等依赖。每个 Router 负责验证参数、注入依赖、调用 Service 和返回既有响应；账户归属检查、分类/汇率/版本规则、事务写入和统计聚合进入对应 Service/Domain。
 
-迁移期间保留 `app/api.py`、`app/models.py`、`app/schemas.py`、`app/domain.py` 作为薄兼容聚合层和 re-export 入口；真正的实现只保留在业务模块中。`db.py` 显式导入所有模块模型，确保 `Base.metadata.create_all` 和现有 SQLite 测试仍能注册完整元数据。
+第一轮保留 `app/models.py` 作为唯一 SQLAlchemy 模型定义文件，不拆成模块级 `models.py`；模块只通过明确的 import 使用其所属模型。迁移期间保留 `app/api.py`、`app/schemas.py`、`app/domain.py` 作为薄兼容聚合层和 re-export 入口；真正的实现只保留在业务模块中。`db.py` 继续显式导入 `app.models`，确保 `Base.metadata.create_all` 和现有 SQLite 测试仍能注册完整元数据。模型文件的进一步拆分作为后续独立变更，不属于本轮。
 
 ## 4. 模块依赖与数据流
 
@@ -175,22 +185,22 @@ Core ApiTransport             Core SyncCoordinator
                          /sync/push + /sync/pull
 ```
 
-业务模块不互相复制同步算法。模块只提供可同步实体的序列化/反序列化、mutation 构造和依赖元数据；SyncCoordinator 统一处理 queue、push、pull、cursor、幂等、冲突和 tombstone。统计和财富页面可以读取其他模块的只读快照，但不能修改其他模块的实体。
+业务模块不互相复制同步算法。模块只提供可同步实体的序列化/反序列化、mutation 构造和依赖元数据；SyncCoordinator 统一处理 queue、push、pull、cursor、幂等、冲突和 tombstone。本轮 Sync 只把现有实现放入清晰边界并接入唯一 Coordinator，不改变现有算法、时序、排序、冲突恢复或协议字段。统计和财富页面可以读取其他模块的只读快照，但不能修改其他模块的实体。
 
 后端同步入口按稳定依赖顺序调用模块 Service：Account/Category 先于 Transaction/Budget；返回结果仍按原始 `client_op_id` 对应操作返回。冲突操作只恢复对应实体并移除对应队列项，不能全局清空队列。
 
 ## 5. 渐进式重构阶段
 
-每个阶段都遵守“修改 → format → analyze/lint → 专项测试 → 完整回归 → diff review → 本地 commit”，当前阶段未通过不得进入下一阶段。
+每个阶段都遵守“修改 → format → analyze/lint → 专项测试 → 完整回归 → diff review → 报告阶段结果 → 本地 commit”。阶段报告必须说明变更文件、行为/API/Schema 是否保持不变、专项测试与完整回归结果、剩余风险；报告完成前不得进入下一阶段。
 
-1. **Phase 0：基线与脚手架**。记录现有测试、确认 branch 和 clean status；建立公共命名和兼容导出策略，不改变行为。
+1. **Phase 0：基线与脚手架**。记录现有测试、确认 branch 和 clean status；建立 `LocalStateSession` 的唯一串行写入契约、公共命名和兼容导出策略，不改变行为；SQLAlchemy `app/models.py` 保持不拆。
 2. **Phase 1：Auth**。抽取 Flutter AuthRepository/AuthStore 和后端 auth Router/Service/Schema/Model，迁移登录、注册、Profile、Token、Session；保留旧构造入口。
 3. **Phase 2：Ledger**。抽取 Transaction/Category 的 Flutter 与后端模块，迁移账本 CRUD、分类管理、金额规则；不改同步字段。
 4. **Phase 3：Assets**。抽取 Account、ExchangeRate、NetWorth 和财富页面依赖，保持外币折算快照语义。
 5. **Phase 4：Budget**。抽取 Budget、BudgetAlert、预算 CRUD 与阈值计算。
 6. **Phase 5：QuickEntry**。抽取 AgentDraft、QuickMemory 和 AI 草稿流程，确认入账仍由 Ledger 用例完成。
 7. **Phase 6：Insights**。抽取 Stats、Metrics、MonthlyReport 和 AI 报告生成，保证数字由确定性 Domain 计算。
-8. **Phase 7：Sync**。最后集中整理队列、push/pull、冲突、tombstone、依赖排序和生命周期；删除重复同步路径，只保留一个 Coordinator。
+8. **Phase 7：Sync**。最后集中整理队列、push/pull、冲突、tombstone、依赖排序和生命周期；只抽取边界并接入一个 Coordinator，不重写、优化或重新设计同步算法。
 9. **收尾**。迁移 UI 和测试到 feature 入口，保留必要的兼容 façade，更新架构文档与目录说明，做全量回归。
 
 ## 6. 风险与控制
@@ -198,11 +208,11 @@ Core ApiTransport             Core SyncCoordinator
 | 风险 | 控制措施 |
 |---|---|
 | Flutter 页面依赖旧 FinanceStore | 先加入薄适配层，再逐页迁移；每阶段保留旧测试入口 |
-| 本地状态快照被多个 Store 同时写入 | 使用单一 LocalStateSession 写入入口，Store 只提交明确的领域 mutation |
+| 本地状态快照被多个 Store 同时写入 | 使用单一且串行的 LocalStateSession 写入入口，Store 只提交明确的领域 mutation；代码审查禁止旁路写入 |
 | ApiClient 拆分导致错误映射或 401 行为变化 | 先抽 `ApiTransport`，集中保留状态码映射、Token 清理和 auth-expired 回调 |
 | SQLAlchemy 模型循环导入或元数据遗漏 | 按模型所有权拆分，使用显式 model registry，在应用启动和测试入口统一导入 |
 | Router 拆分改变响应包装或状态码 | 以现有 API 测试为合同，迁移一个路由组后立即执行专项测试 |
-| 同步冲突、幂等和 cursor 回退 | Sync 最后处理；新增协议回归测试并逐项对照同步架构文档 |
+| 同步冲突、幂等和 cursor 回退 | Sync 最后处理；只做边界抽取，逐项对照现有测试和同步架构文档，不做算法优化 |
 | accidentally touching user/production data | 仅使用本地测试数据库/独立 Compose；不执行 volume 删除、数据库清理或线上连接 |
 
 ## 7. 回滚方案
@@ -217,7 +227,8 @@ Core ApiTransport             Core SyncCoordinator
 - Backend：从 `outputs/wealthmate_backend` 执行 `python -m unittest discover -s tests -v`，并执行 `python -m compileall -q app tests`。
 - Flutter：`dart format --output=none --set-exit-if-changed .`、`flutter analyze`、`flutter test`。
 - API 合同：登录/Profile、账户、分类、交易、预算、统计、财富、汇率、报告、备份和现有 `/sync/push`/`/sync/pull` 测试。
-- 同步专项：相同 `client_op_id` 重放、严格增量 cursor、tombstone、冲突恢复、依赖排序、失败 batch 回滚和跨用户隔离。
+- 同步专项：相同 `client_op_id` 重放、严格增量 cursor、tombstone、冲突恢复、依赖排序、失败 batch 回滚和跨用户隔离；这些测试用于证明边界抽取未改变现有算法。
+- 本地写入约束：测试所有 Feature Store、Repository、同步恢复和 demo 恢复路径都经过同一个串行 `LocalStateSession`，并覆盖连续写入不会丢失更新的场景。
 - 架构约束：页面不得直接持有 `ApiTransport`/数据库；Router 不直接实现领域计算；同步算法只存在于 Core SyncCoordinator。
 
 若本机 Docker Desktop 可用，额外执行独立本地 PostgreSQL Compose 健康检查和 API 冒烟测试；任何测试都不连接生产数据库。
