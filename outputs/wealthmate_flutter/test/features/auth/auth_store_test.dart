@@ -57,6 +57,33 @@ class _AuthResponseClient extends http.BaseClient {
   }
 }
 
+class _DeferredAuthResponseClient extends http.BaseClient {
+  final List<Completer<_AuthResponse>> pending = [];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final completer = Completer<_AuthResponse>();
+    pending.add(completer);
+    final response = await completer.future;
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode(jsonEncode(response.body))),
+      response.statusCode,
+      request: request,
+      headers: const {'content-type': 'application/json'},
+    );
+  }
+
+  Future<void> waitForRequests(int count) async {
+    while (pending.length < count) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+
+  void respondAt(int index, _AuthResponse response) {
+    pending.removeAt(index).complete(response);
+  }
+}
+
 class _AuthResponse {
   const _AuthResponse(this.statusCode, this.body);
 
@@ -164,5 +191,46 @@ void main() {
     expect(auth.isAuthenticated, isFalse);
     expect(auth.profile, isNull);
     expect(tokenStore.value, isNull);
+  });
+
+  test('stale A auth response cannot overwrite B session or rotated token',
+      () async {
+    final tokenStore = _AuthMemoryTokenStore()..value = 'jwt-a-old';
+    final client = _DeferredAuthResponseClient();
+    final api = ApiClient(
+      baseUrl: 'http://auth.test',
+      token: 'jwt-a-old',
+      tokenStore: tokenStore,
+      client: client,
+    );
+    final auth = AuthStore(
+      repository: AuthRepository(
+        remote: AuthRemoteDataSource(api: api),
+      ),
+    );
+
+    final staleA = auth.updateProfile(displayName: 'A');
+    await client.waitForRequests(1);
+
+    await auth.logout();
+    final loginB = auth.login('user-b', 'password');
+    await client.waitForRequests(2);
+    client.respondAt(1, const _AuthResponse(200, {
+      'access_token': 'jwt-b',
+    }));
+    await client.waitForRequests(2);
+    client.respondAt(1, _AuthResponse(200, _profile(accessToken: 'jwt-b')));
+
+    expect(await loginB, isTrue);
+    expect(auth.profile?.id, 'user-1');
+    expect(api.token, 'jwt-b');
+    expect(tokenStore.value, 'jwt-b');
+
+    client.respondAt(0, _AuthResponse(200, _profile(accessToken: 'jwt-a-new')));
+
+    expect(await staleA, isFalse);
+    expect(auth.profile?.id, 'user-1');
+    expect(api.token, 'jwt-b');
+    expect(tokenStore.value, 'jwt-b');
   });
 }

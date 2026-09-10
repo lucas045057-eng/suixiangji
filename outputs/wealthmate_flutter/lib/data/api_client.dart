@@ -33,6 +33,7 @@ class ApiClient {
   final TokenStore tokenStore;
   FutureOr<void> Function()? onAuthExpired;
   late final ApiTransport transport;
+  int _sessionGeneration = 0;
 
   Future<void> _handleAuthExpired() async {
     await logout();
@@ -49,27 +50,43 @@ class ApiClient {
     return true;
   }
 
+  void beginSession() {
+    _sessionGeneration++;
+  }
+
   Future<void> saveToken(String value) async {
+    await _saveToken(value);
+  }
+
+  Future<void> _saveToken(String value, {int? expectedGeneration}) async {
     if (value.isEmpty) return;
+    if (expectedGeneration != null &&
+        expectedGeneration != _sessionGeneration) return;
     token = value;
     await tokenStore.write(value);
   }
 
   Future<void> logout() async {
+    _sessionGeneration++;
     token = null;
     lastVerifiedUserId = null;
     await tokenStore.clear();
     await tokenStore.clearLastVerifiedUserId();
   }
 
-  Future<void> saveLastVerifiedUserId(String userId) async {
+  Future<void> saveLastVerifiedUserId(String userId,
+      {int? expectedGeneration}) async {
     final normalizedUserId = userId.trim();
     if (normalizedUserId.isEmpty) return;
+    if (expectedGeneration != null &&
+        expectedGeneration != _sessionGeneration) return;
     lastVerifiedUserId = normalizedUserId;
     await tokenStore.writeLastVerifiedUserId(normalizedUserId);
   }
 
   Future<Map<String, Object?>> login(String username, String password) async {
+    beginSession();
+    final requestGeneration = _sessionGeneration;
     final result = await _requestMap('POST', '/auth/login',
         body: {'username': username, 'password': password}, includeAuth: false);
     final accessToken =
@@ -77,14 +94,18 @@ class ApiClient {
     if (accessToken == null || accessToken.isEmpty) {
       throw const ApiFailure(ApiFailureKind.server, '登录响应中没有访问令牌');
     }
-    await saveToken(accessToken);
+    await _saveToken(accessToken, expectedGeneration: requestGeneration);
     return result;
   }
 
   Future<UserProfile> fetchProfile() async {
+    final requestGeneration = _sessionGeneration;
     final json = await _requestMap('GET', '/auth/me');
     final profile = UserProfile.fromJson(json);
-    await saveLastVerifiedUserId(profile.id);
+    await saveLastVerifiedUserId(
+      profile.id,
+      expectedGeneration: requestGeneration,
+    );
     return profile;
   }
 
@@ -92,6 +113,7 @@ class ApiClient {
       {String? displayName,
       String? username,
       List<QuickMemory>? quickMemories}) async {
+    final requestGeneration = _sessionGeneration;
     final json = await _requestMap('PATCH', '/auth/me', body: {
       if (displayName != null) 'display_name': displayName,
       if (username != null) 'username': username,
@@ -100,19 +122,20 @@ class ApiClient {
     });
     final accessToken = json['access_token'] as String?;
     if (accessToken != null && accessToken.isNotEmpty)
-      await saveToken(accessToken);
+      await _saveToken(accessToken, expectedGeneration: requestGeneration);
     return UserProfile.fromJson(json);
   }
 
   Future<UserProfile> changePassword(
       String currentPassword, String newPassword) async {
+    final requestGeneration = _sessionGeneration;
     final json = await _requestMap('POST', '/auth/password', body: {
       'current_password': currentPassword,
       'new_password': newPassword,
     });
     final accessToken = json['access_token'] as String?;
     if (accessToken != null && accessToken.isNotEmpty)
-      await saveToken(accessToken);
+      await _saveToken(accessToken, expectedGeneration: requestGeneration);
     return UserProfile.fromJson(json);
   }
 

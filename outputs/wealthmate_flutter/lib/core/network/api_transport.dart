@@ -73,7 +73,11 @@ class ApiTransport {
       };
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final failure = _failureForStatus(response.statusCode);
-        if (response.statusCode == 401 && includeAuth) {
+        if (response.statusCode == 401 &&
+            includeAuth &&
+            token != null &&
+            token.isNotEmpty &&
+            tokenProvider() == token) {
           await onAuthExpired?.call();
         }
         throw failure;
