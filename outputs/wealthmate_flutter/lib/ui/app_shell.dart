@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../features/auth/state/auth_store.dart';
 import '../state/finance_store.dart';
 import 'budgets_page.dart';
 import 'dashboard_page.dart';
@@ -11,9 +12,10 @@ import 'stats_page.dart';
 import 'wealth_page.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({required this.store, this.onLoggedOut, super.key});
+  const AppShell({required this.store, this.auth, this.onLoggedOut, super.key});
 
   final FinanceStore store;
+  final AuthStore? auth;
   final VoidCallback? onLoggedOut;
 
   @override
@@ -30,10 +32,19 @@ class _AppShellState extends State<AppShell> {
     _pageCache = List<Widget?>.filled(5, null);
     _pageCache[0] = _buildPage(0);
     if (!widget.store.isDemoMode) {
-      unawaited(widget.store.loadProfile().then((authenticated) async {
-        if (!authenticated) return;
-        await widget.store.sync();
-      }));
+      final auth = widget.auth;
+      if (auth == null) {
+        unawaited(widget.store.loadProfile().then((authenticated) async {
+          if (!authenticated) return;
+          await widget.store.sync();
+        }));
+      } else {
+        unawaited(auth.loadProfile().then((authenticated) async {
+          if (!authenticated || auth.profile == null) return;
+          await widget.store.loadAuthenticatedProfile(auth.profile!);
+          await widget.store.sync();
+        }));
+      }
     }
   }
 
@@ -46,7 +57,11 @@ class _AppShellState extends State<AppShell> {
       1 => LedgerPage(store: widget.store),
       2 => StatsPage(store: widget.store),
       3 => WealthPage(store: widget.store),
-      _ => SettingsPage(store: widget.store, onLoggedOut: widget.onLoggedOut),
+      _ => SettingsPage(
+          store: widget.store,
+          auth: widget.auth,
+          onLoggedOut: widget.onLoggedOut,
+        ),
     };
   }
 

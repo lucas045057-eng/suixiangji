@@ -229,11 +229,11 @@ Interfaces:
 - AuthStore exposes UserProfile? profile, bool isAuthenticated, Future<bool> login(String username, String password), Future<bool> loadProfile(), Future<bool> updateProfile({String? displayName, String? username}), Future<bool> changePassword(String currentPassword, String nextPassword), Future<void> logout(), and void clearSession().
 - app.auth.service exposes login(db, payload), get_current_user(db, token), update_profile(db, user, payload), and change_password(db, user, payload); routers only validate and delegate.
 
-- [ ] Step 1: Add Auth Store tests around current behavior.
+- [x] Step 1: Add Auth Store tests around current behavior.
 
 Cover login token persistence, profile verification, profile update, password-change token rotation, logout, and 401 session clearing. Keep current test fakes and assert existing response fields. Do not add register, invitation, or any other endpoint absent from the current code.
 
-- [ ] Step 2: Run the focused Auth tests and verify the new Store/Repository surface is initially absent.
+- [x] Step 2: Run the focused Auth tests and verify the new Store/Repository surface is initially absent.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -242,7 +242,7 @@ flutter test test\features\auth\auth_store_test.dart test\api_client_test.dart
 
 Expected: compilation failure until the module classes are added.
 
-- [ ] Step 3: Extract Flutter Auth without moving unrelated state.
+- [x] Step 3: Extract Flutter Auth without moving unrelated state.
 
 Move token restoration, login, profile, password and auth-expiry handling out of FinanceStore into AuthRepository and AuthStore. The Store may request owner binding through LocalStateSession, but it must not modify transactions, accounts, budgets, metrics, or queue entries. Keep lib/ui/login_page.dart as a compatibility export if the concrete widget moves under features/auth/ui/.
 
@@ -261,7 +261,7 @@ abstract interface class AuthStorePort {
 }
 ~~~
 
-- [ ] Step 4: Extract Backend Auth Router/Service while keeping app/models.py untouched.
+- [x] Step 4: Extract Backend Auth Router/Service while keeping app/models.py untouched.
 
 Move only the existing /auth/login, /auth/me, /auth/password route behavior. auth/service.py imports User from app.models; it does not create auth/models.py. app/core/security.py may re-export the existing password/JWT functions, while app/security.py remains a compatibility export. app/api.py includes auth.router and re-exports _user compatibility symbols without duplicating routes.
 
@@ -273,11 +273,11 @@ def login(payload: LoginIn, db: Session = Depends(get_db)) -> dict:
     return auth_service.login(db, payload)
 ~~~
 
-- [ ] Step 5: Migrate app bootstrap and auth-related pages.
+- [x] Step 5: Migrate app bootstrap and auth-related pages.
 
 main.dart constructs AuthRepository/AuthStore; AppShell receives AuthStore for lifecycle and receives feature stores separately where needed. LoginPage talks only to AuthStore or an Auth-specific controller, never directly to ApiClient. Profile/settings pages use AuthStore for profile and password operations.
 
-- [ ] Step 6: Run Auth-focused tests, the full phase gate, review diff, report and commit.
+- [x] Step 6: Run Auth-focused tests, the full phase gate, review diff, report and commit.
 
 Confirm that no Auth route changed and no SQLAlchemy model file changed. Commit:
 

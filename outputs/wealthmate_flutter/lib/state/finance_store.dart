@@ -6,17 +6,31 @@ import '../data/api_client.dart';
 import '../domain/demo_state.dart';
 import '../domain/finance_rules.dart';
 import '../domain/models.dart';
+import '../features/auth/data/auth_remote_data_source.dart';
+import '../features/auth/data/auth_repository.dart';
+import '../features/auth/state/auth_store.dart';
 
 class FinanceStore extends ChangeNotifier {
-  FinanceStore({required this.repository, FinanceState? initialState})
-      : _state = initialState ??
-            (repository.api == null ? DemoData.create() : const FinanceState());
+  FinanceStore({
+    required this.repository,
+    FinanceState? initialState,
+    AuthStore? authStore,
+  })  : _state = initialState ??
+            (repository.api == null ? DemoData.create() : const FinanceState()),
+        _authStore = authStore ??
+            (repository.api == null
+                ? null
+                : AuthStore(
+                    repository: AuthRepository(
+                      remote: AuthRemoteDataSource(api: repository.api!),
+                    ),
+                  ));
 
   final FinanceRepository repository;
   FinanceState _state;
   AgentDraft? _draft;
   String? _draftSourceText;
-  UserProfile? _profile;
+  final AuthStore? _authStore;
   String? _message;
   List<BudgetAlert> _budgetAlerts = const [];
   FinanceState? _metricsState;
@@ -25,7 +39,8 @@ class FinanceStore extends ChangeNotifier {
 
   FinanceState get state => _state;
   AgentDraft? get draft => _draft;
-  UserProfile? get profile => _profile;
+  AuthStore? get authStore => _authStore;
+  UserProfile? get profile => _authStore?.profile;
   String? get message => _message;
   List<BudgetAlert> get budgetAlerts => List.unmodifiable(_budgetAlerts);
   bool get isDemoMode => repository.api == null;
@@ -54,65 +69,57 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<bool> loadProfile() async {
-    if (repository.api == null || repository.api!.token == null) return false;
-    try {
-      final profile = await repository.api!.fetchProfile();
-      final loaded = await repository.loadForUser(profile.id);
-      _state = loaded ?? const FinanceState();
-      _profile = profile;
-      final memories = <String, QuickMemory>{
-        for (final memory in _state.quickMemories) memory.key: memory,
-        for (final memory in profile.quickMemories) memory.key: memory,
-      };
-      _state = _state.copyWith(quickMemories: memories.values.toList());
-      await repository.save(_state);
-      _message = null;
-      notifyListeners();
-      return true;
-    } on ApiFailure catch (failure) {
-      _message = failure.message;
+    final auth = _authStore;
+    if (auth == null || !await auth.loadProfile()) {
+      _message = auth?.message;
       notifyListeners();
       return false;
     }
+    final profile = auth.profile;
+    if (profile == null) return false;
+    await loadAuthenticatedProfile(profile);
+    return true;
+  }
+
+  Future<void> loadAuthenticatedProfile(UserProfile profile) async {
+    final loaded = await repository.loadForUser(profile.id);
+    _state = loaded ?? const FinanceState();
+    final memories = <String, QuickMemory>{
+      for (final memory in _state.quickMemories) memory.key: memory,
+      for (final memory in profile.quickMemories) memory.key: memory,
+    };
+    _state = _state.copyWith(quickMemories: memories.values.toList());
+    await repository.save(_state);
+    _message = null;
+    notifyListeners();
   }
 
   Future<bool> updateProfile({String? displayName, String? username}) async {
-    if (repository.api == null) {
+    final auth = _authStore;
+    if (auth == null) {
       _message = '当前未配置同步服务';
       notifyListeners();
       return false;
     }
-    try {
-      _profile = await repository.api!
-          .updateProfile(displayName: displayName, username: username);
-      _message = '用户资料已更新';
-      notifyListeners();
-      return true;
-    } on ApiFailure catch (failure) {
-      _message = failure.message;
-      notifyListeners();
-      return false;
-    }
+    final success =
+        await auth.updateProfile(displayName: displayName, username: username);
+    _message = success ? '用户资料已更新' : auth.message;
+    notifyListeners();
+    return success;
   }
 
   Future<bool> changePassword(
       String currentPassword, String newPassword) async {
-    if (repository.api == null) {
+    final auth = _authStore;
+    if (auth == null) {
       _message = '当前未配置同步服务';
       notifyListeners();
       return false;
     }
-    try {
-      _profile =
-          await repository.api!.changePassword(currentPassword, newPassword);
-      _message = '密码已更新，其他设备需要重新登录';
-      notifyListeners();
-      return true;
-    } on ApiFailure catch (failure) {
-      _message = failure.message;
-      notifyListeners();
-      return false;
-    }
+    final success = await auth.changePassword(currentPassword, newPassword);
+    _message = success ? '密码已更新，其他设备需要重新登录' : auth.message;
+    notifyListeners();
+    return success;
   }
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
@@ -268,8 +275,7 @@ class FinanceStore extends ChangeNotifier {
     await repository.save(_state);
     if (repository.api != null) {
       try {
-        _profile = await repository.api!
-            .updateProfile(quickMemories: _state.quickMemories);
+        await _authStore?.updateProfile(quickMemories: _state.quickMemories);
       } on ApiFailure {
         // The confirmed transaction remains safe locally and will sync later.
       }
@@ -374,7 +380,7 @@ class FinanceStore extends ChangeNotifier {
   }
 
   void clearAuthenticatedSession() {
-    _profile = null;
+    _authStore?.clearSession();
     _draft = null;
     _draftSourceText = null;
     _message = null;

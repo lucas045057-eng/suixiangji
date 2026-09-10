@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/models.dart';
+import '../features/auth/state/auth_store.dart';
 import '../state/finance_store.dart';
 import 'account_detail_page.dart';
 import 'category_management_page.dart';
 import 'profile_settings_page.dart';
 
 class SettingsPage extends StatelessWidget {
-  const SettingsPage({required this.store, this.onLoggedOut, super.key});
+  const SettingsPage({
+    required this.store,
+    this.auth,
+    this.onLoggedOut,
+    super.key,
+  });
 
   final FinanceStore store;
+  final AuthStore? auth;
   final VoidCallback? onLoggedOut;
 
   @override
@@ -46,8 +53,8 @@ class SettingsPage extends StatelessWidget {
                               store.isDemoMode ? '本地演示 · 尚未配置同步服务' : '同步服务已配置'),
                           onTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                  builder: (_) =>
-                                      ProfileSettingsPage(store: store))))),
+                                  builder: (_) => ProfileSettingsPage(
+                                      store: store, auth: auth))))),
                   const SizedBox(height: 12),
                   Card(
                       child: Column(children: [
@@ -57,8 +64,8 @@ class SettingsPage extends StatelessWidget {
                         subtitle: const Text('修改昵称、用户名和登录密码'),
                         onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                                builder: (_) =>
-                                    ProfileSettingsPage(store: store)))),
+                                builder: (_) => ProfileSettingsPage(
+                                    store: store, auth: auth)))),
                   ])),
                   const SizedBox(height: 12),
                   Card(
@@ -169,7 +176,7 @@ class SettingsPage extends StatelessWidget {
                             title: const Text('退出登录'),
                             subtitle: const Text('只清除登录凭据，不删除本地财务数据'),
                             onTap: () async {
-                              await store.repository.api!.logout();
+                              await (auth ?? store.authStore)?.logout();
                               if (context.mounted) onLoggedOut?.call();
                             })),
                   ],

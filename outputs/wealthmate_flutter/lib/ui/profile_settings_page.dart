@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../features/auth/state/auth_store.dart';
 import '../state/finance_store.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
-  const ProfileSettingsPage({required this.store, super.key});
+  const ProfileSettingsPage({required this.store, this.auth, super.key});
 
   final FinanceStore store;
+  final AuthStore? auth;
 
   @override
   State<ProfileSettingsPage> createState() => _ProfileSettingsPageState();
@@ -21,17 +23,18 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   @override
   void initState() {
     super.initState();
-    final profile = widget.store.profile;
+    final auth = widget.auth ?? widget.store.authStore;
+    final profile = auth?.profile ?? widget.store.profile;
     displayNameController =
         TextEditingController(text: profile?.displayName ?? '');
     usernameController = TextEditingController(text: profile?.username ?? '');
-    if (!widget.store.isDemoMode) {
+    if (!widget.store.isDemoMode && auth != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        widget.store.loadProfile().then((_) {
-          if (!mounted || widget.store.profile == null) return;
+        auth.loadProfile().then((loaded) {
+          if (!loaded || !mounted || auth.profile == null) return;
           setState(() {
-            displayNameController.text = widget.store.profile!.displayName;
-            usernameController.text = widget.store.profile!.username;
+            displayNameController.text = auth.profile!.displayName;
+            usernameController.text = auth.profile!.username;
           });
         });
       });
@@ -129,19 +132,24 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
       _show('显示名称不能为空，用户名至少 3 位');
       return;
     }
-    final saved = await widget.store
-        .updateProfile(displayName: displayName, username: username);
+    final auth = widget.auth ?? widget.store.authStore;
+    final saved = await auth?.updateProfile(
+            displayName: displayName, username: username) ??
+        false;
     if (saved && mounted) _show('登录资料已保存');
   }
 
   Future<void> _changePassword() async {
     final current = currentPasswordController.text;
     final next = newPasswordController.text;
-    if (current.isEmpty || next.length < 8 || next != confirmPasswordController.text) {
+    if (current.isEmpty ||
+        next.length < 8 ||
+        next != confirmPasswordController.text) {
       _show('请填写当前密码，并确认新密码至少 8 位且两次一致');
       return;
     }
-    final saved = await widget.store.changePassword(current, next);
+    final auth = widget.auth ?? widget.store.authStore;
+    final saved = await auth?.changePassword(current, next) ?? false;
     if (saved && mounted) {
       currentPasswordController.clear();
       newPasswordController.clear();

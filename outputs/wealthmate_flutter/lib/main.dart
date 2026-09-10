@@ -6,6 +6,9 @@ import 'data/drift_database.dart';
 import 'data/finance_repository.dart';
 import 'data/local_repository.dart';
 import 'data/sync_queue.dart';
+import 'features/auth/data/auth_remote_data_source.dart';
+import 'features/auth/data/auth_repository.dart';
+import 'features/auth/state/auth_store.dart';
 import 'state/finance_store.dart';
 import 'ui/app_shell.dart';
 import 'ui/login_page.dart';
@@ -23,22 +26,30 @@ Future<void> main() async {
   final local = LocalRepository(DriftKeyValueStore(database));
   final queue = SyncQueue();
   final session = LocalStateSession(local: local, queue: queue);
+  final auth = api == null
+      ? null
+      : AuthStore(
+          repository: AuthRepository(
+            remote: AuthRemoteDataSource(api: api),
+          ),
+        );
   final repository = FinanceRepository(
     local: local,
     queue: queue,
     session: session,
     api: api,
   );
-  final store = FinanceStore(repository: repository);
+  final store = FinanceStore(repository: repository, authStore: auth);
   await store.load();
-  runApp(WealthMateApp(store: store, api: api));
+  runApp(WealthMateApp(store: store, api: api, auth: auth));
 }
 
 class WealthMateApp extends StatefulWidget {
-  const WealthMateApp({required this.store, this.api, super.key});
+  const WealthMateApp({required this.store, this.api, this.auth, super.key});
 
   final FinanceStore store;
   final ApiClient? api;
+  final AuthStore? auth;
 
   @override
   State<WealthMateApp> createState() => _WealthMateAppState();
@@ -51,12 +62,12 @@ class _WealthMateAppState extends State<WealthMateApp> {
   void initState() {
     super.initState();
     authenticated = widget.api == null || widget.api!.token != null;
-    widget.api?.onAuthExpired = _handleAuthExpired;
+    widget.auth?.onAuthExpired = _handleAuthExpired;
   }
 
   @override
   void dispose() {
-    widget.api?.onAuthExpired = null;
+    widget.auth?.onAuthExpired = null;
     super.dispose();
   }
 
@@ -72,9 +83,13 @@ class _WealthMateAppState extends State<WealthMateApp> {
       title: '随想记',
       theme: wealthMateTheme(),
       home: widget.api == null || authenticated
-          ? AppShell(store: widget.store, onLoggedOut: _handleAuthExpired)
+          ? AppShell(
+              store: widget.store,
+              auth: widget.auth,
+              onLoggedOut: _handleAuthExpired,
+            )
           : LoginPage(
-              api: widget.api!,
+              auth: widget.auth!,
               onLoggedIn: () => setState(() => authenticated = true)),
     );
   }

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../data/api_client.dart';
+import '../features/auth/state/auth_store.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({required this.api, required this.onLoggedIn, super.key});
+  const LoginPage({required this.auth, required this.onLoggedIn, super.key});
 
-  final ApiClient api;
+  final AuthStore auth;
   final VoidCallback onLoggedIn;
 
   @override
@@ -83,11 +83,12 @@ class _LoginPageState extends State<LoginPage> {
       message = null;
     });
     try {
-      await widget.api
-          .login(usernameController.text.trim(), passwordController.text);
-      if (mounted) widget.onLoggedIn();
-    } on ApiFailure catch (failure) {
-      if (mounted) setState(() => message = failure.message);
+      if (await widget.auth
+          .login(usernameController.text.trim(), passwordController.text)) {
+        if (mounted) widget.onLoggedIn();
+      } else if (mounted) {
+        setState(() => message = widget.auth.message);
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }

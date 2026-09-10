@@ -6,21 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
-class LoginIn(BaseModel):
-    username: str
-    password: str
-
-
-class ProfilePatch(BaseModel):
-    display_name: str | None = Field(default=None, min_length=1, max_length=128)
-    username: str | None = Field(default=None, min_length=3, max_length=128)
-    quick_memories: list[dict[str, Any]] | None = None
-
-
-class PasswordChange(BaseModel):
-    current_password: str = Field(min_length=1, max_length=256)
-    new_password: str = Field(min_length=8, max_length=256)
+from .auth.schemas import LoginIn, PasswordChange, ProfilePatch
 
 
 class AccountIn(BaseModel):
