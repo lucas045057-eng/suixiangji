@@ -1,30 +1,13 @@
-import 'dart:convert';
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
+import '../core/network/api_transport.dart';
 import '../domain/models.dart';
 import 'sync_queue.dart';
 import 'token_store.dart';
 
-enum ApiFailureKind {
-  configuration,
-  unauthorized,
-  conflict,
-  validation,
-  network,
-  server
-}
-
-class ApiFailure implements Exception {
-  const ApiFailure(this.kind, this.message);
-
-  final ApiFailureKind kind;
-  final String message;
-
-  @override
-  String toString() => message;
-}
+export '../core/network/api_transport.dart' show ApiFailureKind, ApiFailure;
 
 class ApiClient {
   ApiClient({
@@ -34,7 +17,14 @@ class ApiClient {
     TokenStore? tokenStore,
     this.onAuthExpired,
   })  : client = client ?? http.Client(),
-        tokenStore = tokenStore ?? SecureTokenStore();
+        tokenStore = tokenStore ?? SecureTokenStore() {
+    transport = ApiTransport(
+      baseUrl: baseUrl,
+      client: this.client,
+      tokenProvider: () => token,
+      onAuthExpired: _handleAuthExpired,
+    );
+  }
 
   final String? baseUrl;
   String? token;
@@ -42,6 +32,12 @@ class ApiClient {
   final http.Client client;
   final TokenStore tokenStore;
   FutureOr<void> Function()? onAuthExpired;
+  late final ApiTransport transport;
+
+  Future<void> _handleAuthExpired() async {
+    await logout();
+    await onAuthExpired?.call();
+  }
 
   Future<bool> restoreToken() async {
     if (token == null || token!.isEmpty) {
@@ -254,53 +250,13 @@ class ApiClient {
       (await pullChanges(sinceVersion)).transactions;
 
   Future<Map<String, Object?>> _requestMap(String method, String path,
-      {Map<String, Object?>? body, bool includeAuth = true}) async {
-    final root = baseUrl?.trim();
-    if (root == null || root.isEmpty)
-      throw const ApiFailure(ApiFailureKind.configuration, '同步服务尚未配置');
-    final uri = Uri.parse(root.endsWith('/')
-        ? '${root.substring(0, root.length - 1)}$path'
-        : '$root$path');
-    final headers = <String, String>{'content-type': 'application/json'};
-    if (includeAuth && token != null && token!.isNotEmpty)
-      headers['authorization'] = 'Bearer $token';
-    try {
-      final response = switch (method) {
-        'POST' => await client.post(uri,
-            headers: headers, body: jsonEncode(body ?? const {})),
-        'PATCH' => await client.patch(uri,
-            headers: headers, body: jsonEncode(body ?? const {})),
-        'DELETE' => await client.delete(uri, headers: headers),
-        _ => await client.get(uri, headers: headers),
-      };
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final failure = _failureForStatus(response.statusCode);
-        if (response.statusCode == 401 && includeAuth) {
-          await logout();
-          await onAuthExpired?.call();
-        }
-        throw failure;
-      }
-      final decoded = jsonDecode(response.body);
-      return (decoded as Map).cast<String, Object?>();
-    } on ApiFailure {
-      rethrow;
-    } on FormatException {
-      throw const ApiFailure(ApiFailureKind.server, '同步服务返回了无法识别的数据');
-    } catch (_) {
-      throw const ApiFailure(ApiFailureKind.network, '暂时无法连接同步服务');
-    }
-  }
-
-  ApiFailure _failureForStatus(int statusCode) {
-    if (statusCode == 401)
-      return const ApiFailure(ApiFailureKind.unauthorized, '登录已失效，请重新登录');
-    if (statusCode == 409)
-      return const ApiFailure(ApiFailureKind.conflict, '数据存在冲突，请在本机确认');
-    if (statusCode == 422)
-      return const ApiFailure(ApiFailureKind.validation, '提交的数据需要修正');
-    return const ApiFailure(ApiFailureKind.server, '同步服务暂时不可用');
-  }
+          {Map<String, Object?>? body, bool includeAuth = true}) =>
+      transport.requestMap(
+        method,
+        path,
+        body: body,
+        includeAuth: includeAuth,
+      );
 
   List<Map<String, Object?>> _items(Map<String, Object?> json) {
     final values =

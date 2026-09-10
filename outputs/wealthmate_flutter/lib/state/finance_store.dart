@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import '../data/finance_repository.dart';
 import '../data/api_client.dart';
-import '../data/sync_queue.dart';
 import '../domain/demo_state.dart';
 import '../domain/finance_rules.dart';
 import '../domain/models.dart';
@@ -208,20 +207,7 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> updateTransaction(FinanceTransaction transaction) async {
     if (!_state.transactions.any((item) => item.id == transaction.id)) return;
-    _state = _state.copyWith(
-        transactions: _state.transactions
-            .map((item) => item.id == transaction.id ? transaction : item)
-            .toList());
-    repository.queue.enqueue(SyncOperation(
-      clientOpId: transaction.clientOpId,
-      entity: 'transactions',
-      entityId: transaction.id,
-      type: SyncOperationType.upsert,
-      payload: transaction.toJson(),
-      createdAt: DateTime.now().toIso8601String(),
-    ));
-    await repository.save(_state);
-    await repository.persistQueue();
+    _state = await repository.applyLocalTransaction(_state, transaction);
     _message = '账目已更新';
     notifyListeners();
   }
@@ -336,21 +322,7 @@ class FinanceStore extends ChangeNotifier {
     final budgetId = id ?? 'budget-${DateTime.now().microsecondsSinceEpoch}';
     final budget = Budget(
         id: budgetId, month: month, categoryId: categoryId, limit: limit);
-    final budgets = [
-      ..._state.budgets.where((item) => item.id != budgetId),
-      budget
-    ];
-    _state = _state.copyWith(budgets: budgets);
-    repository.queue.enqueue(SyncOperation(
-      clientOpId: 'budget:$budgetId:${DateTime.now().microsecondsSinceEpoch}',
-      entity: 'budgets',
-      entityId: budgetId,
-      type: SyncOperationType.upsert,
-      payload: budget.toJson(),
-      createdAt: DateTime.now().toIso8601String(),
-    ));
-    await repository.save(_state);
-    await repository.persistQueue();
+    _state = await repository.applyLocalBudget(_state, budget);
     _message = '预算已保存';
     notifyListeners();
   }
@@ -495,9 +467,8 @@ class FinanceStore extends ChangeNotifier {
     _draft = null;
     _draftSourceText = null;
     _message = '演示数据已恢复';
-    repository.queue.replace(const []);
+    await repository.clearPendingOperations();
     await repository.save(_state);
-    await repository.persistQueue();
     notifyListeners();
   }
 

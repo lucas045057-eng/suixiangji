@@ -1,15 +1,22 @@
 import 'dart:math';
 
+import '../core/database/local_state_session.dart';
 import 'api_client.dart';
 import 'local_repository.dart';
 import 'sync_queue.dart';
 import '../domain/models.dart';
 
 class FinanceRepository {
-  FinanceRepository({required this.local, required this.queue, this.api});
+  FinanceRepository({
+    required this.local,
+    required this.queue,
+    LocalStateSession? session,
+    this.api,
+  }) : session = session ?? LocalStateSession(local: local, queue: queue);
 
   final LocalRepository local;
   final SyncQueue queue;
+  final LocalStateSession session;
   final ApiClient? api;
   String? _localOwnerUserId;
   final Set<String> _pendingConflictClientOpIds = <String>{};
@@ -30,8 +37,8 @@ class FinanceRepository {
     }
     final storedOwner = await local.loadOwnerUserId();
     if (storedOwner != normalizedUserId) {
-      await local.clearFinanceStateAndQueue();
-      queue.replace(const []);
+      await session.replaceState(const FinanceState());
+      await session.mutateQueue((pending) => pending.replace(const []));
     }
     await local.saveOwnerUserId(normalizedUserId);
     _localOwnerUserId = normalizedUserId;
@@ -57,33 +64,66 @@ class FinanceRepository {
     if (api != null && !isLocalOwnerBound) {
       final restored = await restoreLocalOwnerForVerifiedSession();
       if (!restored) {
-        queue.replace(const []);
+        await session.mutateQueue((pending) => pending.replace(const []));
         return null;
       }
     }
-    queue.replace(await local.loadQueue());
-    return local.load();
+    return session.load();
   }
 
-  Future<void> save(FinanceState state) => local.save(state);
+  Future<void> save(FinanceState state) => session.replaceState(state);
 
-  Future<void> persistQueue() => local.saveQueue(queue);
+  Future<void> persistQueue() => session.mutateQueue((_) {});
+
+  Future<void> clearPendingOperations() =>
+      session.mutateQueue((pending) => pending.replace(const []));
 
   Future<FinanceState> applyLocal(
       FinanceState state, FinanceTransaction transaction) async {
-    final next =
-        state.copyWith(transactions: [...state.transactions, transaction]);
-    queue.enqueue(SyncOperation(
-      clientOpId: transaction.clientOpId,
-      entity: 'transactions',
-      entityId: transaction.id,
-      type: SyncOperationType.upsert,
-      payload: transaction.toJson(),
-      createdAt: DateTime.now().toIso8601String(),
-    ));
-    await local.save(next);
-    await persistQueue();
-    return next;
+    return applyLocalTransaction(state, transaction);
+  }
+
+  Future<FinanceState> applyLocalTransaction(
+      FinanceState state, FinanceTransaction transaction) async {
+    final next = state.copyWith(transactions: [
+      ...state.transactions.where((item) => item.id != transaction.id),
+      transaction,
+    ]);
+    return session.write(
+      (_) => next,
+      appendOperations: [
+        SyncOperation(
+          clientOpId: transaction.clientOpId,
+          entity: 'transactions',
+          entityId: transaction.id,
+          type: SyncOperationType.upsert,
+          payload: transaction.toJson(),
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      ],
+    );
+  }
+
+  Future<FinanceState> applyLocalBudget(
+      FinanceState state, Budget budget) async {
+    final next = state.copyWith(budgets: [
+      ...state.budgets.where((item) => item.id != budget.id),
+      budget,
+    ]);
+    return session.write(
+      (_) => next,
+      appendOperations: [
+        SyncOperation(
+          clientOpId:
+              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}',
+          entity: 'budgets',
+          entityId: budget.id,
+          type: SyncOperationType.upsert,
+          payload: budget.toJson(),
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      ],
+    );
   }
 
   Future<FinanceState> applyLocalAccount(
@@ -92,18 +132,20 @@ class FinanceRepository {
       ...state.accounts.where((item) => item.id != account.id),
       account
     ]);
-    queue.enqueue(SyncOperation(
-      clientOpId:
-          'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
-      entity: 'accounts',
-      entityId: account.id,
-      type: SyncOperationType.upsert,
-      payload: account.toJson(),
-      createdAt: DateTime.now().toIso8601String(),
-    ));
-    await local.save(next);
-    await persistQueue();
-    return next;
+    return session.write(
+      (_) => next,
+      appendOperations: [
+        SyncOperation(
+          clientOpId:
+              'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
+          entity: 'accounts',
+          entityId: account.id,
+          type: SyncOperationType.upsert,
+          payload: account.toJson(),
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      ],
+    );
   }
 
   Future<FinanceState> applyLocalCategory(
@@ -112,18 +154,20 @@ class FinanceRepository {
       ...state.categories.where((item) => item.id != category.id),
       category
     ]);
-    queue.enqueue(SyncOperation(
-      clientOpId:
-          'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
-      entity: 'categories',
-      entityId: category.id,
-      type: SyncOperationType.upsert,
-      payload: category.toJson(),
-      createdAt: DateTime.now().toIso8601String(),
-    ));
-    await local.save(next);
-    await persistQueue();
-    return next;
+    return session.write(
+      (_) => next,
+      appendOperations: [
+        SyncOperation(
+          clientOpId:
+              'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
+          entity: 'categories',
+          entityId: category.id,
+          type: SyncOperationType.upsert,
+          payload: category.toJson(),
+          createdAt: DateTime.now().toIso8601String(),
+        ),
+      ],
+    );
   }
 
   Future<FinanceState> softDelete(
@@ -135,18 +179,20 @@ class FinanceRepository {
     final deleted =
         nextTransactions.firstWhere((item) => item.id == transactionId);
     final next = state.copyWith(transactions: nextTransactions);
-    queue.enqueue(SyncOperation(
-      clientOpId:
-          'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
-      entity: 'transactions',
-      entityId: transactionId,
-      type: SyncOperationType.delete,
-      payload: deleted.toJson(),
-      createdAt: now,
-    ));
-    await local.save(next);
-    await persistQueue();
-    return next;
+    return session.write(
+      (_) => next,
+      appendOperations: [
+        SyncOperation(
+          clientOpId:
+              'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+          entity: 'transactions',
+          entityId: transactionId,
+          type: SyncOperationType.delete,
+          payload: deleted.toJson(),
+          createdAt: now,
+        ),
+      ],
+    );
   }
 
   FinanceState mergePulled(
@@ -223,7 +269,7 @@ class FinanceRepository {
       return state.copyWith(
           syncState: const SyncState(error: '当前用户身份尚未确认，暂不上传本地数据'));
     }
-    if (queue.pending().isEmpty) {
+    if ((await session.pendingOperations()).isEmpty) {
       return state.copyWith(
         syncState: state.syncState.copyWith(
           isSyncing: false,
@@ -232,7 +278,7 @@ class FinanceRepository {
       );
     }
     try {
-      final operations = queue.pending();
+      final operations = await session.pendingOperations();
       final result = await api!.push(operations);
       final accepted =
           ((result['accepted'] as List<Object?>?) ?? const <Object?>[])
@@ -244,10 +290,11 @@ class FinanceRepository {
       final nextTransactions = [...state.transactions];
       final nextAccounts = [...state.accounts];
       final nextBudgets = [...state.budgets];
+      final acceptedClientOpIds = <String>{};
       for (final operation in operations) {
         final receipt = acceptedByOperation[operation.clientOpId];
         if (receipt != null) {
-          queue.complete(operation.clientOpId);
+          acceptedClientOpIds.add(operation.clientOpId);
           final serverVersion = (receipt['server_version'] as num?)?.toInt();
           if (serverVersion == null) continue;
           if (operation.entity == 'transactions') {
@@ -289,7 +336,11 @@ class FinanceRepository {
           }
         }
       }
-      await persistQueue();
+      await session.mutateQueue((pending) {
+        for (final clientOpId in acceptedClientOpIds) {
+          pending.complete(clientOpId);
+        }
+      });
       final conflictItems =
           ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
               .map((item) => (item! as Map).cast<String, Object?>())
@@ -314,7 +365,7 @@ class FinanceRepository {
               serverVersion: (result['server_version'] as num?)?.toInt() ??
                   state.syncState.serverVersion,
               lastSyncedAt: DateTime.now().toIso8601String()));
-      await local.save(nextState);
+      await session.replaceState(nextState);
       return nextState;
     } on ApiFailure catch (failure) {
       return state.copyWith(
@@ -378,7 +429,7 @@ class FinanceRepository {
         serverVersion: remote.serverVersion,
         lastSyncedAt: DateTime.now().toIso8601String(),
       ));
-      await local.save(next);
+      await session.replaceState(next);
       return next;
     } on ApiFailure catch (failure) {
       return state.copyWith(
@@ -458,11 +509,12 @@ class FinanceRepository {
       }
       return true;
     }).toList(growable: false);
-    for (final operation in conflictOperations) {
-      queue.complete(operation.clientOpId);
-      _pendingConflictClientOpIds.remove(operation.clientOpId);
-    }
-    await persistQueue();
+    await session.mutateQueue((pending) {
+      for (final operation in conflictOperations) {
+        pending.complete(operation.clientOpId);
+        _pendingConflictClientOpIds.remove(operation.clientOpId);
+      }
+    });
     final nextVersion = state.syncState.serverVersion > remote.serverVersion
         ? state.syncState.serverVersion
         : remote.serverVersion;
@@ -472,7 +524,7 @@ class FinanceRepository {
           serverVersion: nextVersion,
           lastSyncedAt: DateTime.now().toIso8601String(),
         ));
-    await local.save(nextState);
+    await session.replaceState(nextState);
     return nextState;
   }
 

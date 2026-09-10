@@ -87,11 +87,11 @@ Interfaces:
 - Future<List<SyncOperation>> pendingOperations() returns a snapshot after prior writes have drained.
 - ApiTransport.requestMap(String method, String path, {Map<String, Object?>? body, bool includeAuth = true}) owns HTTP and status-to-ApiFailure mapping; it never knows a business entity.
 
-- [ ] Step 1: Record the baseline before touching implementation.
+- [x] Step 1: Record the baseline before touching implementation.
 
 Run the shared baseline commands from E:\codex\suixiangji. Save the command summary in the Phase 0 report; do not attribute pre-existing failures to this task.
 
-- [ ] Step 2: Write the failing serialization tests.
+- [x] Step 2: Write the failing serialization tests.
 
 Add tests that issue two writes without awaiting the first and prove the second mutation observes the first; add a queue/state atomicity test:
 
@@ -132,7 +132,7 @@ test('persists a state mutation and its queued operation in one serial turn', ()
 });
 ~~~
 
-- [ ] Step 3: Run the focused tests and verify they fail for the missing interface.
+- [x] Step 3: Run the focused tests and verify they fail for the missing interface.
 
 Run:
 
@@ -143,7 +143,7 @@ flutter test test\core\local_state_session_test.dart
 
 Expected: compilation failure because LocalStateSession is not implemented.
 
-- [ ] Step 4: Implement the smallest FIFO session and adapt existing writes.
+- [x] Step 4: Implement the smallest FIFO session and adapt existing writes.
 
 Use a private future tail; every state and queue write must await the previous tail and update the session-owned snapshot. The core shape is:
 
@@ -189,11 +189,11 @@ The final implementation must also provide replaceState, mutateQueue, and pendin
 
 Extract only HTTP mechanics from ApiClient into ApiTransport; keep ApiClient as a compatibility façade with its current public methods and token behavior. main.dart constructs one LocalStateSession and passes it through the repository graph.
 
-- [ ] Step 5: Run focused and full Phase 0 verification.
+- [x] Step 5: Run focused and full Phase 0 verification.
 
 Run the focused Flutter tests, then the complete shared phase gate. Inspect git diff --check and confirm no direct aggregate LocalRepository.save remains outside LocalStateSession.
 
-- [ ] Step 6: Report and commit Phase 0.
+- [x] Step 6: Report and commit Phase 0.
 
 Report changed files, serialization proof, baseline/full regression results, and the exact diff summary. Commit:
 

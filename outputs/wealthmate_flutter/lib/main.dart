@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'core/database/local_state_session.dart';
 import 'data/api_client.dart';
 import 'data/drift_database.dart';
 import 'data/finance_repository.dart';
@@ -19,9 +20,13 @@ Future<void> main() async {
       ? null
       : ApiClient(baseUrl: baseUrl, token: token.isEmpty ? null : token);
   if (api != null) await api.restoreToken();
+  final local = LocalRepository(DriftKeyValueStore(database));
+  final queue = SyncQueue();
+  final session = LocalStateSession(local: local, queue: queue);
   final repository = FinanceRepository(
-    local: LocalRepository(DriftKeyValueStore(database)),
-    queue: SyncQueue(),
+    local: local,
+    queue: queue,
+    session: session,
     api: api,
   );
   final store = FinanceStore(repository: repository);
