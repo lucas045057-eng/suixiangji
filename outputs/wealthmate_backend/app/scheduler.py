@@ -31,8 +31,8 @@ async def run_monthly_report_job() -> None:
                     narrative, meta = await configured_model().complete("monthly_report", {"month": month, "metrics": metrics})
                     ai_status = "success"
                     db.add(AgentLog(user_id=user.id, task="monthly_report", model=meta.get("model"), status="success", input_tokens=meta.get("input_tokens"), output_tokens=meta.get("output_tokens"), result_summary="scheduled structured report"))
-                except Exception as exc:
-                    db.add(AgentLog(user_id=user.id, task="monthly_report", model=get_settings().llm_model or None, status="unavailable", result_summary=str(exc)))
+                except Exception:
+                    db.add(AgentLog(user_id=user.id, task="monthly_report", model=get_settings().llm_model or None, status="unavailable", result_summary="Provider unavailable; sensitive error details omitted"))
             if existing:
                 existing.metrics = metrics
                 existing.narrative = narrative

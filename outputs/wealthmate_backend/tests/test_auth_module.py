@@ -9,6 +9,7 @@ class AuthModuleBoundaryTest(unittest.TestCase):
         self.assertEqual(
             paths,
             {
+                "/auth/register",
                 "/auth/login",
                 "/auth/me",
                 "/auth/password",
@@ -19,10 +20,12 @@ class AuthModuleBoundaryTest(unittest.TestCase):
         from app.auth import service
 
         for name in (
+            "register",
             "login",
             "get_current_user",
             "update_profile",
             "change_password",
+            "delete_user",
         ):
             self.assertTrue(callable(getattr(service, name)))
 

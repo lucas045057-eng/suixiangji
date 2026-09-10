@@ -649,8 +649,8 @@ async def exchange_rate(base: str, quote: str = "CNY", db: Session = Depends(get
         raise HTTPException(status_code=422, detail="请提供有效且不同的三位币种代码")
     try:
         values = await fetch_frankfurter_rate(base, quote)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"汇率服务不可用，未写入猜测值: {exc}") from exc
+    except Exception:
+        raise HTTPException(status_code=502, detail="汇率服务暂不可用，请稍后再试") from None
     row = db.query(ExchangeRate).filter(ExchangeRate.base_currency == values["base_currency"], ExchangeRate.quote_currency == values["quote_currency"], ExchangeRate.rate_date == values["rate_date"], ExchangeRate.source == values["source"]).first()
     if row:
         row.rate = values["rate"]
@@ -664,20 +664,7 @@ async def exchange_rate(base: str, quote: str = "CNY", db: Session = Depends(get
 
 @router.post("/exchange/rates")
 def save_exchange_rate(payload: RateIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    values = payload.model_dump()
-    values["base_currency"] = values["base_currency"].upper().strip()
-    values["quote_currency"] = values["quote_currency"].upper().strip()
-    if len(values["base_currency"]) != 3 or len(values["quote_currency"]) != 3 or values["base_currency"] == values["quote_currency"]:
-        raise HTTPException(status_code=422, detail="请提供有效且不同的三位币种代码")
-    row = db.query(ExchangeRate).filter(ExchangeRate.base_currency == values["base_currency"], ExchangeRate.quote_currency == values["quote_currency"], ExchangeRate.rate_date == values["rate_date"], ExchangeRate.source == values["source"]).first()
-    if row:
-        row.rate = values["rate"]
-        row.fetched_at = datetime.now(timezone.utc)
-    else:
-        row = ExchangeRate(**values)
-        db.add(row)
-    db.commit()
-    return _json_metrics({"base_currency": row.base_currency, "quote_currency": row.quote_currency, "rate": row.rate, "rate_date": row.rate_date, "source": row.source, "updated_at": row.fetched_at})
+    raise HTTPException(status_code=403, detail="公共汇率仅由服务器可信来源更新，请请求获取汇率")
 
 
 @router.get("/reports/monthly/{month}")
@@ -695,8 +682,8 @@ async def monthly_report(month: str, force: bool = False, db: Session = Depends(
             narrative, meta = await model.complete("monthly_report", {"month": month, "metrics": metrics})
             ai_status = "success"
             db.add(AgentLog(user_id=user.id, task="monthly_report", model=meta.get("model"), status="success", input_tokens=meta.get("input_tokens"), output_tokens=meta.get("output_tokens"), result_summary="structured metrics only"))
-        except Exception as exc:
-            db.add(AgentLog(user_id=user.id, task="monthly_report", model=get_settings().llm_model or None, status="unavailable", result_summary=str(exc)))
+        except Exception:
+            db.add(AgentLog(user_id=user.id, task="monthly_report", model=get_settings().llm_model or None, status="unavailable", result_summary="Provider unavailable; sensitive error details omitted"))
     stored_metrics = _json_metrics(metrics)
     if existing:
         existing.metrics = stored_metrics

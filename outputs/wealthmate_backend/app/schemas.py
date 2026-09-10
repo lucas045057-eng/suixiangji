@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .auth.schemas import LoginIn, PasswordChange, ProfilePatch
+from .auth.schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
 
 
 class AccountIn(BaseModel):

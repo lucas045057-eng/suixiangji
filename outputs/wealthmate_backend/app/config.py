@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,6 +13,11 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 60 * 24 * 30
     demo_username: str = "admin"
     demo_password: str = "change-me"
+    demo_enabled: bool = False
+    environment: Literal["development", "test", "beta", "production"] = "development"
+    test_schema_init: bool = False
+    auth_login_limit: int = Field(default=20, ge=1)
+    auth_register_limit: int = Field(default=10, ge=1)
     llm_provider: str = "none"
     llm_model: str = ""
     llm_base_url: str = ""
@@ -20,6 +26,15 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="WEALTHMATE_", extra="ignore")
+
+    def validate_runtime(self) -> None:
+        if self.environment in ("beta", "production"):
+            if len(self.jwt_secret) < 32 or self.jwt_secret.startswith(("change", "replace")):
+                raise ValueError("Beta requires a unique strong JWT secret")
+            if self.demo_enabled or self.test_schema_init:
+                raise ValueError("Demo login and test schema initialization are forbidden in Beta")
+            if "*" in self.cors_origins or not self.cors_origins.strip():
+                raise ValueError("Beta requires explicit CORS origins")
 
 
 @lru_cache

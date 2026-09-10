@@ -172,6 +172,9 @@ class ServerSeedVersionInvariantRedTest(unittest.TestCase):
         environment["WEALTHMATE_DATABASE_URL"] = "sqlite:///" + Path(db_path).as_posix()
         environment["WEALTHMATE_DEMO_USERNAME"] = "seed-version-user"
         environment["WEALTHMATE_DEMO_PASSWORD"] = "seed-version-password"
+        environment["WEALTHMATE_DEMO_ENABLED"] = "true"
+        environment["WEALTHMATE_ENVIRONMENT"] = "test"
+        environment["WEALTHMATE_TEST_SCHEMA_INIT"] = "true"
         environment["WEALTHMATE_JWT_SECRET"] = "seed-version-secret"
         environment["SEED_VERSION_INVARIANT_MODE"] = mode
         try:

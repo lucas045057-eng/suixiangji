@@ -38,10 +38,22 @@ def create_token(user_id: str, username: str, auth_version: int = 0) -> str:
     return jwt.encode({"sub": user_id, "username": username, "auth_version": auth_version, "exp": expires, "jti": str(uuid4())}, settings.jwt_secret, algorithm="HS256")
 
 
-def decode_token(token: str) -> dict[str, str]:
+def decode_token(token: str) -> dict:
     try:
-        return jwt.decode(token, get_settings().jwt_secret, algorithms=["HS256"])
-    except JWTError as exc:
+        claims = jwt.decode(
+            token,
+            get_settings().jwt_secret,
+            algorithms=["HS256"],
+            options={"require_exp": True, "require_sub": True},
+        )
+        if (
+            not isinstance(claims.get("sub"), str)
+            or not claims["sub"]
+            or type(claims.get("auth_version")) is not int
+        ):
+            raise ValueError("invalid token")
+        return claims
+    except (JWTError, TypeError) as exc:
         raise ValueError("invalid token") from exc
 
 

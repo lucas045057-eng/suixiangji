@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import date
 
 from test_sync_acceptance import SyncAcceptanceMixin
 
@@ -12,6 +13,8 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         os.environ["WEALTHMATE_DATABASE_URL"] = f"sqlite:///{os.path.join(cls.tempdir.name, 'api.db')}"
         os.environ["WEALTHMATE_DEMO_USERNAME"] = "test-user"
         os.environ["WEALTHMATE_DEMO_PASSWORD"] = "test-password"
+        os.environ["WEALTHMATE_DEMO_ENABLED"] = "true"
+        os.environ["WEALTHMATE_ENVIRONMENT"] = "test"
         os.environ["WEALTHMATE_JWT_SECRET"] = "test-secret"
         from app.config import get_settings
 
@@ -75,7 +78,21 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         self.assertFalse(second.json()["accepted"][0]["created"])
 
     def test_verified_rate_is_snapshotted_and_report_numbers_are_programmatic(self):
-        rate = self.client.post("/exchange/rates", headers=self.headers, json={"base_currency": "USD", "quote_currency": "CNY", "rate": 7.2, "rate_date": "2026-09-03", "source": "test verified source"})
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "app.api.fetch_frankfurter_rate",
+            new=AsyncMock(
+                return_value={
+                    "base_currency": "USD",
+                    "quote_currency": "CNY",
+                    "rate": 7.2,
+                    "rate_date": date(2026, 9, 3),
+                    "source": "test verified source",
+                }
+            ),
+        ):
+            rate = self.client.get("/exchange/rates?base=USD", headers=self.headers)
         self.assertEqual(rate.status_code, 200, rate.text)
         tx = self.client.post("/transactions", headers=self.headers, json={"id": "usd-1", "client_op_id": "device-2:2", "kind": "expense", "amount": 10, "currency": "USD", "account_id": "wallet", "category_name": "交通", "occurred_on": "2026-09-03"})
         self.assertEqual(tx.status_code, 200, tx.text)

@@ -1,27 +1,18 @@
+# Frozen schema from 9a13bf9; do not import live application models here.
 from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import (
-    JSON,
-    Boolean,
-    CheckConstraint,
-    Date,
-    DateTime,
-    ForeignKey,
-    Index,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    UniqueConstraint,
-    func,
-)
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .db import Base
+from sqlalchemy.orm import DeclarativeBase
+
+
+class Base(DeclarativeBase):
+    pass
 
 
 class User(Base):
@@ -34,23 +25,6 @@ class User(Base):
     auth_version: Mapped[int] = mapped_column(Integer, default=0)
     sync_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-
-
-Index("uq_users_username_normalized", func.lower(func.trim(User.username)), unique=True)
-
-
-class InviteCode(Base):
-    __tablename__ = "invite_codes"
-    __table_args__ = (
-        CheckConstraint("max_uses > 0", name="ck_invite_max_uses"),
-        CheckConstraint("used_count >= 0 AND used_count <= max_uses", name="ck_invite_used_count"),
-    )
-    code: Mapped[str] = mapped_column(String(128), primary_key=True)
-    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    max_uses: Mapped[int] = mapped_column(Integer, default=1)
-    used_count: Mapped[int] = mapped_column(Integer, default=0)
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Account(Base):
@@ -186,3 +160,4 @@ class AgentLog(Base):
     cost: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
     result_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+

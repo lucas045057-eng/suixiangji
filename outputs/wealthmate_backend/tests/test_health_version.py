@@ -28,6 +28,8 @@ class HealthVersionTest(unittest.TestCase):
         environment.pop("WEALTHMATE_GIT_SHA", None)
         environment["WEALTHMATE_DATABASE_URL"] = "sqlite:///" + Path(db_path).as_posix()
         environment["WEALTHMATE_JWT_SECRET"] = "health-version-secret"
+        environment["WEALTHMATE_ENVIRONMENT"] = "test"
+        environment["WEALTHMATE_TEST_SCHEMA_INIT"] = "true"
         if git_sha is not None:
             environment["APP_GIT_SHA"] = git_sha
         try:

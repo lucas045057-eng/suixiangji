@@ -126,6 +126,8 @@ class Sc08PayloadContractTest(unittest.TestCase):
         environment = os.environ.copy()
         environment["WEALTHMATE_DATABASE_URL"] = "sqlite:///" + Path(db_path).as_posix()
         environment["WEALTHMATE_JWT_SECRET"] = "sc08-current-secret"
+        environment["WEALTHMATE_ENVIRONMENT"] = "test"
+        environment["WEALTHMATE_TEST_SCHEMA_INIT"] = "true"
         try:
             completed = subprocess.run(
                 [sys.executable, "-X", "utf8", "-"],

@@ -3,12 +3,25 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Category, User
+from ..models import (
+    Account,
+    AgentLog,
+    Budget,
+    Category,
+    MonthlyReport,
+    NetWorthSnapshot,
+    SyncOperation,
+    Transaction,
+    User,
+)
 from ..core.security import create_token, decode_token, hash_password, verify_password
-from .schemas import LoginIn, PasswordChange, ProfilePatch
+from .registration import consume_invite, create_user
+from .schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
 
 
 def profile_json(user: User, *, include_token: bool = False) -> dict:
@@ -28,42 +41,53 @@ def profile_json(user: User, *, include_token: bool = False) -> dict:
     return result
 
 
+def _lock_auth_user(db: Session, user: User) -> User:
+    """Serialize sensitive account mutations, revalidate after acquiring lock."""
+    verified_version = user.auth_version or 0
+    current = (
+        db.query(User)
+        .filter(User.id == user.id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+    if current is None or (current.auth_version or 0) != verified_version:
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
+    return current
+
+
+def register(db: Session, payload: RegisterIn) -> dict:
+    try:
+        consume_invite(db, payload.invite_code)
+        user = create_user(db, payload.username, payload.password, payload.display_name)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="用户名已存在") from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="注册服务暂不可用，请稍后重试") from None
+    except Exception:
+        db.rollback()
+        raise
+    return {**profile_json(user, include_token=True), "user_id": user.id}
+
+
 def login(db: Session, payload: LoginIn) -> dict:
     settings = get_settings()
-    user = db.query(User).filter(User.username == payload.username).first()
+    username = payload.username.strip().lower()
+    user = db.query(User).filter(func.lower(func.trim(User.username)) == username).first()
     if user:
         if not verify_password(payload.password, user.password_hash):
             raise HTTPException(status_code=401, detail="用户名或密码错误")
-    elif payload.username != settings.demo_username or payload.password != settings.demo_password:
+    elif (
+        not settings.demo_enabled
+        or username != settings.demo_username.strip().lower()
+        or payload.password != settings.demo_password
+    ):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     if not user:
-        user = User(
-            id=str(uuid4()),
-            username=payload.username,
-            password_hash=hash_password(payload.password),
-            display_name=payload.username,
-        )
-        db.add(user)
-        db.flush()
-        current_version = user.sync_version or 0
-        for name, kind in (
-            ("餐饮", "expense"),
-            ("交通", "expense"),
-            ("住房", "expense"),
-            ("工资", "income"),
-            ("购物", "expense"),
-        ):
-            current_version += 1
-            db.add(
-                Category(
-                    id=str(uuid4()),
-                    user_id=user.id,
-                    name=name,
-                    kind=kind,
-                    server_version=current_version,
-                )
-            )
-        user.sync_version = current_version
+        user = create_user(db, username, payload.password)
         db.commit()
     return {
         "access_token": create_token(
@@ -86,8 +110,7 @@ def get_current_user(db: Session, token: str) -> User:
     found = db.get(User, claims.get("sub"))
     if not found:
         raise HTTPException(status_code=401, detail="用户不存在")
-    token_version = claims.get("auth_version")
-    if token_version is not None and int(token_version) != (found.auth_version or 0):
+    if claims["auth_version"] != (found.auth_version or 0):
         raise HTTPException(status_code=401, detail="登录已失效，请重新登录")
     return found
 
@@ -97,6 +120,7 @@ def profile(user: User) -> dict:
 
 
 def update_profile(db: Session, user: User, payload: ProfilePatch) -> dict:
+    user = _lock_auth_user(db, user)
     changed_credentials = False
     if payload.username is not None:
         username = payload.username.strip()
@@ -104,7 +128,7 @@ def update_profile(db: Session, user: User, payload: ProfilePatch) -> dict:
             raise HTTPException(status_code=422, detail="用户名不能为空")
         existing = (
             db.query(User)
-            .filter(User.username == username, User.id != user.id)
+            .filter(func.lower(func.trim(User.username)) == username, User.id != user.id)
             .first()
         )
         if existing:
@@ -118,14 +142,46 @@ def update_profile(db: Session, user: User, payload: ProfilePatch) -> dict:
         user.quick_memories = payload.quick_memories
     if changed_credentials:
         user.auth_version = (user.auth_version or 0) + 1
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="用户名已存在") from None
     return profile_json(user, include_token=True)
 
 
 def change_password(db: Session, user: User, payload: PasswordChange) -> dict:
+    user = _lock_auth_user(db, user)
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status_code=401, detail="当前密码错误")
     user.password_hash = hash_password(payload.new_password)
     user.auth_version = (user.auth_version or 0) + 1
     db.commit()
     return profile_json(user, include_token=True)
+
+
+def delete_user(db: Session, user: User, payload: DeleteUserIn) -> dict:
+    user = _lock_auth_user(db, user)
+    if not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status_code=403, detail="当前密码错误，账户未注销")
+    # FK dependents first. Public exchange rates and invitation history remain.
+    try:
+        for model in (
+            Transaction,
+            Budget,
+            SyncOperation,
+            NetWorthSnapshot,
+            MonthlyReport,
+            AgentLog,
+            Account,
+            Category,
+        ):
+            db.query(model).filter(model.user_id == user.id).delete(
+                synchronize_session=False
+            )
+        db.delete(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"deleted": True}

@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 def _engine():
     url = get_settings().database_url
-    kwargs = {"pool_pre_ping": True}
+    kwargs = {"pool_pre_ping": True, "hide_parameters": True}
     if url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
     return create_engine(url, **kwargs)
@@ -31,31 +31,15 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def ensure_schema() -> None:
-    """Apply additive V1.1 columns to databases created by the V1 release."""
-    Base.metadata.create_all(bind=engine)
-    inspector = inspect(engine)
-    additions = {
-        "users": {
-            "display_name": "VARCHAR(128) DEFAULT '财富用户'",
-            "quick_memories": "JSON",
-            "auth_version": "INTEGER DEFAULT 0",
-        },
-        "accounts": {
-            "account_kind": "VARCHAR(32) DEFAULT 'other'",
-            "is_liquid": "BOOLEAN DEFAULT FALSE",
-            "is_default_payment": "BOOLEAN DEFAULT FALSE",
-            "updated_at": "TIMESTAMP",
-        },
-        "transactions": {"occurred_at": "VARCHAR(64)"},
-        "categories": {
-            "active": "BOOLEAN DEFAULT TRUE",
-            "server_version": "INTEGER DEFAULT 0",
-            "updated_at": "TIMESTAMP",
-        },
-    }
-    with engine.begin() as connection:
-        for table, columns in additions.items():
-            existing = {column["name"] for column in inspector.get_columns(table)}
-            for column, declaration in columns.items():
-                if column not in existing:
-                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"))
+    """Check migration head; only explicit non-Beta test setup may create tables."""
+    settings = get_settings()
+    settings.validate_runtime()
+    if settings.test_schema_init and settings.environment in ("development", "test"):
+        Base.metadata.create_all(bind=engine)
+        return
+    with engine.connect() as connection:
+        if "alembic_version" in inspect(connection).get_table_names():
+            versions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+            if versions == ["0002_beta_users"]:
+                return
+    raise RuntimeError("Database migration required: run alembic upgrade head before starting the API")
