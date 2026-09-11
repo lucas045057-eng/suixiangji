@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'core/database/local_state_session.dart';
@@ -61,7 +63,8 @@ class _WealthMateAppState extends State<WealthMateApp> {
   @override
   void initState() {
     super.initState();
-    authenticated = widget.api == null || widget.api!.token != null;
+    authenticated = widget.api == null ||
+        (widget.api!.token != null && widget.api!.lastVerifiedUserId != null);
     widget.auth?.onAuthExpired = _handleAuthExpired;
   }
 
@@ -90,7 +93,18 @@ class _WealthMateAppState extends State<WealthMateApp> {
             )
           : LoginPage(
               auth: widget.auth!,
-              onLoggedIn: () => setState(() => authenticated = true)),
+              pendingCleanupMessage: widget.store.pendingDeletionCleanupMessage,
+              onRetryCleanup: widget.store.retryPendingDeletionCleanup,
+              onLoggedIn: _handleLoggedIn),
     );
+  }
+
+  void _handleLoggedIn() {
+    final profile = widget.auth?.profile;
+    if (profile == null) return;
+    unawaited(widget.store.loadAuthenticatedProfile(profile).then((_) {
+      if (!mounted || widget.auth?.profile?.id != profile.id) return;
+      setState(() => authenticated = true);
+    }));
   }
 }

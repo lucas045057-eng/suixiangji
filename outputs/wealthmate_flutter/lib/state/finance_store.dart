@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import '../data/finance_repository.dart';
 import '../data/api_client.dart';
+import '../data/local_repository.dart';
 import '../domain/demo_state.dart';
 import '../domain/finance_rules.dart';
 import '../domain/models.dart';
@@ -33,6 +34,9 @@ class FinanceStore extends ChangeNotifier {
   final AuthStore? _authStore;
   String? _message;
   List<BudgetAlert> _budgetAlerts = const [];
+  final Set<String> _pendingDeletionCleanupUserIds = <String>{};
+  bool _pendingDeletionCleanupStateUnknown = false;
+  int _sessionGeneration = 0;
   FinanceState? _metricsState;
   String? _metricsMonth;
   FinanceMetrics? _metricsCache;
@@ -42,6 +46,18 @@ class FinanceStore extends ChangeNotifier {
   AuthStore? get authStore => _authStore;
   UserProfile? get profile => _authStore?.profile;
   String? get message => _message;
+  String? get pendingDeletionCleanupUserId =>
+      _pendingDeletionCleanupUserIds.isEmpty
+          ? null
+          : _pendingDeletionCleanupUserIds.first;
+  String? get pendingDeletionCleanupMessage =>
+      _pendingDeletionCleanupStateUnknown
+          ? '本机清理状态暂时无法读取，请稍后重试'
+          : _pendingDeletionCleanupUserIds.isEmpty
+              ? null
+              : '账号已删除，但本机数据清理仍未完成，请重试本机清理';
+  (int, int) get _session =>
+      (_sessionGeneration, repository.sessionIdentity.$2);
   List<BudgetAlert> get budgetAlerts => List.unmodifiable(_budgetAlerts);
   bool get isDemoMode => repository.api == null;
   List<Category> get activeCategories =>
@@ -60,36 +76,148 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> load() async {
+    final started = _session;
+    if (repository.api != null && repository.api!.token == null) {
+      await repository.api!.restoreToken();
+      if (_session != started) return;
+    }
+    late final List<String> pending;
+    try {
+      pending = await repository.local.loadPendingAccountCleanupUserIds();
+    } on Object {
+      if (_session != started) return;
+      _pendingDeletionCleanupStateUnknown = true;
+      await _failClosedForUnknownCleanupState();
+      notifyListeners();
+      return;
+    }
+    if (_session != started) return;
+    _pendingDeletionCleanupStateUnknown = false;
+    _pendingDeletionCleanupUserIds
+      ..clear()
+      ..addAll(pending);
+    if (_pendingDeletionCleanupUserIds.isNotEmpty) {
+      final verifiedUserId = repository.api?.lastVerifiedUserId?.trim();
+      final currentIsDifferentVerifiedUser = repository.api?.token != null &&
+          verifiedUserId != null &&
+          verifiedUserId.isNotEmpty &&
+          !_pendingDeletionCleanupUserIds.contains(verifiedUserId);
+      if (!currentIsDifferentVerifiedUser) {
+        await repository.api?.logout();
+        repository.queue.replace(const []);
+        repository.unbindLocalOwner();
+        _state = const FinanceState();
+        _draft = null;
+        _draftSourceText = null;
+        _budgetAlerts = const [];
+        _metricsState = null;
+        _metricsMonth = null;
+        _metricsCache = null;
+        _authStore?.clearSession();
+        await _attemptPendingDeletionCleanup(notify: false);
+        notifyListeners();
+        return;
+      }
+      await _attemptPendingDeletionCleanup(notify: false);
+      if (_session != started && repository.api?.token == null) return;
+    }
     if (repository.api != null && !repository.isLocalOwnerBound) {
       await repository.restoreLocalOwnerForVerifiedSession();
+      if (_session != started) return;
     }
     final loaded = await repository.load();
+    if (_session != started) return;
     if (loaded != null) _state = loaded;
     notifyListeners();
   }
 
+  Future<void> _failClosedForUnknownCleanupState() async {
+    await repository.api?.logout();
+    repository.queue.replace(const []);
+    repository.unbindLocalOwner();
+    _state = const FinanceState();
+    _draft = null;
+    _draftSourceText = null;
+    _budgetAlerts = const [];
+    _metricsState = null;
+    _metricsMonth = null;
+    _metricsCache = null;
+    _authStore?.clearSession();
+    _message = pendingDeletionCleanupMessage;
+  }
+
+  Future<bool> _attemptPendingDeletionCleanup({required bool notify}) async {
+    if (_pendingDeletionCleanupUserIds.isEmpty) return true;
+    final cleanupMessage = pendingDeletionCleanupMessage;
+    var cleanedAll = true;
+    for (final userId in List<String>.from(_pendingDeletionCleanupUserIds)) {
+      final scopedLocal = repository.local.forUser(userId);
+      try {
+        await repository.session.purgePartition(scopedLocal);
+        await scopedLocal.clearPendingAccountCleanup(userId);
+        _pendingDeletionCleanupUserIds.remove(userId);
+      } on Object {
+        cleanedAll = false;
+      }
+    }
+    if (cleanedAll && _message == cleanupMessage) _message = null;
+    if (!cleanedAll) _message = pendingDeletionCleanupMessage;
+    if (notify) notifyListeners();
+    return cleanedAll;
+  }
+
+  Future<bool> retryPendingDeletionCleanup() async {
+    if (_pendingDeletionCleanupStateUnknown) {
+      late final List<String> pending;
+      try {
+        pending = await repository.local.loadPendingAccountCleanupUserIds();
+      } on Object {
+        _message = pendingDeletionCleanupMessage;
+        notifyListeners();
+        return false;
+      }
+      _pendingDeletionCleanupStateUnknown = false;
+      _pendingDeletionCleanupUserIds
+        ..clear()
+        ..addAll(pending);
+      if (pending.isEmpty) {
+        _message = null;
+        notifyListeners();
+        return true;
+      }
+    }
+    return _attemptPendingDeletionCleanup(notify: true);
+  }
+
   Future<bool> loadProfile() async {
+    final started = _session;
     final auth = _authStore;
     if (auth == null || !await auth.loadProfile()) {
+      if (_session != started) return false;
       _message = auth?.message;
       notifyListeners();
       return false;
     }
+    if (_session != started) return false;
     final profile = auth.profile;
     if (profile == null) return false;
     await loadAuthenticatedProfile(profile);
-    return true;
+    return _session == started;
   }
 
   Future<void> loadAuthenticatedProfile(UserProfile profile) async {
+    final started = _session;
     final loaded = await repository.loadForUser(profile.id);
+    if (_session != started) return;
     _state = loaded ?? const FinanceState();
     final memories = <String, QuickMemory>{
       for (final memory in _state.quickMemories) memory.key: memory,
       for (final memory in profile.quickMemories) memory.key: memory,
     };
     _state = _state.copyWith(quickMemories: memories.values.toList());
+    if (_session != started) return;
     await repository.save(_state);
+    if (_session != started) return;
     _message = null;
     notifyListeners();
   }
@@ -101,8 +229,10 @@ class FinanceStore extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final started = _session;
     final success =
         await auth.updateProfile(displayName: displayName, username: username);
+    if (_session != started) return false;
     _message = success ? '用户资料已更新' : auth.message;
     notifyListeners();
     return success;
@@ -116,10 +246,80 @@ class FinanceStore extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final started = _session;
     final success = await auth.changePassword(currentPassword, newPassword);
+    if (_session != started) return false;
     _message = success ? '密码已更新，其他设备需要重新登录' : auth.message;
     notifyListeners();
     return success;
+  }
+
+  Future<bool> deleteAccount(String currentPassword) async {
+    final started = _session;
+    final api = repository.api;
+    final auth = _authStore;
+    final profile = auth?.profile;
+    final local = repository.local;
+    if (api == null ||
+        auth == null ||
+        profile == null ||
+        local.userId != profile.id ||
+        currentPassword.isEmpty) {
+      _message = '请确认登录身份并输入当前密码';
+      notifyListeners();
+      return false;
+    }
+    final userId = profile.id.trim();
+    final scopedLocal = local.forUser(userId);
+    try {
+      final deleted = await auth.deleteAccount(currentPassword);
+      if (!deleted) return false;
+
+      _pendingDeletionCleanupUserIds.add(userId);
+      _message = pendingDeletionCleanupMessage;
+      final current = _session == started;
+      Future<void>? logout;
+      int? logoutGeneration;
+      if (current) {
+        logout = api.logout();
+        logoutGeneration = api.sessionGeneration;
+        _state = const FinanceState();
+        repository.queue.replace(const []);
+        repository.unbindLocalOwner();
+        _sessionGeneration++;
+        auth.clearSession();
+        notifyListeners();
+      }
+
+      try {
+        await scopedLocal.markPendingAccountCleanup(userId);
+      } catch (_) {}
+      try {
+        await repository.session.purgePartition(scopedLocal);
+        await scopedLocal.clearPendingAccountCleanup(userId);
+        _pendingDeletionCleanupUserIds.remove(userId);
+        if (_pendingDeletionCleanupUserIds.isEmpty) _message = null;
+      } catch (_) {
+        _message = pendingDeletionCleanupMessage;
+        notifyListeners();
+      }
+
+      if (logoutGeneration != null &&
+          api.sessionGeneration == logoutGeneration) {
+        try {
+          await api.onAuthExpired?.call();
+        } catch (_) {}
+      }
+      try {
+        await logout;
+      } catch (_) {}
+      return true;
+    } on ApiFailure catch (failure) {
+      if (_session != started) return false;
+      _message = failure.message;
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
@@ -334,8 +534,8 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<List<BudgetAlert>> checkBudgetAlerts() async {
-    final raw =
-        await repository.local.store.read('wealthmate-budget-alerts-v1');
+    final raw = await repository.local
+        .readMetadata(LocalRepository.budgetAlertsKey);
     final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
     final seen =
         decoded is List ? decoded.whereType<String>().toSet() : <String>{};
@@ -354,9 +554,10 @@ class FinanceStore extends ChangeNotifier {
           budget: progress.budget, spent: progress.spent, level: level);
       if (seen.add(alert.key)) alerts.add(alert);
     }
-    if (alerts.isNotEmpty)
-      await repository.local.store
-          .write('wealthmate-budget-alerts-v1', jsonEncode(seen.toList()));
+    if (alerts.isNotEmpty) {
+      await repository.local
+          .writeMetadata(LocalRepository.budgetAlertsKey, jsonEncode(seen.toList()));
+    }
     _budgetAlerts = alerts;
     return alerts;
   }

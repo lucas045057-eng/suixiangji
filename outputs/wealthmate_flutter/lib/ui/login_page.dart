@@ -4,10 +4,18 @@ import '../features/auth/state/auth_store.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({required this.auth, required this.onLoggedIn, super.key});
+  const LoginPage({
+    required this.auth,
+    required this.onLoggedIn,
+    this.pendingCleanupMessage,
+    this.onRetryCleanup,
+    super.key,
+  });
 
   final AuthStore auth;
   final VoidCallback onLoggedIn;
+  final String? pendingCleanupMessage;
+  final Future<bool> Function()? onRetryCleanup;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -18,6 +26,14 @@ class _LoginPageState extends State<LoginPage> {
   final passwordController = TextEditingController();
   String? message;
   bool loading = false;
+  bool retryingCleanup = false;
+  String? pendingCleanupMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    pendingCleanupMessage = widget.pendingCleanupMessage;
+  }
 
   @override
   void dispose() {
@@ -48,6 +64,19 @@ class _LoginPageState extends State<LoginPage> {
                       const Text('登录你的本地财富空间',
                           style: TextStyle(
                               color: Color(0xFF87958F), fontSize: 11)),
+                      if (pendingCleanupMessage != null) ...[
+                        const SizedBox(height: 14),
+                        Text(pendingCleanupMessage!,
+                            style: const TextStyle(
+                                color: Color(0xFFB65B55), fontSize: 11)),
+                        if (widget.onRetryCleanup != null) ...[
+                          const SizedBox(height: 8),
+                          OutlinedButton(
+                              onPressed:
+                                  retryingCleanup ? null : _retryCleanup,
+                              child: Text(retryingCleanup ? '清理中…' : '重试本机清理')),
+                        ],
+                      ],
                       const SizedBox(height: 22),
                       TextField(
                           controller: usernameController,
@@ -105,5 +134,17 @@ class _LoginPageState extends State<LoginPage> {
     } finally {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> _retryCleanup() async {
+    final retry = widget.onRetryCleanup;
+    if (retry == null) return;
+    setState(() => retryingCleanup = true);
+    final cleaned = await retry();
+    if (!mounted) return;
+    setState(() {
+      retryingCleanup = false;
+      if (cleaned) pendingCleanupMessage = null;
+    });
   }
 }

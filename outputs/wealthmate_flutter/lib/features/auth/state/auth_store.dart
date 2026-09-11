@@ -36,6 +36,7 @@ class AuthStore extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
       _message = failure.message;
       notifyListeners();
       return false;
@@ -80,6 +81,7 @@ class AuthStore extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
       _message = failure.message;
       notifyListeners();
       return false;
@@ -104,6 +106,7 @@ class AuthStore extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
       _message = failure.message;
       notifyListeners();
       return false;
@@ -122,6 +125,7 @@ class AuthStore extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
       _message = failure.message;
       notifyListeners();
       return false;
@@ -132,7 +136,10 @@ class AuthStore extends ChangeNotifier {
     final requestGeneration = _sessionGeneration;
     try {
       await repository.deleteAccount(currentPassword);
-      if (requestGeneration != _sessionGeneration) return false;
+      // A confirmed delete may finish after the UI has switched sessions.
+      // The caller owns the captured local partition and must still clean it,
+      // while no stale response may mutate the current AuthSession.
+      if (requestGeneration != _sessionGeneration) return true;
       _message = null;
       notifyListeners();
       return true;

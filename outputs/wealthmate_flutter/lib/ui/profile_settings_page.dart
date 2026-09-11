@@ -19,6 +19,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
   final currentPasswordController = TextEditingController();
   final newPasswordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
+  bool _deleting = false;
 
   @override
   void initState() {
@@ -120,6 +121,17 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                     style: const TextStyle(
                         color: Color(0xFF4C4A9C), fontSize: 11)),
               ],
+              if (!widget.store.isDemoMode) ...[
+                const SizedBox(height: 30),
+                const Divider(),
+                const Text('删除后将永久移除当前账号及其财务数据，其他账号不受影响。'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                    onPressed: _deleting ? null : _deleteAccount,
+                    icon: const Icon(Icons.delete_forever,
+                        color: Color(0xFFB65B55)),
+                    label: Text(_deleting ? '正在删除…' : '永久删除账号')),
+              ],
             ]),
       ),
     );
@@ -158,9 +170,80 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
     }
   }
 
+  Future<void> _deleteAccount() async {
+    final password = await showDialog<String>(
+        context: context, builder: (_) => const _DeleteAccountDialog());
+    if (password == null || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      final deleted = await widget.store.deleteAccount(password);
+      if (!mounted) return;
+      if (deleted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        _show(widget.store.message ?? '删除未完成，请稍后重试');
+      }
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   void _show(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
+}
+
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _password = TextEditingController();
+  bool _confirmed = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('永久删除当前账号？'),
+        content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('账号与云端、本机的当前账号数据将永久删除，无法撤销。'),
+          const SizedBox(height: 14),
+          TextField(
+              controller: _password,
+              obscureText: true,
+              decoration: const InputDecoration(labelText: '删除验证密码')),
+          CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _confirmed,
+              onChanged: (value) => setState(() => _confirmed = value ?? false),
+              title: const Text('我确认永久删除当前账号及其数据')),
+          if (_error != null)
+            Text(_error!, style: const TextStyle(color: Color(0xFFB65B55))),
+        ])),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+              onPressed: () {
+                if (_password.text.isEmpty || !_confirmed) {
+                  setState(() => _error = '请输入当前密码并勾选删除确认');
+                  return;
+                }
+                Navigator.pop(context, _password.text);
+              },
+              child: const Text('确认永久删除')),
+        ],
+      );
 }
