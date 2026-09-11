@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
+import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({required this.auth, required this.onLoggedIn, super.key});
@@ -68,6 +69,18 @@ class _LoginPageState extends State<LoginPage> {
                           child: FilledButton(
                               onPressed: loading ? null : _login,
                               child: Text(loading ? '登录中…' : '登录'))),
+                      TextButton(
+                          onPressed: loading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => RegisterPage(
+                                          auth: widget.auth,
+                                          onLoggedIn: () {
+                                            Navigator.of(context).pop();
+                                            widget.onLoggedIn();
+                                          }))),
+                          child: const Text('注册账号')),
                     ]),
               ),
             ),

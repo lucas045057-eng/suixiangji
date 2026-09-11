@@ -161,6 +161,48 @@ void main() {
     expect(tokenStore.value, 'jwt-password');
   });
 
+  test('registration persists the returned token and verified profile',
+      () async {
+    final tokenStore = _AuthMemoryTokenStore();
+    final auth = _authStore(
+      tokenStore: tokenStore,
+      responses: [
+        const _AuthResponse(201, {'access_token': 'jwt-register'}),
+        _AuthResponse(200, _profile(accessToken: 'jwt-register')),
+      ],
+    );
+
+    expect(
+      await auth.register(
+        username: 'alice',
+        password: 'test-password',
+        inviteCode: 'invite-code',
+      ),
+      isTrue,
+    );
+    expect(auth.profile?.id, 'user-1');
+    expect(tokenStore.value, 'jwt-register');
+  });
+
+  test('account deletion delegates to the auth repository', () async {
+    final tokenStore = _AuthMemoryTokenStore()..value = 'jwt-old';
+    final auth = _authStore(
+      tokenStore: tokenStore,
+      token: 'jwt-old',
+      responses: [
+        const _AuthResponse(200, {'access_token': 'jwt-old'}),
+        _AuthResponse(200, _profile(accessToken: 'jwt-old')),
+        const _AuthResponse(200, {'deleted': true}),
+      ],
+    );
+
+    expect(await auth.login('demo', 'password'), isTrue);
+    final deleted = await auth.deleteAccount('current-password');
+    expect(deleted, isTrue);
+    expect(auth.isAuthenticated, isTrue);
+    expect(tokenStore.value, 'jwt-old');
+  });
+
   test('logout clears the persisted token and in-memory profile', () async {
     final tokenStore = _AuthMemoryTokenStore()..value = 'jwt-old';
     final auth = _authStore(

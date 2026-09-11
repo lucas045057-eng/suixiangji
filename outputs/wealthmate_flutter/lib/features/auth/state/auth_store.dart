@@ -42,6 +42,33 @@ class AuthStore extends ChangeNotifier {
     }
   }
 
+  Future<bool> register({
+    required String username,
+    required String password,
+    String? displayName,
+    required String inviteCode,
+  }) async {
+    final requestGeneration = ++_sessionGeneration;
+    try {
+      final profile = await repository.register(
+        username: username,
+        password: password,
+        displayName: displayName,
+        inviteCode: inviteCode,
+      );
+      if (requestGeneration != _sessionGeneration) return false;
+      _session = AuthSession(profile: profile);
+      _message = null;
+      notifyListeners();
+      return true;
+    } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
+      _message = failure.message;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<bool> loadProfile() async {
     if (repository.remote.api.token?.isNotEmpty != true) return false;
     final requestGeneration = _sessionGeneration;
@@ -95,6 +122,22 @@ class AuthStore extends ChangeNotifier {
       notifyListeners();
       return true;
     } on ApiFailure catch (failure) {
+      _message = failure.message;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteAccount(String currentPassword) async {
+    final requestGeneration = _sessionGeneration;
+    try {
+      await repository.deleteAccount(currentPassword);
+      if (requestGeneration != _sessionGeneration) return false;
+      _message = null;
+      notifyListeners();
+      return true;
+    } on ApiFailure catch (failure) {
+      if (requestGeneration != _sessionGeneration) return false;
       _message = failure.message;
       notifyListeners();
       return false;

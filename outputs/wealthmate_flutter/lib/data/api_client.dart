@@ -34,6 +34,41 @@ class ApiClient {
   FutureOr<void> Function()? onAuthExpired;
   late final ApiTransport transport;
   int _sessionGeneration = 0;
+  int get sessionGeneration => _sessionGeneration;
+  Future<void> _credentialWrites = Future<void>.value();
+
+  Future<void> _persistCredentials(Future<void> Function() action) {
+    final next = _credentialWrites.then((_) => action());
+    _credentialWrites = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
+
+  Future<void> _clearPersistedCredentialsBestEffort() async {
+    try {
+      await tokenStore.clear();
+    } catch (_) {}
+    try {
+      await tokenStore.clearLastVerifiedUserId();
+    } catch (_) {}
+  }
+
+  Future<void> _failClosedCredentials(int generation,
+      [String? expectedToken]) async {
+    if (generation != _sessionGeneration ||
+        (expectedToken != null && expectedToken != token)) {
+      return;
+    }
+    token = null;
+    lastVerifiedUserId = null;
+    await _clearPersistedCredentialsBestEffort();
+  }
+
+  void _requireSession(int generation, [String? requestToken]) {
+    if (generation != _sessionGeneration ||
+        (requestToken != null && requestToken != token)) {
+      throw const ApiFailure(ApiFailureKind.cancelled, '登录状态已变更，请重试');
+    }
+  }
 
   Future<void> _handleAuthExpired() async {
     await logout();
@@ -41,12 +76,17 @@ class ApiClient {
   }
 
   Future<bool> restoreToken() async {
+    final generation = _sessionGeneration;
+    await _credentialWrites;
+    final restored = await tokenStore.read();
+    _requireSession(generation);
     if (token == null || token!.isEmpty) {
-      final restored = await tokenStore.read();
       if (restored == null || restored.isEmpty) return false;
       token = restored;
     }
-    lastVerifiedUserId = await tokenStore.readLastVerifiedUserId();
+    final verified = await tokenStore.readLastVerifiedUserId();
+    _requireSession(generation);
+    lastVerifiedUserId = token == restored ? verified : null;
     return true;
   }
 
@@ -54,66 +94,131 @@ class ApiClient {
     _sessionGeneration++;
   }
 
-  Future<void> saveToken(String value) async {
-    await _saveToken(value);
-  }
-
-  Future<void> _saveToken(String value, {int? expectedGeneration}) async {
+  Future<void> saveToken(String value, {bool newSession = true}) async {
     if (value.isEmpty) return;
-    if (expectedGeneration != null &&
-        expectedGeneration != _sessionGeneration) return;
-    token = value;
-    await tokenStore.write(value);
+    if (newSession) {
+      _sessionGeneration++;
+      lastVerifiedUserId = null;
+    }
+    final generation = _sessionGeneration;
+    try {
+      await _persistCredentials(() async {
+        try {
+          // Remove the old identity before making the replacement token
+          // durable. A partial token write therefore cannot retain A's
+          // verified partition marker.
+          if (newSession) await tokenStore.clearLastVerifiedUserId();
+          await tokenStore.write(value);
+        } catch (_) {
+          await _failClosedCredentials(generation);
+          rethrow;
+        }
+      });
+      _requireSession(generation);
+      token = value;
+    } catch (error) {
+      await _persistCredentials(() => _failClosedCredentials(generation));
+      if (error is ApiFailure) rethrow;
+      throw const ApiFailure(ApiFailureKind.network, '登录状态保存失败，请重试');
+    }
   }
 
   Future<void> logout() async {
     _sessionGeneration++;
     token = null;
     lastVerifiedUserId = null;
-    await tokenStore.clear();
-    await tokenStore.clearLastVerifiedUserId();
+    await _persistCredentials(_clearPersistedCredentialsBestEffort);
   }
 
-  Future<void> saveLastVerifiedUserId(String userId,
-      {int? expectedGeneration}) async {
+  Future<void> saveLastVerifiedUserId(String userId) async {
     final normalizedUserId = userId.trim();
     if (normalizedUserId.isEmpty) return;
-    if (expectedGeneration != null &&
-        expectedGeneration != _sessionGeneration) return;
-    lastVerifiedUserId = normalizedUserId;
-    await tokenStore.writeLastVerifiedUserId(normalizedUserId);
+    final generation = _sessionGeneration;
+    final verifiedToken = token;
+    try {
+      await _persistCredentials(() async {
+        _requireSession(generation, verifiedToken);
+        try {
+          await tokenStore.writeLastVerifiedUserId(normalizedUserId);
+        } catch (_) {
+          await _failClosedCredentials(generation, verifiedToken);
+          rethrow;
+        }
+      });
+      _requireSession(generation, verifiedToken);
+      lastVerifiedUserId = normalizedUserId;
+    } catch (error) {
+      await _persistCredentials(
+          () => _failClosedCredentials(generation, verifiedToken));
+      if (error is ApiFailure) rethrow;
+      throw const ApiFailure(ApiFailureKind.network, '登录状态保存失败，请重试');
+    }
   }
 
   Future<Map<String, Object?>> login(String username, String password) async {
-    beginSession();
-    final requestGeneration = _sessionGeneration;
+    final generation = ++_sessionGeneration;
     final result = await _requestMap('POST', '/auth/login',
         body: {'username': username, 'password': password}, includeAuth: false);
+    _requireSession(generation);
     final accessToken =
         result['access_token'] as String? ?? result['token'] as String?;
     if (accessToken == null || accessToken.isEmpty) {
       throw const ApiFailure(ApiFailureKind.server, '登录响应中没有访问令牌');
     }
-    await _saveToken(accessToken, expectedGeneration: requestGeneration);
+    await saveToken(accessToken);
     return result;
   }
 
   Future<UserProfile> fetchProfile() async {
-    final requestGeneration = _sessionGeneration;
+    final generation = _sessionGeneration;
     final json = await _requestMap('GET', '/auth/me');
+    _requireSession(generation);
     final profile = UserProfile.fromJson(json);
-    await saveLastVerifiedUserId(
-      profile.id,
-      expectedGeneration: requestGeneration,
-    );
+    if (profile.id.trim().isEmpty) {
+      throw const ApiFailure(ApiFailureKind.server, '无法确认账户身份，请重新登录');
+    }
+    await saveLastVerifiedUserId(profile.id);
+    _requireSession(generation);
     return profile;
+  }
+
+  Future<Map<String, Object?>> register(
+      {required String username,
+      required String password,
+      String? displayName,
+      required String inviteCode}) async {
+    final generation = ++_sessionGeneration;
+    final result =
+        await _requestMap('POST', '/auth/register', includeAuth: false, body: {
+      'username': username.trim(),
+      'password': password,
+      if (displayName != null && displayName.trim().isNotEmpty)
+        'display_name': displayName.trim(),
+      'invite_code': inviteCode.trim(),
+    });
+    _requireSession(generation);
+    final accessToken = result['access_token'] as String?;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const ApiFailure(ApiFailureKind.server, '注册响应异常，请尝试登录');
+    }
+    await saveToken(accessToken);
+    return result;
+  }
+
+  Future<void> deleteAccount(String currentPassword) async {
+    final result = await _requestMap('DELETE', '/auth/me',
+        body: {'current_password': currentPassword},
+        allowStaleSuccess: true);
+    if (result['deleted'] != true) {
+      throw const ApiFailure(ApiFailureKind.server, '未能确认删除结果，请稍后重试');
+    }
   }
 
   Future<UserProfile> updateProfile(
       {String? displayName,
       String? username,
       List<QuickMemory>? quickMemories}) async {
-    final requestGeneration = _sessionGeneration;
+    final generation = _sessionGeneration;
     final json = await _requestMap('PATCH', '/auth/me', body: {
       if (displayName != null) 'display_name': displayName,
       if (username != null) 'username': username,
@@ -121,21 +226,25 @@ class ApiClient {
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
     });
     final accessToken = json['access_token'] as String?;
-    if (accessToken != null && accessToken.isNotEmpty)
-      await _saveToken(accessToken, expectedGeneration: requestGeneration);
+    if (accessToken != null && accessToken.isNotEmpty) {
+      await saveToken(accessToken, newSession: false);
+    }
+    _requireSession(generation);
     return UserProfile.fromJson(json);
   }
 
   Future<UserProfile> changePassword(
       String currentPassword, String newPassword) async {
-    final requestGeneration = _sessionGeneration;
+    final generation = _sessionGeneration;
     final json = await _requestMap('POST', '/auth/password', body: {
       'current_password': currentPassword,
       'new_password': newPassword,
     });
     final accessToken = json['access_token'] as String?;
-    if (accessToken != null && accessToken.isNotEmpty)
-      await _saveToken(accessToken, expectedGeneration: requestGeneration);
+    if (accessToken != null && accessToken.isNotEmpty) {
+      await saveToken(accessToken, newSession: false);
+    }
+    _requireSession(generation);
     return UserProfile.fromJson(json);
   }
 
@@ -273,13 +382,20 @@ class ApiClient {
       (await pullChanges(sinceVersion)).transactions;
 
   Future<Map<String, Object?>> _requestMap(String method, String path,
-          {Map<String, Object?>? body, bool includeAuth = true}) =>
-      transport.requestMap(
-        method,
-        path,
-        body: body,
-        includeAuth: includeAuth,
-      );
+      {Map<String, Object?>? body,
+      bool includeAuth = true,
+      bool allowStaleSuccess = false}) async {
+    final generation = _sessionGeneration;
+    final requestToken = includeAuth ? token : null;
+    final result = await transport.requestMap(
+      method,
+      path,
+      body: body,
+      includeAuth: includeAuth,
+    );
+    if (!allowStaleSuccess) _requireSession(generation, requestToken);
+    return result;
+  }
 
   List<Map<String, Object?>> _items(Map<String, Object?> json) {
     final values =

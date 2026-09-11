@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 enum ApiFailureKind {
+  cancelled,
   configuration,
   unauthorized,
   conflict,
@@ -68,11 +69,15 @@ class ApiTransport {
             headers: headers,
             body: jsonEncode(body ?? const {}),
           ),
-        'DELETE' => await client.delete(uri, headers: headers),
+        'DELETE' => await client.delete(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          ),
         _ => await client.get(uri, headers: headers),
       };
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final failure = _failureForStatus(response.statusCode);
+        final failure = _failureForStatus(response.statusCode, path);
         if (response.statusCode == 401 &&
             includeAuth &&
             token != null &&
@@ -93,7 +98,28 @@ class ApiTransport {
     }
   }
 
-  ApiFailure _failureForStatus(int statusCode) {
+  ApiFailure _failureForStatus(int statusCode, String path) {
+    if (statusCode == 400 && path == '/auth/register') {
+      return const ApiFailure(
+          ApiFailureKind.validation, '邀请码无效、已过期或已用完，请联系邀请人');
+    }
+    if (statusCode == 403) {
+      return ApiFailure(
+        ApiFailureKind.validation,
+        path == '/auth/me' || path == '/auth/password'
+            ? '当前密码不正确，请重试'
+            : '当前账号无权执行此操作',
+      );
+    }
+    if (statusCode == 429) {
+      return const ApiFailure(ApiFailureKind.validation, '操作太频繁，请稍后再试');
+    }
+    if (statusCode == 409 && (path == '/auth/register' || path == '/auth/me')) {
+      return const ApiFailure(ApiFailureKind.conflict, '用户名已被使用，请换一个');
+    }
+    if (statusCode == 401 && path == '/auth/login') {
+      return const ApiFailure(ApiFailureKind.unauthorized, '用户名或密码不正确');
+    }
     if (statusCode == 401) {
       return const ApiFailure(ApiFailureKind.unauthorized, '登录已失效，请重新登录');
     }

@@ -11,6 +11,24 @@ class AuthRepository {
     return fetchProfile();
   }
 
+  Future<UserProfile> register({
+    required String username,
+    required String password,
+    String? displayName,
+    required String inviteCode,
+  }) async {
+    await remote.register(
+      username: username,
+      password: password,
+      displayName: displayName,
+      inviteCode: inviteCode,
+    );
+    return fetchProfile();
+  }
+
+  Future<void> deleteAccount(String currentPassword) =>
+      remote.deleteAccount(currentPassword);
+
   Future<UserProfile> fetchProfile() => remote.fetchProfile();
 
   Future<UserProfile> updateProfile({

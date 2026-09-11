@@ -9,6 +9,22 @@ class AuthRemoteDataSource {
   Future<Map<String, Object?>> login(String username, String password) =>
       api.login(username, password);
 
+  Future<Map<String, Object?>> register({
+    required String username,
+    required String password,
+    String? displayName,
+    required String inviteCode,
+  }) =>
+      api.register(
+        username: username,
+        password: password,
+        displayName: displayName,
+        inviteCode: inviteCode,
+      );
+
+  Future<void> deleteAccount(String currentPassword) =>
+      api.deleteAccount(currentPassword);
+
   Future<UserProfile> fetchProfile() => api.fetchProfile();
 
   Future<UserProfile> updateProfile({
