@@ -573,8 +573,14 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> sync() async {
-    _state = await repository.pushPending(_state);
-    _state = await repository.pullChanges(_state);
+    final started = _session;
+    final pushed = await repository.pushPending(_state);
+    if (_session != started) return;
+    _state = pushed;
+    final pulled = await repository.pullChanges(_state);
+    if (_session != started) return;
+    _state = pulled;
+    if (_session != started) return;
     _message = _state.syncState.error ??
         (_state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步');
     notifyListeners();
