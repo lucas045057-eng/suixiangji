@@ -54,7 +54,6 @@ class FinanceRepository {
     final needsRebind = session.local.userId != normalizedUserId;
     if (_localOwnerUserId != normalizedUserId) {
       _ownerGeneration++;
-      queue.replace(const []);
       _pendingConflictClientOpIds.clear();
     }
     _localOwnerUserId = normalizedUserId;

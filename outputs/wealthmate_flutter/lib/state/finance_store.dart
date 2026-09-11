@@ -323,8 +323,12 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
-    _state = await repository.applyLocal(_state, transaction);
+    final started = _session;
+    final next = await repository.applyLocal(_state, transaction);
+    if (_session != started) return;
+    _state = next;
     await checkBudgetAlerts();
+    if (_session != started) return;
     _message = '已保存到本地';
     notifyListeners();
   }
