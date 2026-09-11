@@ -581,6 +581,7 @@ class FinanceStore extends ChangeNotifier {
   }
 
   void clearAuthenticatedSession() {
+    _sessionGeneration++;
     _authStore?.clearSession();
     _draft = null;
     _draftSourceText = null;
