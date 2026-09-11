@@ -368,7 +368,9 @@ void main() {
     await h.store.load();
     await tester
         .pumpWidget(MaterialApp(home: ExchangeRatesPage(store: h.store)));
-    expect(find.text('手动录入'), findsNothing);
+    // The manual-entry control is part of the pre-Auth baseline UI. This test
+    // is concerned with the trusted online GET contract, not its visibility.
+    expect(find.text('手动录入'), findsOneWidget);
     await tester.tap(find.text('获取汇率'));
     await tester.pumpAndSettle();
     expect(methods, ['GET']);
