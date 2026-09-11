@@ -42,8 +42,14 @@ class LocalStateSession {
       });
 
   /// Serializes deletion of a partition with normal aggregate writes.
-  Future<void> purgePartition(LocalRepository partition) =>
-      _serial(partition.purge);
+  Future<void> purgePartition(LocalRepository partition) => _serial(() async {
+        await partition.purge();
+        if (_local.userId == partition.userId) {
+          _state = null;
+          _loaded = false;
+          queue.replace(const []);
+        }
+      });
 
   Future<FinanceState?> load() => _serial(() async {
         await _ensureLoaded();
