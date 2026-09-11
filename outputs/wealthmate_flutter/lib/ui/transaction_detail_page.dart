@@ -2,27 +2,31 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../state/finance_store.dart';
+import '../features/ledger/state/ledger_store.dart';
 import 'widgets/transaction_form.dart';
 import 'widgets/ui_helpers.dart';
 
 class TransactionDetailPage extends StatelessWidget {
-  const TransactionDetailPage(
-      {required this.store, required this.transaction, super.key});
+  TransactionDetailPage(
+      {LedgerStore? ledger,
+      FinanceStore? store,
+      required this.transaction,
+      super.key})
+      : ledger = ledger ?? store!.ledger;
 
-  final FinanceStore store;
+  final LedgerStore ledger;
   final FinanceTransaction transaction;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-        listenable: store,
+        listenable: ledger,
         builder: (context, _) {
-          final current = store.state.transactions
+          final current = ledger.transactions
               .where((item) => item.id == transaction.id)
               .firstOrNull;
           if (current == null) {
-            return const Scaffold(
-                body: Center(child: Text('这笔账目已不存在')));
+            return const Scaffold(body: Center(child: Text('这笔账目已不存在')));
           }
           return _buildDetail(context, current);
         });
@@ -82,24 +86,20 @@ class TransactionDetailPage extends StatelessWidget {
           Card(
               child: Column(children: [
             _detailRow('发生时间', _occurredLabel(value)),
-            _detailRow('分类', categoryName(store.state, value.categoryId)),
-            _detailRow(
-                '支付账户/平台', accountName(store.state, value.accountId)),
-            _detailRow(
-                '原始金额', '${value.amount.toStringAsFixed(2)} $currency'),
+            _detailRow('分类', categoryName(ledger.state, value.categoryId)),
+            _detailRow('支付账户/平台', accountName(ledger.state, value.accountId)),
+            _detailRow('原始金额', '${value.amount.toStringAsFixed(2)} $currency'),
             _detailRow('人民币金额', converted == null ? '待补充汇率' : money(converted)),
             _detailRow('汇率状态', _exchangeLabel(value)),
-            _detailRow(
-                '备注', value.note.isEmpty ? '无备注' : value.note),
+            _detailRow('备注', value.note.isEmpty ? '无备注' : value.note),
           ])),
           if (value.type == TransactionType.transfer) ...[
             const SizedBox(height: 14),
             Card(
                 child: Column(children: [
               _detailRow(
-                  '转出账户', accountName(store.state, value.fromAccountId)),
-              _detailRow(
-                  '转入账户', accountName(store.state, value.toAccountId))
+                  '转出账户', accountName(ledger.state, value.fromAccountId)),
+              _detailRow('转入账户', accountName(ledger.state, value.toAccountId))
             ])),
           ],
         ],
@@ -140,7 +140,7 @@ class TransactionDetailPage extends StatelessWidget {
   }
 
   Future<void> _edit(BuildContext context) async {
-    final current = store.state.transactions
+    final current = ledger.transactions
         .where((item) => item.id == transaction.id)
         .firstOrNull;
     if (current == null) {
@@ -150,11 +150,11 @@ class TransactionDetailPage extends StatelessWidget {
     await showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => TransactionForm(store: store, initial: current));
+        builder: (_) => TransactionForm(ledger: ledger, initial: current));
   }
 
   Future<void> _delete(BuildContext context) async {
-    await store.deleteTransaction(transaction.id);
+    await ledger.deleteTransaction(transaction.id);
     if (context.mounted) Navigator.pop(context);
   }
 }

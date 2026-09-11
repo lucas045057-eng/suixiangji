@@ -17,7 +17,15 @@ from .core.dependencies import oauth2_scheme
 from .db import get_db
 from .domain import TransactionRecord, calculate_cny, classify_natural_language, monthly_metrics, money, period_metrics
 from .models import Account, AgentLog, Budget, Category, ExchangeRate, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
-from .schemas import AccountIn, BudgetIn, BudgetPatch, CategoryIn, CategoryPatch, DraftIn, RateIn, RestoreIn, SyncPushIn, TransactionIn
+from .schemas import AccountIn, BudgetIn, BudgetPatch, DraftIn, RateIn, RestoreIn, SyncPushIn
+from .ledger.service import (
+    _attach_latest_rate,
+    _category_json,
+    _normalise_tx_payload,
+    _save_category,
+    _save_tx,
+    _tx_json,
+)
 from .services.agent import configured_model, deterministic_report_text, make_draft
 from .services.exchange import fetch_frankfurter_rate
 
@@ -53,118 +61,6 @@ def _account_json(row: Account) -> dict:
         "server_version": row.server_version,
         "updated_at": row.updated_at,
     })
-
-
-def _tx_json(row: Transaction) -> dict:
-    return _json_metrics({
-        "id": row.id,
-        "date": row.occurred_on,
-        "occurred_on": row.occurred_on,
-        "type": row.kind,
-        "kind": row.kind,
-        "amount": row.amount,
-        "currency": row.currency,
-        "original_amount": row.amount,
-        "original_currency": row.currency,
-        "cny_amount": row.cny_amount,
-        "exchange_rate": row.exchange_rate,
-        "exchange_rate_date": row.exchange_rate_date,
-        "exchange_rate_source": row.exchange_rate_source,
-        "conversion_status": row.conversion_status,
-        "category_id": row.category_id,
-        "category_name": row.category_name,
-        "account_id": row.account_id,
-        "from_account_id": row.from_account_id,
-        "to_account_id": row.to_account_id,
-        "occurred_at": row.occurred_at or f"{row.occurred_on.isoformat()}T00:00:00",
-        "note": row.note,
-        "client_op_id": row.client_op_id,
-        "deleted_at": row.deleted_at,
-        "server_version": row.server_version,
-        "updated_at": row.updated_at,
-    })
-
-
-def _normalise_tx_payload(payload: dict, *, client_op_id: str | None = None, entity_id: str | None = None) -> dict:
-    kind = payload.get("kind") or payload.get("type") or "expense"
-    occurred = payload.get("occurred_on") or payload.get("date") or date.today().isoformat()
-    amount = Decimal(str(payload.get("amount", payload.get("original_amount", 0))))
-    currency = str(payload.get("currency") or payload.get("original_currency") or "CNY").upper()
-    exchange_rate = payload.get("exchange_rate")
-    rate_date = payload.get("exchange_rate_date")
-    rate_source = payload.get("exchange_rate_source")
-    cny_amount = payload.get("cny_amount")
-    occurred_at = payload.get("occurred_at")
-    if occurred_at is None:
-        occurred_at = f"{_date(occurred).isoformat()}T00:00:00"
-    elif isinstance(occurred_at, datetime):
-        occurred_at = occurred_at.isoformat()
-    if currency == "CNY" or (cny_amount is None and exchange_rate is not None):
-        converted = calculate_cny(amount, currency, Decimal(str(exchange_rate)) if exchange_rate is not None else None, rate_date=_date(rate_date) if rate_date else None, source=rate_source)
-        cny_amount = converted["cny_amount"]
-        exchange_rate = converted["exchange_rate"]
-        rate_date = converted["exchange_rate_date"]
-        rate_source = converted["exchange_rate_source"]
-        conversion_status = converted["conversion_status"]
-    else:
-        conversion_status = "ready" if cny_amount is not None else "pending"
-    return {
-        "id": payload.get("id") or entity_id or str(uuid4()),
-        "client_op_id": payload.get("client_op_id") or client_op_id or str(uuid4()),
-        "kind": kind,
-        "amount": amount,
-        "currency": currency,
-        "cny_amount": Decimal(str(cny_amount)) if cny_amount is not None else None,
-        "exchange_rate": Decimal(str(exchange_rate)) if exchange_rate is not None else None,
-        "exchange_rate_date": _date(rate_date) if rate_date else None,
-        "exchange_rate_source": rate_source,
-        "conversion_status": conversion_status,
-        "category_id": payload.get("category_id"),
-        "category_name": payload.get("category_name"),
-        "account_id": payload.get("account_id"),
-        "from_account_id": payload.get("from_account_id"),
-        "to_account_id": payload.get("to_account_id"),
-        "occurred_on": _date(occurred),
-        "occurred_at": str(occurred_at),
-        "note": payload.get("note") or "",
-    }
-
-
-def _attach_latest_rate(db: Session, values: dict) -> dict:
-    currency = str(values.get("currency") or values.get("original_currency") or "CNY").upper()
-    if currency == "CNY" or values.get("cny_amount") is not None or values.get("exchange_rate") is not None:
-        return values
-    rate = db.query(ExchangeRate).filter(ExchangeRate.base_currency == currency, ExchangeRate.quote_currency == "CNY").order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc()).first()
-    if not rate:
-        return values
-    return {**values, "exchange_rate": rate.rate, "exchange_rate_date": rate.rate_date, "exchange_rate_source": rate.source}
-
-
-def _save_tx(db: Session, user: User, values: dict, *, deleted: bool = False, server_version: int | None = None) -> Transaction:
-    if values["kind"] != "transfer" and not values.get("account_id"):
-        raise HTTPException(status_code=422, detail="非转账账目必须选择账户")
-    row = db.get(Transaction, values["id"])
-    if row and row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="账目不存在")
-    for field in ("account_id", "from_account_id", "to_account_id"):
-        account_id = values.get(field)
-        if account_id and (not db.get(Account, account_id) or db.get(Account, account_id).user_id != user.id):
-            raise HTTPException(status_code=422, detail=f"账户不存在: {account_id}")
-    category_id = values.get("category_id")
-    if category_id:
-        category = db.get(Category, category_id)
-        if not category or category.user_id != user.id:
-            raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
-    if not row:
-        row = Transaction(id=values["id"], user_id=user.id, **{key: value for key, value in values.items() if key != "id"})
-        db.add(row)
-    else:
-        for key, value in values.items():
-            if key != "id":
-                setattr(row, key, value)
-    row.deleted_at = datetime.now(timezone.utc) if deleted else None
-    row.server_version = server_version if server_version is not None else row.server_version
-    return row
 
 
 def _save_account(db: Session, user: User, values: dict, *, deleted: bool = False, server_version: int | None = None) -> Account:
@@ -322,79 +218,6 @@ def delete_account(account_id: str, db: Session = Depends(get_db), user: User = 
     return {"deleted": True, "id": account_id, "server_version": user.sync_version}
 
 
-@router.get("/categories")
-def list_categories(db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    return {"items": [_category_json(row) for row in db.query(Category).filter(Category.user_id == user.id).all()], "server_version": user.sync_version}
-
-
-def _category_json(row: Category) -> dict:
-    return _json_metrics({"id": row.id, "name": row.name, "active": row.active, "type": row.kind, "kind": row.kind, "server_version": row.server_version, "updated_at": row.updated_at})
-
-
-def _save_category(db: Session, user: User, values: dict, *, server_version: int | None = None, active: bool | None = None) -> Category:
-    row = db.get(Category, values["id"])
-    if row and row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="分类不存在")
-    if not row:
-        row = Category(id=values["id"], user_id=user.id, name=values.get("name") or values["id"], kind=values.get("kind") or values.get("type") or "expense", active=True if active is None else active)
-        db.add(row)
-    else:
-        if values.get("name") is not None:
-            row.name = values["name"]
-        if values.get("kind") or values.get("type"):
-            row.kind = values.get("kind") or values.get("type")
-        if active is not None:
-            row.active = active
-    row.server_version = server_version if server_version is not None else row.server_version
-    return row
-
-
-@router.post("/categories")
-def create_category(payload: CategoryIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Category, payload.id) if payload.id else None
-    if row and row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="分类不存在")
-    if not row:
-        row = Category(id=payload.id or str(uuid4()), user_id=user.id, name=payload.name, kind=payload.kind, active=True)
-        db.add(row)
-    else:
-        row.name = payload.name
-        row.kind = payload.kind
-        row.active = True
-    user.sync_version += 1
-    row.server_version = user.sync_version
-    db.commit()
-    return {"id": row.id, "name": row.name, "active": row.active, "type": row.kind, "kind": row.kind}
-
-
-@router.patch("/categories/{category_id}")
-def update_category(category_id: str, payload: CategoryPatch, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Category, category_id)
-    if not row or row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="分类不存在")
-    values = payload.model_dump(exclude_unset=True)
-    if "name" in values:
-        row.name = values["name"]
-    if "active" in values:
-        row.active = values["active"]
-    user.sync_version += 1
-    row.server_version = user.sync_version
-    db.commit()
-    return {"id": row.id, "name": row.name, "active": row.active, "type": row.kind, "kind": row.kind}
-
-
-@router.post("/categories/{category_id}/archive")
-def archive_category(category_id: str, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Category, category_id)
-    if not row or row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="分类不存在")
-    row.active = False
-    user.sync_version += 1
-    row.server_version = user.sync_version
-    db.commit()
-    return {"id": row.id, "name": row.name, "active": row.active, "type": row.kind, "kind": row.kind}
-
-
 def _budget_json(row: Budget) -> dict:
     return _json_metrics({
         "id": row.id,
@@ -480,54 +303,6 @@ def delete_budget(budget_id: str, db: Session = Depends(get_db), user: User = De
     row.server_version = user.sync_version
     db.commit()
     return {"deleted": True, "id": budget_id, "server_version": user.sync_version}
-
-
-@router.get("/transactions")
-def list_transactions(db: Session = Depends(get_db), user: User = Depends(_user), include_deleted: bool = False) -> dict:
-    query = db.query(Transaction).filter(Transaction.user_id == user.id)
-    if not include_deleted:
-        query = query.filter(Transaction.deleted_at.is_(None))
-    return {"items": [_tx_json(row) for row in query.order_by(Transaction.occurred_on.desc()).all()], "server_version": user.sync_version}
-
-
-@router.post("/transactions")
-def create_transaction(payload: TransactionIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    existing = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.client_op_id == payload.client_op_id).first()
-    if existing:
-        return _tx_json(existing)
-    user.sync_version += 1
-    values = payload.model_dump()
-    values["id"] = values.get("id") or str(uuid4())
-    row = _save_tx(db, user, _normalise_tx_payload(_attach_latest_rate(db, values)), server_version=user.sync_version)
-    db.add(SyncOperation(user_id=user.id, client_op_id=row.client_op_id, entity="transactions", entity_id=row.id, server_version=user.sync_version))
-    db.commit()
-    return _tx_json(row)
-
-
-@router.patch("/transactions/{transaction_id}")
-def update_transaction(transaction_id: str, payload: TransactionIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    if transaction_id != payload.id and payload.id:
-        raise HTTPException(status_code=422, detail="账目 ID 不一致")
-    existing = db.get(Transaction, transaction_id)
-    if not existing or existing.user_id != user.id:
-        raise HTTPException(status_code=404, detail="账目不存在")
-    user.sync_version += 1
-    values = _normalise_tx_payload(_attach_latest_rate(db, payload.model_dump()), entity_id=transaction_id)
-    row = _save_tx(db, user, values, server_version=user.sync_version)
-    db.commit()
-    return _tx_json(row)
-
-
-@router.delete("/transactions/{transaction_id}")
-def delete_transaction(transaction_id: str, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Transaction, transaction_id)
-    if not row or row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="账目不存在")
-    user.sync_version += 1
-    row.deleted_at = datetime.now(timezone.utc)
-    row.server_version = user.sync_version
-    db.commit()
-    return {"deleted": True, "id": transaction_id, "server_version": user.sync_version}
 
 
 @router.post("/agent/draft")

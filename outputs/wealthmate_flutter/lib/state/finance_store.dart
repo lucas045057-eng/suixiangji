@@ -10,6 +10,9 @@ import '../domain/models.dart';
 import '../features/auth/data/auth_remote_data_source.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/state/auth_store.dart';
+import '../features/ledger/data/ledger_remote_data_source.dart';
+import '../features/ledger/data/ledger_repository.dart';
+import '../features/ledger/state/ledger_store.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
@@ -25,9 +28,28 @@ class FinanceStore extends ChangeNotifier {
                     repository: AuthRepository(
                       remote: AuthRemoteDataSource(api: repository.api!),
                     ),
-                  ));
+                  )),
+        ledger = LedgerStore(
+          repository: LedgerRepository(
+            session: repository.session,
+            remote: repository.api == null
+                ? null
+                : LedgerRemoteDataSource(api: repository.api!),
+          ),
+          initialState: initialState ??
+              (repository.api == null ? DemoData.create() : const FinanceState()),
+        ) {
+    ledger.onStateChanged = (next) {
+      _state = next;
+      _metricsState = null;
+      _metricsMonth = null;
+      _metricsCache = null;
+      notifyListeners();
+    };
+  }
 
   final FinanceRepository repository;
+  final LedgerStore ledger;
   FinanceState _state;
   AgentDraft? _draft;
   String? _draftSourceText;
@@ -113,6 +135,7 @@ class FinanceStore extends ChangeNotifier {
         _metricsState = null;
         _metricsMonth = null;
         _metricsCache = null;
+        ledger.adoptState(_state);
         _authStore?.clearSession();
         await _attemptPendingDeletionCleanup(notify: false);
         notifyListeners();
@@ -127,7 +150,10 @@ class FinanceStore extends ChangeNotifier {
     }
     final loaded = await repository.load();
     if (_session != started) return;
-    if (loaded != null) _state = loaded;
+    if (loaded != null) {
+      _state = loaded;
+      ledger.adoptState(_state);
+    }
     notifyListeners();
   }
 
@@ -136,6 +162,7 @@ class FinanceStore extends ChangeNotifier {
     repository.queue.replace(const []);
     repository.unbindLocalOwner();
     _state = const FinanceState();
+    ledger.adoptState(_state);
     _draft = null;
     _draftSourceText = null;
     _budgetAlerts = const [];
@@ -215,6 +242,7 @@ class FinanceStore extends ChangeNotifier {
       for (final memory in profile.quickMemories) memory.key: memory,
     };
     _state = _state.copyWith(quickMemories: memories.values.toList());
+    ledger.adoptState(_state);
     if (_session != started) return;
     await repository.save(_state);
     if (_session != started) return;
@@ -284,6 +312,7 @@ class FinanceStore extends ChangeNotifier {
         logout = api.logout();
         logoutGeneration = api.sessionGeneration;
         _state = const FinanceState();
+        ledger.adoptState(_state);
         repository.queue.replace(const []);
         repository.unbindLocalOwner();
         _sessionGeneration++;
@@ -324,9 +353,8 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
     final started = _session;
-    final next = await repository.applyLocal(_state, transaction);
+    await ledger.addTransaction(transaction);
     if (_session != started) return;
-    _state = next;
     await checkBudgetAlerts();
     if (_session != started) return;
     _message = '已保存到本地';
@@ -358,6 +386,7 @@ class FinanceStore extends ChangeNotifier {
             accountKind: accountKind,
             currency: currency.toUpperCase(),
             openingBalance: openingBalance));
+    ledger.adoptState(_state);
     _message = '账户已保存到本地，联网后会同步';
     notifyListeners();
   }
@@ -379,15 +408,14 @@ class FinanceStore extends ChangeNotifier {
       _state = _state.copyWith(defaultAccountId: account.id);
       await repository.save(_state);
     }
+    ledger.adoptState(_state);
     _message = '账户配置已保存';
     notifyListeners();
   }
 
   Future<void> addCategory(
       {required String name, required TransactionType type}) async {
-    final id = 'category-${DateTime.now().microsecondsSinceEpoch}';
-    _state = await repository.applyLocalCategory(
-        _state, Category(id: id, name: name, type: type));
+    await ledger.addCategory(name: name, type: type);
     _message = '分类已保存';
     notifyListeners();
   }
@@ -399,10 +427,7 @@ class FinanceStore extends ChangeNotifier {
         .toList(growable: false);
     final existing = matches.isEmpty ? null : matches.first;
     if (existing == null) return;
-    _state = await repository.applyLocalCategory(
-        _state,
-        Category(
-            id: existing.id, name: name, active: active, type: existing.type));
+    await ledger.updateCategory(categoryId, name: name, active: active);
     _message = active ? '分类已更新' : '分类已归档';
     notifyListeners();
   }
@@ -418,7 +443,7 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> updateTransaction(FinanceTransaction transaction) async {
     if (!_state.transactions.any((item) => item.id == transaction.id)) return;
-    _state = await repository.applyLocalTransaction(_state, transaction);
+    await ledger.updateTransaction(transaction);
     _message = '账目已更新';
     notifyListeners();
   }
@@ -519,7 +544,7 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> deleteTransaction(String transactionId) async {
     if (!_state.transactions.any((item) => item.id == transactionId)) return;
-    _state = await repository.softDelete(_state, transactionId);
+    await ledger.deleteTransaction(transactionId);
     _message = '账目已移入待同步删除队列';
     notifyListeners();
   }
@@ -533,6 +558,7 @@ class FinanceStore extends ChangeNotifier {
     final budget = Budget(
         id: budgetId, month: month, categoryId: categoryId, limit: limit);
     _state = await repository.applyLocalBudget(_state, budget);
+    ledger.adoptState(_state);
     _message = '预算已保存';
     notifyListeners();
   }
@@ -572,6 +598,7 @@ class FinanceStore extends ChangeNotifier {
       return;
     _state = _state.copyWith(defaultAccountId: accountId);
     await repository.save(_state);
+    ledger.adoptState(_state);
     _message = '默认支付账户已更新';
     notifyListeners();
   }
@@ -581,9 +608,11 @@ class FinanceStore extends ChangeNotifier {
     final pushed = await repository.pushPending(_state);
     if (_session != started) return;
     _state = pushed;
+    ledger.adoptState(_state);
     final pulled = await repository.pullChanges(_state);
     if (_session != started) return;
     _state = pulled;
+    ledger.adoptState(_state);
     if (_session != started) return;
     _message = _state.syncState.error ??
         (_state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步');
@@ -678,10 +707,12 @@ class FinanceStore extends ChangeNotifier {
           exchangeRateSource: snapshot.source);
     }).toList();
     _state = _state.copyWith(exchangeRates: rates, accounts: accounts);
+    ledger.adoptState(_state);
   }
 
   Future<void> restoreDemoData() async {
     _state = DemoData.create();
+    ledger.adoptState(_state);
     _draft = null;
     _draftSourceText = null;
     _message = '演示数据已恢复';
@@ -723,6 +754,7 @@ class FinanceStore extends ChangeNotifier {
           ..._state.reports.where((item) => item.month != metrics.monthKey),
           remoteReport
         ]);
+        ledger.adoptState(_state);
         await repository.save(_state);
         _message = '月度报告已从服务端更新';
         notifyListeners();
@@ -744,6 +776,7 @@ class FinanceStore extends ChangeNotifier {
       ..._state.reports.where((item) => item.month != current.monthKey),
       report
     ]);
+    ledger.adoptState(_state);
     await repository.save(_state);
     _message = '月度报告已更新';
     notifyListeners();

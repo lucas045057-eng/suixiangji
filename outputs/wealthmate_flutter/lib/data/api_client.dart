@@ -253,9 +253,14 @@ class ApiClient {
     return _items(json).map((item) => Account.fromJson(item)).toList();
   }
 
+  Future<List<Map<String, Object?>>> _requestItems(String path) async {
+    final json = await _requestMap('GET', path);
+    return _items(json);
+  }
+
   Future<List<Category>> fetchCategories() async {
-    final json = await _requestMap('GET', '/categories');
-    return _items(json).map((item) => Category.fromJson(item)).toList();
+    final items = await _requestItems('/categories');
+    return items.map((item) => Category.fromJson(item)).toList();
   }
 
   Future<Category> createCategory(
@@ -279,8 +284,8 @@ class ApiClient {
   }
 
   Future<List<FinanceTransaction>> fetchTransactions() async {
-    final json = await _requestMap('GET', '/transactions');
-    return _items(json)
+    final items = await _requestItems('/transactions');
+    return items
         .map((item) => FinanceTransaction.fromJson(item))
         .toList();
   }

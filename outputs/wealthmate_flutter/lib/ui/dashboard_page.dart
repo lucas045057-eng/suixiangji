@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/ledger/state/ledger_store.dart';
 import '../domain/models.dart';
 import '../state/finance_store.dart';
 import 'widgets/draft_confirmation_card.dart';
@@ -11,19 +12,27 @@ import 'widgets/ui_helpers.dart';
 import 'transaction_detail_page.dart';
 
 class DashboardPage extends StatelessWidget {
-  const DashboardPage(
-      {required this.store, required this.openBudgets, super.key});
+  DashboardPage(
+      {LedgerStore? ledger,
+      FinanceStore? store,
+      required this.openBudgets,
+      super.key})
+      : ledger = ledger ?? store!.ledger,
+        financeStore = store;
 
-  final FinanceStore store;
+  final LedgerStore ledger;
+  final FinanceStore? financeStore;
   final VoidCallback openBudgets;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: store,
+      listenable: financeStore ?? ledger,
       builder: (context, _) {
-        final metrics = store.metrics;
-        final state = store.state;
+        final metrics = financeStore?.metrics ?? ledger.metrics;
+        final state = ledger.state;
+        final alerts = financeStore?.budgetAlerts ?? const <BudgetAlert>[];
+        final draft = financeStore?.draft;
         final recent = state.transactions
             .where((item) => item.deletedAt == null)
             .toList()
@@ -49,7 +58,7 @@ class DashboardPage extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                             letterSpacing: -.7))),
                 IconButton(
-                    onPressed: store.sync,
+                    onPressed: financeStore?.sync,
                     tooltip: '同步',
                     icon: const Icon(Icons.sync_rounded)),
               ]),
@@ -57,8 +66,8 @@ class DashboardPage extends StatelessWidget {
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 20),
-              if (store.budgetAlerts.isNotEmpty) ...[
-                _newAlertBanner(store.budgetAlerts),
+              if (alerts.isNotEmpty) ...[
+                _newAlertBanner(alerts),
                 const SizedBox(height: 12),
               ],
               Card(
@@ -81,7 +90,7 @@ class DashboardPage extends StatelessWidget {
                                 fontWeight: FontWeight.w800)),
                         const SizedBox(height: 8),
                         Text(
-                            '储蓄率 ${(metrics.savingsRate * 100).round()}%，当前净资产 ${money(metrics.netWorth)}。${store.isDemoMode ? '当前为本地演示，数据只保存在本机。' : '同步服务已配置。'}',
+                            '储蓄率 ${(metrics.savingsRate * 100).round()}%，当前净资产 ${money(metrics.netWorth)}。${(financeStore?.isDemoMode ?? ledger.isDemoMode) ? '当前为本地演示，数据只保存在本机。' : '同步服务已配置。'}',
                             style: const TextStyle(
                                 color: Color(0xFFA9BDB5),
                                 fontSize: 11,
@@ -145,16 +154,16 @@ class DashboardPage extends StatelessWidget {
                 ]);
               }),
               const SizedBox(height: 16),
-              if (store.draft != null) ...[
+              if (draft != null && financeStore != null) ...[
                 DraftConfirmationCard(
-                    draft: store.draft!,
+                    draft: draft,
                     state: state,
                     onEdit: () async {
                       final edited = await showDraftEditor(context,
-                          draft: store.draft!, state: store.state);
-                      if (edited != null) store.updateDraft(edited);
+                          draft: draft, state: state);
+                      if (edited != null) financeStore!.updateDraft(edited);
                     },
-                    onConfirm: () async => store.confirmDraft(store.draft!)),
+                    onConfirm: () async => financeStore!.confirmDraft(draft)),
                 const SizedBox(height: 16),
               ],
               _sectionCard(
@@ -188,9 +197,9 @@ class DashboardPage extends StatelessWidget {
                                     state, item.budget.categoryId)))
                             .toList()),
               ),
-              if (store.message != null) ...[
+              if ((financeStore?.message ?? ledger.message) != null) ...[
                 const SizedBox(height: 12),
-                Text(store.message!,
+                Text(financeStore?.message ?? ledger.message!,
                     style: const TextStyle(
                         color: Color(0xFF2F9F7D),
                         fontSize: 11,
@@ -230,7 +239,7 @@ class DashboardPage extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) =>
-              TransactionDetailPage(store: store, transaction: transaction))),
+              TransactionDetailPage(ledger: ledger, transaction: transaction))),
       leading: CircleAvatar(
           backgroundColor:
               income ? const Color(0xFFE6F6EF) : const Color(0xFFFFF1E4),
@@ -239,11 +248,11 @@ class DashboardPage extends StatelessWidget {
               size: 17)),
       title: Text(
           transaction.note.isEmpty
-              ? categoryName(store.state, transaction.categoryId)
+              ? categoryName(ledger.state, transaction.categoryId)
               : transaction.note,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       subtitle: Text(
-          '${categoryName(store.state, transaction.categoryId)} · ${accountName(store.state, transaction.accountId)}',
+          '${categoryName(ledger.state, transaction.categoryId)} · ${accountName(ledger.state, transaction.accountId)}',
           style: const TextStyle(fontSize: 10)),
       trailing: Text('${income ? '+' : '-'}${money(transaction.amount)}',
           style: TextStyle(
@@ -272,7 +281,7 @@ class DashboardPage extends StatelessWidget {
           const SizedBox(width: 9),
           Expanded(
               child: Text(
-                  '预算提醒：${categoryName(store.state, first.budget.categoryId)} $label，已使用 ${money(first.spent)}。',
+                  '预算提醒：${categoryName(ledger.state, first.budget.categoryId)} $label，已使用 ${money(first.spent)}。',
                   style: const TextStyle(
                       color: Color(0xFFA05B2C),
                       fontSize: 11,
@@ -284,6 +293,7 @@ class DashboardPage extends StatelessWidget {
     showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => TransactionForm(store: store, smartMode: smart));
+        builder: (_) => TransactionForm(
+            ledger: ledger, store: financeStore, smartMode: smart));
   }
 }

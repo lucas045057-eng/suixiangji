@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../state/finance_store.dart';
+import '../features/ledger/state/ledger_store.dart';
 
 class CategoryManagementPage extends StatelessWidget {
-  const CategoryManagementPage({required this.store, super.key});
+  CategoryManagementPage({LedgerStore? ledger, FinanceStore? store, super.key})
+      : ledger = ledger ?? store!.ledger;
 
-  final FinanceStore store;
+  final LedgerStore ledger;
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +23,7 @@ class CategoryManagementPage extends StatelessWidget {
         ],
       ),
       body: ListenableBuilder(
-        listenable: store,
+        listenable: ledger,
         builder: (context, _) => ListView(
           padding: const EdgeInsets.fromLTRB(22, 10, 22, 30),
           children: [
@@ -31,7 +33,7 @@ class CategoryManagementPage extends StatelessWidget {
             Card(
               child: Column(
                 children: [
-                  for (final category in store.state.categories)
+                  for (final category in ledger.state.categories)
                     ListTile(
                       leading: CircleAvatar(
                         backgroundColor: category.active
@@ -112,7 +114,7 @@ class CategoryManagementPage extends StatelessWidget {
       ),
     );
     if (saved == true)
-      await store.addCategory(name: controller.text.trim(), type: type);
+      await ledger.addCategory(name: controller.text.trim(), type: type);
     controller.dispose();
   }
 
@@ -141,9 +143,9 @@ class CategoryManagementPage extends StatelessWidget {
       ),
     );
     if (action == 'archive') {
-      await store.archiveCategory(category.id);
+      await ledger.archiveCategory(category.id);
     } else if (action == 'save') {
-      await store.updateCategory(category.id,
+      await ledger.updateCategory(category.id,
           name: controller.text.trim().isEmpty
               ? category.name
               : controller.text.trim(),

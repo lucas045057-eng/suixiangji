@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../state/finance_store.dart';
+import '../features/ledger/state/ledger_store.dart';
 import 'widgets/transaction_form.dart';
 import 'widgets/ui_helpers.dart';
 import 'transaction_detail_page.dart';
 
 class LedgerPage extends StatefulWidget {
-  const LedgerPage({required this.store, super.key});
+  LedgerPage({LedgerStore? ledger, FinanceStore? store, super.key})
+      : ledger = ledger ?? store!.ledger;
 
-  final FinanceStore store;
+  final LedgerStore ledger;
 
   @override
   State<LedgerPage> createState() => _LedgerPageState();
@@ -22,14 +24,14 @@ class _LedgerPageState extends State<LedgerPage> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.store,
+      listenable: widget.ledger,
       builder: (context, _) {
-        final transactions = widget.store.state.transactions
+        final transactions = widget.ledger.transactions
             .where((item) {
               if (item.deletedAt != null ||
                   (filter != null && item.type != filter)) return false;
               final haystack =
-                  '${item.note} ${categoryName(widget.store.state, item.categoryId)} ${accountName(widget.store.state, item.accountId)}';
+                  '${item.note} ${categoryName(widget.ledger.state, item.categoryId)} ${accountName(widget.ledger.state, item.accountId)}';
               return haystack.contains(query);
             })
             .toList()
@@ -107,7 +109,7 @@ class _LedgerPageState extends State<LedgerPage> {
       contentPadding: const EdgeInsets.symmetric(vertical: 5),
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => TransactionDetailPage(
-              store: widget.store, transaction: transaction))),
+              ledger: widget.ledger, transaction: transaction))),
       leading: CircleAvatar(
           backgroundColor:
               income ? const Color(0xFFE6F6EF) : const Color(0xFFFFF1E4),
@@ -116,11 +118,11 @@ class _LedgerPageState extends State<LedgerPage> {
               size: 17)),
       title: Text(
           transaction.note.isEmpty
-              ? categoryName(widget.store.state, transaction.categoryId)
+              ? categoryName(widget.ledger.state, transaction.categoryId)
               : transaction.note,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       subtitle: Text(
-          '${transaction.date} · ${categoryName(widget.store.state, transaction.categoryId)} · ${accountName(widget.store.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
+          '${transaction.date} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
           style: const TextStyle(fontSize: 10)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(
@@ -134,7 +136,7 @@ class _LedgerPageState extends State<LedgerPage> {
             onSelected: (value) async {
               if (value == 'edit') _openEdit(context, transaction);
               if (value == 'delete')
-                await widget.store.deleteTransaction(transaction.id);
+                await widget.ledger.deleteTransaction(transaction.id);
             },
             itemBuilder: (_) => const [
                   PopupMenuItem(value: 'edit', child: Text('编辑')),
@@ -147,12 +149,12 @@ class _LedgerPageState extends State<LedgerPage> {
   void _openNew(BuildContext context) => showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => TransactionForm(store: widget.store));
+      builder: (_) => TransactionForm(ledger: widget.ledger));
 
   void _openEdit(BuildContext context, FinanceTransaction transaction) =>
       showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
           builder: (_) =>
-              TransactionForm(store: widget.store, initial: transaction));
+              TransactionForm(ledger: widget.ledger, initial: transaction));
 }

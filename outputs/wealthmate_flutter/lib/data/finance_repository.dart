@@ -5,6 +5,8 @@ import 'api_client.dart';
 import 'local_repository.dart';
 import 'sync_queue.dart';
 import '../domain/models.dart';
+import '../features/ledger/data/ledger_repository.dart';
+import '../features/ledger/domain/ledger_rules.dart';
 
 class FinanceRepository {
   FinanceRepository({
@@ -16,9 +18,8 @@ class FinanceRepository {
         session = session ?? LocalStateSession(local: local, queue: queue);
 
   final LocalRepository _local;
-  LocalRepository get local => _localOwnerUserId == null
-      ? _local
-      : _local.forUser(_localOwnerUserId!);
+  LocalRepository get local =>
+      _localOwnerUserId == null ? _local : _local.forUser(_localOwnerUserId!);
   final SyncQueue queue;
   final LocalStateSession session;
   final ApiClient? api;
@@ -33,8 +34,7 @@ class FinanceRepository {
 
   bool get isLocalOwnerBound =>
       _localOwnerUserId != null &&
-      (api == null ||
-          _boundApiGeneration == api!.sessionGeneration);
+      (api == null || _boundApiGeneration == api!.sessionGeneration);
 
   Future<FinanceState?> loadForUser(String userId) async {
     final generation = api?.sessionGeneration;
@@ -125,18 +125,16 @@ class FinanceRepository {
       ...state.transactions.where((item) => item.id != transaction.id),
       transaction,
     ]);
-    return session.write(
+    return LedgerRepository(session: session).applyTransaction(
       (_) => next,
-      appendOperations: [
-        SyncOperation(
-          clientOpId: transaction.clientOpId,
-          entity: 'transactions',
-          entityId: transaction.id,
-          type: SyncOperationType.upsert,
-          payload: transaction.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
+      operation: SyncOperation(
+        clientOpId: transaction.clientOpId,
+        entity: 'transactions',
+        entityId: transaction.id,
+        type: SyncOperationType.upsert,
+        payload: transaction.toJson(),
+        createdAt: DateTime.now().toIso8601String(),
+      ),
     );
   }
 
@@ -192,23 +190,18 @@ class FinanceRepository {
 
   Future<FinanceState> applyLocalCategory(
       FinanceState state, Category category) async {
-    final next = state.copyWith(categories: [
-      ...state.categories.where((item) => item.id != category.id),
-      category
-    ]);
-    return session.write(
+    final next = LedgerRules.upsertCategory(state, category);
+    return LedgerRepository(session: session).applyTransaction(
       (_) => next,
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
-          entity: 'categories',
-          entityId: category.id,
-          type: SyncOperationType.upsert,
-          payload: category.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
+      operation: SyncOperation(
+        clientOpId:
+            'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
+        entity: 'categories',
+        entityId: category.id,
+        type: SyncOperationType.upsert,
+        payload: category.toJson(),
+        createdAt: DateTime.now().toIso8601String(),
+      ),
     );
   }
 
@@ -221,19 +214,17 @@ class FinanceRepository {
     final deleted =
         nextTransactions.firstWhere((item) => item.id == transactionId);
     final next = state.copyWith(transactions: nextTransactions);
-    return session.write(
+    return LedgerRepository(session: session).applyTransaction(
       (_) => next,
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
-          entity: 'transactions',
-          entityId: transactionId,
-          type: SyncOperationType.delete,
-          payload: deleted.toJson(),
-          createdAt: now,
-        ),
-      ],
+      operation: SyncOperation(
+        clientOpId:
+            'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
+        entity: 'transactions',
+        entityId: transactionId,
+        type: SyncOperationType.delete,
+        payload: deleted.toJson(),
+        createdAt: now,
+      ),
     );
   }
 

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from .api import router
 from .config import get_settings
 from .db import ensure_schema
+from .ledger.router import router as ledger_router
 from .scheduler import create_scheduler
 
 
@@ -30,6 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(ledger_router)
 
 
 @app.exception_handler(RequestValidationError)

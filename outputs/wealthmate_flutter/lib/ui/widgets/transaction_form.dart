@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../features/ledger/state/ledger_store.dart';
 import '../../domain/models.dart';
 import '../../state/finance_store.dart';
 import 'draft_confirmation_card.dart';
@@ -7,10 +8,17 @@ import 'draft_editor.dart';
 import 'ui_helpers.dart';
 
 class TransactionForm extends StatefulWidget {
-  const TransactionForm(
-      {required this.store, this.initial, this.smartMode = false, super.key});
+  TransactionForm(
+      {LedgerStore? ledger,
+      FinanceStore? store,
+      this.initial,
+      this.smartMode = false,
+      super.key})
+      : ledger = ledger ?? store!.ledger,
+        financeStore = store;
 
-  final FinanceStore store;
+  final LedgerStore ledger;
+  final FinanceStore? financeStore;
   final FinanceTransaction? initial;
   final bool smartMode;
 
@@ -40,11 +48,11 @@ class _TransactionFormState extends State<TransactionForm> {
     smartController = TextEditingController();
     type = initial?.type.name ?? TransactionType.expense.name;
     categoryId = initial?.categoryId ??
-        widget.store.state.categories.firstOrNull?.id ??
+        widget.ledger.state.categories.firstOrNull?.id ??
         '';
     accountId = initial?.accountId ??
-        widget.store.state.defaultAccountId ??
-        widget.store.state.accounts.firstOrNull?.id ??
+        widget.ledger.state.defaultAccountId ??
+        widget.ledger.state.accounts.firstOrNull?.id ??
         '';
     date = initial?.date ?? _dateKey(DateTime.now());
     occurredAt = initial?.occurredAt ?? '${date}T00:00:00';
@@ -66,7 +74,7 @@ class _TransactionFormState extends State<TransactionForm> {
         padding: EdgeInsets.fromLTRB(
             20, 16, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
         child: ListenableBuilder(
-          listenable: widget.store,
+          listenable: widget.financeStore ?? widget.ledger,
           builder: (context, _) => _buildContent(context),
         ),
       ),
@@ -74,26 +82,30 @@ class _TransactionFormState extends State<TransactionForm> {
   }
 
   Widget _buildContent(BuildContext context) {
-    if (widget.smartMode && widget.store.draft != null) {
+    final financeStore = widget.financeStore;
+    if (widget.smartMode && financeStore?.draft != null) {
+      final activeFinanceStore = financeStore!;
       return SingleChildScrollView(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sheetHeader(context, '确认这笔草稿', 'Agent 只会整理，不会跳过你的确认。'),
         DraftConfirmationCard(
-          draft: widget.store.draft!,
-          state: widget.store.state,
+          draft: activeFinanceStore.draft!,
+          state: widget.ledger.state,
           onEdit: () async {
             final edited = await showDraftEditor(context,
-                draft: widget.store.draft!, state: widget.store.state);
-            if (edited != null) widget.store.updateDraft(edited);
+                draft: activeFinanceStore.draft!, state: widget.ledger.state);
+            if (edited != null) activeFinanceStore.updateDraft(edited);
           },
           onConfirm: () async {
-            final posted = await widget.store.confirmDraft(widget.store.draft!);
+            final posted = await activeFinanceStore
+                .confirmDraft(activeFinanceStore.draft!);
             if (posted && context.mounted) Navigator.pop(context);
           },
         ),
         TextButton(
-            onPressed: widget.store.clearDraft, child: const Text('重新输入')),
+            onPressed: activeFinanceStore.clearDraft,
+            child: const Text('重新输入')),
       ]));
     }
     return SingleChildScrollView(
@@ -150,7 +162,7 @@ class _TransactionFormState extends State<TransactionForm> {
           child: FilledButton.icon(
             onPressed: () async {
               if (formKey.currentState!.validate())
-                await widget.store.createDraft(smartController.text);
+                await widget.financeStore?.createDraft(smartController.text);
             },
             icon: const Icon(Icons.auto_awesome, size: 17),
             label: const Text('生成待确认草稿'),
@@ -159,11 +171,11 @@ class _TransactionFormState extends State<TransactionForm> {
   }
 
   Widget _buildManualComposer(BuildContext context) {
-    final accounts = widget.store.state.accounts
+    final accounts = widget.ledger.state.accounts
         .where((item) => item.deletedAt == null)
         .toList();
     final categories =
-        widget.store.state.categories.where((item) => item.active).toList();
+        widget.ledger.state.categories.where((item) => item.active).toList();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('账目类型',
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
@@ -270,7 +282,7 @@ class _TransactionFormState extends State<TransactionForm> {
             : null;
     final conversionStatus = convertedAmount == null ? 'pending' : 'ready';
     final note = noteController.text.trim().isEmpty
-        ? categoryName(widget.store.state, categoryId)
+        ? categoryName(widget.ledger.state, categoryId)
         : noteController.text.trim();
     final transaction = FinanceTransaction(
       id: id,
@@ -303,9 +315,9 @@ class _TransactionFormState extends State<TransactionForm> {
       deletedAt: existing?.deletedAt,
     );
     if (existing == null) {
-      await widget.store.addTransaction(transaction);
+      await widget.ledger.addTransaction(transaction);
     } else {
-      await widget.store.updateTransaction(transaction);
+      await widget.ledger.updateTransaction(transaction);
     }
     if (mounted) Navigator.pop(context);
   }
