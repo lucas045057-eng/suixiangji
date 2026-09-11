@@ -94,10 +94,14 @@ class FinanceRepository {
   }
 
   Future<FinanceState?> load() async {
+    final started = sessionIdentity;
     if (api != null && !isLocalOwnerBound) {
       final restored = await restoreLocalOwnerForVerifiedSession();
+      if (sessionIdentity != started) return null;
       if (!restored) {
-        await session.mutateQueue((pending) => pending.replace(const []));
+        await session.mutateQueue((pending) {
+          if (sessionIdentity == started) pending.replace(const []);
+        });
         return null;
       }
     }
