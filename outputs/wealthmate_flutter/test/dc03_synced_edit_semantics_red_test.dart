@@ -212,8 +212,10 @@ void main() {
     await store.sync();
     expect(store.repository.queue.pending(), hasLength(1));
 
-    final persisted = jsonDecode(
-        memory.values['wealthmate-sync-queue-v1']!) as List<dynamic>;
+    final persisted = jsonDecode((await LocalRepository(memory)
+            .forUser('dc03-user')
+            .readMetadata(LocalRepository.queueStorageKey))!)
+        as List<dynamic>;
     expect((persisted.single as Map)['client_op_id'], operationId);
 
     await store.sync();

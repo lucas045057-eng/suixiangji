@@ -6,13 +6,16 @@ typedef StateMutation = FinanceState Function(FinanceState current);
 
 /// Serializes access to the locally persisted finance aggregate and queue.
 class LocalStateSession {
-  LocalStateSession({required this.local, required this.queue});
+  LocalStateSession({required LocalRepository local, required this.queue})
+      : _local = local;
 
-  final LocalRepository local;
+  LocalRepository _local;
   final SyncQueue queue;
   Future<void> _tail = Future<void>.value();
   FinanceState? _state;
   bool _loaded = false;
+
+  LocalRepository get local => _local;
 
   Future<T> _serial<T>(Future<T> Function() action) {
     final run = _tail.then((_) => action());
@@ -28,6 +31,19 @@ class LocalStateSession {
     }
     _loaded = true;
   }
+
+  /// Rebinds the aggregate cache and queue to a verified user's partition.
+  /// The rebind itself is serialized with all pending aggregate writes.
+  Future<void> rebind(LocalRepository local) => _serial(() async {
+        _local = local;
+        _state = null;
+        _loaded = false;
+        queue.replace(await _local.loadQueue());
+      });
+
+  /// Serializes deletion of a partition with normal aggregate writes.
+  Future<void> purgePartition(LocalRepository partition) =>
+      _serial(partition.purge);
 
   Future<FinanceState?> load() => _serial(() async {
         await _ensureLoaded();

@@ -278,7 +278,7 @@ void main() {
     }
   });
 
-  test('returning to user A after user B reset does not restore A data',
+  test('returning to user A after user B restores A data',
       () async {
     final directory =
         await Directory.systemTemp.createTemp('suixiangji-user-isolation-');
@@ -301,9 +301,11 @@ void main() {
       final userARepositoryAfterB = repositoryFor(database);
       final restoredByA = await userARepositoryAfterB.loadForUser('user-a');
 
-      expect(restoredByA?.accounts, isEmpty);
-      expect(restoredByA?.transactions, isEmpty);
-      expect(restoredByA?.syncState.serverVersion, 0);
+      expect(restoredByA?.accounts.map((item) => item.id),
+          contains('user-a-account'));
+      expect(restoredByA?.transactions.map((item) => item.id),
+          contains('user-a-tx'));
+      expect(restoredByA?.syncState.serverVersion, 100);
     } finally {
       await database?.close();
       await directory.delete(recursive: true);

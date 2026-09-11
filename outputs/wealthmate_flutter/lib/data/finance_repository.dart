@@ -8,25 +8,38 @@ import '../domain/models.dart';
 
 class FinanceRepository {
   FinanceRepository({
-    required this.local,
+    required LocalRepository local,
     required this.queue,
     LocalStateSession? session,
     this.api,
-  }) : session = session ?? LocalStateSession(local: local, queue: queue);
+  })  : _local = local,
+        session = session ?? LocalStateSession(local: local, queue: queue);
 
-  final LocalRepository local;
+  final LocalRepository _local;
+  LocalRepository get local => _localOwnerUserId == null
+      ? _local
+      : _local.forUser(_localOwnerUserId!);
   final SyncQueue queue;
   final LocalStateSession session;
   final ApiClient? api;
   String? _localOwnerUserId;
+  int? _boundApiGeneration;
+  int _ownerGeneration = 0;
+  (int, int) get sessionIdentity =>
+      (_ownerGeneration, api?.sessionGeneration ?? 0);
   final Set<String> _pendingConflictClientOpIds = <String>{};
 
   String? get localOwnerUserId => _localOwnerUserId;
 
-  bool get isLocalOwnerBound => _localOwnerUserId != null;
+  bool get isLocalOwnerBound =>
+      _localOwnerUserId != null &&
+      (api == null ||
+          _boundApiGeneration == api!.sessionGeneration);
 
   Future<FinanceState?> loadForUser(String userId) async {
+    final generation = api?.sessionGeneration;
     await ensureLocalOwner(userId);
+    if (generation != api?.sessionGeneration) return null;
     return load();
   }
 
@@ -35,28 +48,41 @@ class FinanceRepository {
     if (normalizedUserId.isEmpty) {
       throw ArgumentError.value(userId, 'userId', '用户身份不能为空');
     }
-    final storedOwner = await local.loadOwnerUserId();
-    if (storedOwner != normalizedUserId) {
-      await session.replaceState(const FinanceState());
-      await session.mutateQueue((pending) => pending.replace(const []));
+    final generation = api?.sessionGeneration;
+    await _local.migrateLegacy();
+    if (generation != api?.sessionGeneration) return;
+    final needsRebind = session.local.userId != normalizedUserId;
+    if (_localOwnerUserId != normalizedUserId) {
+      _ownerGeneration++;
+      queue.replace(const []);
+      _pendingConflictClientOpIds.clear();
     }
-    await local.saveOwnerUserId(normalizedUserId);
     _localOwnerUserId = normalizedUserId;
+    _boundApiGeneration = generation;
+    await _local.saveOwnerUserId(normalizedUserId);
+    if (needsRebind) await session.rebind(_local.forUser(normalizedUserId));
   }
 
   void unbindLocalOwner() {
+    _ownerGeneration++;
     _localOwnerUserId = null;
+    _boundApiGeneration = null;
   }
 
   Future<bool> restoreLocalOwnerForVerifiedSession() async {
+    final generation = api?.sessionGeneration;
     if (api == null || api!.token == null || api!.token!.trim().isEmpty) {
       return false;
     }
     final verifiedUserId = api!.lastVerifiedUserId?.trim();
     if (verifiedUserId == null || verifiedUserId.isEmpty) return false;
-    final storedOwner = await local.loadOwnerUserId();
+    final storedOwner = await _local.loadOwnerUserId();
     if (storedOwner == null || storedOwner != verifiedUserId) return false;
-    _localOwnerUserId = storedOwner;
+    await _local.migrateLegacy();
+    if (generation != api?.sessionGeneration) return false;
+    _localOwnerUserId = verifiedUserId;
+    _boundApiGeneration = generation;
+    await session.rebind(_local.forUser(verifiedUserId));
     return true;
   }
 
@@ -103,6 +129,12 @@ class FinanceRepository {
       ],
     );
   }
+
+  /*
+   * The remaining aggregate and sync methods stay below this boundary. They
+   * use the same session instance, so changing the user only swaps its
+   * partition and cache; it does not introduce a second write path.
+   */
 
   Future<FinanceState> applyLocalBudget(
       FinanceState state, Budget budget) async {
