@@ -77,7 +77,14 @@ class FinanceRepository {
     final verifiedUserId = api!.lastVerifiedUserId?.trim();
     if (verifiedUserId == null || verifiedUserId.isEmpty) return false;
     final storedOwner = await _local.loadOwnerUserId();
-    if (storedOwner == null || storedOwner != verifiedUserId) return false;
+    if (storedOwner != verifiedUserId &&
+        await _local
+                .forUser(verifiedUserId)
+                .readMetadata(LocalRepository.storageKey) ==
+            null) {
+      return false;
+    }
+    if (generation != api?.sessionGeneration) return false;
     await _local.migrateLegacy();
     if (generation != api?.sessionGeneration) return false;
     _localOwnerUserId = verifiedUserId;
