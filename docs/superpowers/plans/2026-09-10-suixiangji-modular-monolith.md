@@ -313,11 +313,11 @@ Interfaces:
 - LedgerStore exposes List<FinanceTransaction> transactions, List<Category> activeCategories, Future<void> addTransaction(FinanceTransaction), Future<void> updateTransaction(FinanceTransaction), Future<void> deleteTransaction(String), Future<void> addCategory({required String name, required TransactionType type}), Future<void> updateCategory(String categoryId, {required String name, required bool active}), and Future<void> archiveCategory(String).
 - ledger.service exposes list_categories, create_category, update_category, archive_category, list_transactions, create_transaction, update_transaction, and delete_transaction; all accept Session and User and return current API response shapes.
 
-- [ ] Step 1: Write Ledger Store tests for local CRUD and queue semantics.
+- [x] Step 1: Write Ledger Store tests for local CRUD and queue semantics.
 
 Cover transaction create/edit/delete, category CRUD/archive, stable transaction IDs, new edit operation IDs, and the fact that every write reaches LocalStateSession. Reuse the existing sync regression cases instead of changing their expectations.
 
-- [ ] Step 2: Run focused Ledger tests and verify the new boundary is absent.
+- [x] Step 2: Run focused Ledger tests and verify the new boundary is absent.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -326,11 +326,11 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest tests.test_api tests.test_domain -v
 ~~~
 
-- [ ] Step 3: Extract pure Ledger rules before wiring the Store.
+- [x] Step 3: Extract pure Ledger rules before wiring the Store.
 
 Move only transaction/category decisions from FinanceRules and FinanceRepository into features/ledger/domain/ledger_rules.dart. Keep money conversion and aggregate metrics in their current domain owner until the Assets/Insights phases. The rules accept DTOs/values, not Widgets, HTTP requests, or database Sessions.
 
-- [ ] Step 4: Implement Ledger Repository/Store through the session.
+- [x] Step 4: Implement Ledger Repository/Store through the session.
 
 For every create/edit/delete, build the same SyncOperation payload and call LocalStateSession.write; do not call LocalRepository.save, repository.save, or queue.enqueue directly from a page. Keep FinanceRepository methods as delegating compatibility methods until all consumers move.
 
@@ -350,7 +350,7 @@ Future<FinanceState> saveTransaction(FinanceTransaction transaction) {
 }
 ~~~
 
-- [ ] Step 5: Extract Backend Ledger routes and services without touching models.
+- [x] Step 5: Extract Backend Ledger routes and services without touching models.
 
 Move Category/Transaction response mappers, normalization, validation, and persistence into the Ledger module. When account existence is checked, import Account from unchanged app.models; do not move or duplicate its ORM class. Keep exact field aliases (date/occurred_on, type/kind, original amount/currency fields) and status codes.
 
@@ -362,7 +362,7 @@ def create_transaction(payload: TransactionIn, db: Session = Depends(get_db), us
     return ledger_service.create_transaction(db, user, payload)
 ~~~
 
-- [ ] Step 6: Migrate Ledger pages and run the full Phase gate.
+- [x] Step 6: Migrate Ledger pages and run the full Phase gate.
 
 LedgerPage, TransactionDetailPage, CategoryManagementPage, and transaction form depend on LedgerStore. DashboardPage receives Ledger as a read-only input plus the later Assets/Budget/Insights stores; it must not regain a universal Store. Review for direct HTTP/database access, report the full diff and commit:
 
@@ -396,11 +396,11 @@ Interfaces:
 - AssetStore exposes List<Account> accounts, List<ExchangeRateSnapshot> exchangeRates, Future<void> addAccount({required String name, required AccountType type, String currency = 'CNY', double openingBalance = 0, AccountKind accountKind = AccountKind.other}), Future<void> updateAccount(Account), Future<void> setDefaultAccount(String), Future<void> saveManualExchangeRate({required String baseCurrency, required double rate, required String rateDate, required String source}), Future<void> refreshExchangeRate(String), and read-only net-worth selectors.
 - assets.service exposes account CRUD, exchange_rate, save_exchange_rate, and wealth operations; it imports ORM classes from app.models and leaves model definitions unchanged.
 
-- [ ] Step 1: Add tests for account validation, default account, currency snapshots and net worth.
+- [x] Step 1: Add tests for account validation, default account, currency snapshots and net worth.
 
 Assert CNY and foreign-currency conversion behavior, preservation of rate/source/date snapshots, account name uniqueness, asset/liability handling, and no mutation of transactions.
 
-- [ ] Step 2: Run focused Assets tests and verify failure before implementation.
+- [x] Step 2: Run focused Assets tests and verify failure before implementation.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -409,7 +409,7 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest tests.test_api tests.test_domain -v
 ~~~
 
-- [ ] Step 3: Extract Assets rules and Repository.
+- [x] Step 3: Extract Assets rules and Repository.
 
 Move account and exchange-rate state changes into Assets; use LocalStateSession.write for all aggregate updates. Keep LocalRepository as the low-level serializer only. Reuse existing FinanceRules calculations until the Insights phase; do not change rounding or missing-rate semantics.
 
@@ -425,7 +425,7 @@ List<Account> get activeAccounts =>
     _state.accounts.where((item) => item.deletedAt == null).toList(growable: false);
 ~~~
 
-- [ ] Step 4: Extract Backend Assets routes/services.
+- [x] Step 4: Extract Backend Assets routes/services.
 
 Move account response mapping, duplicate-name validation, exchange-rate lookup/snapshot, and wealth aggregation into app/assets. Keep Account, ExchangeRate, and NetWorthSnapshot in app.models; no schema or migration change. Keep scheduler imports working through service-level functions, not Router internals.
 
@@ -441,11 +441,11 @@ def update_account(db: Session, user: User, account_id: str, payload: AccountIn)
     return account_json(row)
 ~~~
 
-- [ ] Step 5: Migrate Wealth, Exchange Rate and Account pages.
+- [x] Step 5: Migrate Wealth, Exchange Rate and Account pages.
 
 Pages use AssetStore; account edits and exchange-rate writes go through the Store. Update AppShell composition only to inject stores; do not create an aggregate FinanceStore replacement.
 
-- [ ] Step 6: Run full regression, diff review, report and commit Phase 3.
+- [x] Step 6: Run full regression, diff review, report and commit Phase 3.
 
 ~~~powershell
 git add outputs\wealthmate_flutter outputs\wealthmate_backend
