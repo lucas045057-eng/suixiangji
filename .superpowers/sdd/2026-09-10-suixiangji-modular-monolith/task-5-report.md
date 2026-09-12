@@ -38,6 +38,26 @@ Budget 职责已抽取并接入 Flutter 与 Backend：
 - BudgetRepository 当前主要负责本地优先写入与远端数据源封装，远端 CRUD 方法由现有 ApiClient 保持兼容；本阶段未改变在线同步生命周期。
 - 当前工作区已有其他阶段的未提交变更，本 commit 按用户要求包含本次 Budget 收尾相关工作区内容；未执行 reset、checkout、merge 或 cherry-pick。
 
+## Fix round 1
+
+- 基线 commit：`437a69f`；修复 commit：`47b8ee8` (`fix(budget): enforce shared session boundary`)。
+- FinanceStore 现在拒绝使用不同 `LocalStateSession` 的注入式 BudgetStore；Budget focused tests 增加了重建 Session 的持久化验证、完整 queue identity/payload 验证，以及 warning/exhausted/over 告警和去重覆盖。
+- 正式 AppShell/Dashboard 路径使用 BudgetStore 的预算投影；`api.py` 中未使用的 Budget 兼容导入已清理。
+- Fix focused tests：12 passed；Flutter analyze：通过；Backend compileall：通过；`git diff --check`：通过。
+- Scoped re-review：APPROVE，无新增 Critical/Important。
+
+## Post-fix full regression
+
+在 `47b8ee8` 上重新运行：
+
+- Root `npm test`: 7 passed, 0 failed。
+- Backend `python -m compileall -q app tests`: passed。
+- Backend `python -m pytest tests -q --basetemp=C:\\Users\\Admin\\AppData\\Local\\Temp\\suixiangji-pytest-budget-fix`: 119 passed, 0 failed, 1 pre-existing warning。
+- Backend `python -m unittest discover -s tests -v`: 49 passed, 0 failed。
+- Flutter `flutter analyze`: no issues found。
+- Flutter full `flutter test`: 222 passed, 0 failed。
+- No API/schema/migration/sync/Auth/Assets/Ledger changes were introduced by the fix round; no push, PR, deployment, or production database access。
+
 ## Fix round 1 — scoped review findings
 
 基于 HEAD `437a69f` 完成以下最小修正，未进入下一 Phase：
