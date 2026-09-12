@@ -81,7 +81,7 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         from unittest.mock import AsyncMock, patch
 
         with patch(
-            "app.api.fetch_frankfurter_rate",
+            "app.assets.service.fetch_frankfurter_rate",
             new=AsyncMock(
                 return_value={
                     "base_currency": "USD",
@@ -102,6 +102,61 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         self.assertEqual(report.json()["metrics"]["expense"], 113.0)
         self.assertIn("113", report.json()["summary"])
         self.assertIn(report.json()["ai_status"], ("unavailable", "success"))
+
+    def test_assets_module_preserves_account_fx_snapshots_and_wealth_rules(self):
+        from unittest.mock import AsyncMock, patch
+
+        with patch(
+            "app.assets.service.fetch_frankfurter_rate",
+            new=AsyncMock(
+                return_value={
+                    "base_currency": "EUR",
+                    "quote_currency": "CNY",
+                    "rate": 8.0,
+                    "rate_date": date(2026, 9, 4),
+                    "source": "asset module source",
+                }
+            ),
+        ):
+            rate = self.client.get(
+                "/exchange/rates?base=EUR", headers=self.headers
+            )
+        self.assertEqual(rate.status_code, 200, rate.text)
+
+        asset = self.client.post(
+            "/accounts",
+            headers=self.headers,
+            json={
+                "id": "asset-module-eur",
+                "name": "Assets EUR",
+                "kind": "asset",
+                "currency": "EUR",
+                "opening_balance": 10,
+            },
+        )
+        self.assertEqual(asset.status_code, 200, asset.text)
+        self.assertEqual(asset.json()["opening_cny_amount"], 80.0)
+        self.assertEqual(asset.json()["opening_exchange_rate"], 8.0)
+        self.assertEqual(asset.json()["opening_rate_date"], "2026-09-04")
+        self.assertEqual(asset.json()["opening_rate_source"], "asset module source")
+
+        liability = self.client.post(
+            "/accounts",
+            headers=self.headers,
+            json={
+                "id": "asset-module-liability",
+                "name": "Assets Liability",
+                "kind": "liability",
+                "opening_balance": 25,
+            },
+        )
+        self.assertEqual(liability.status_code, 200, liability.text)
+        wealth = self.client.get("/wealth", headers=self.headers)
+        self.assertEqual(wealth.status_code, 200, wealth.text)
+        details = {item["id"]: item for item in wealth.json()["accounts"]}
+        self.assertEqual(details["asset-module-eur"]["cny_balance"], 80.0)
+        self.assertEqual(details["asset-module-eur"]["conversion_status"], "ready")
+        self.assertEqual(details["asset-module-liability"]["cny_balance"], 25.0)
 
     def test_v1_1_account_kind_and_transaction_time_survive_round_trip(self):
         account = self.client.post(

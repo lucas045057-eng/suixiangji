@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../domain/models.dart';
 import '../features/auth/state/auth_store.dart';
+import '../features/assets/state/asset_store.dart';
 import '../state/finance_store.dart';
 import 'account_detail_page.dart';
 import 'category_management_page.dart';
@@ -12,16 +13,19 @@ class SettingsPage extends StatelessWidget {
   const SettingsPage({
     required this.store,
     this.auth,
+    this.assets,
     this.onLoggedOut,
     super.key,
   });
 
   final FinanceStore store;
   final AuthStore? auth;
+  final AssetStore? assets;
   final VoidCallback? onLoggedOut;
 
   @override
   Widget build(BuildContext context) {
+    final assetStore = assets ?? store.assets;
     return ListenableBuilder(
         listenable: store,
         builder: (context, _) => SafeArea(
@@ -88,15 +92,15 @@ class SettingsPage extends StatelessWidget {
                       subtitle: const Text('自然语言未写账户时使用'),
                       trailing: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                              value: store.state.defaultAccountId,
-                              items: store.state.accounts
+                              value: assetStore.state.defaultAccountId,
+                              items: assetStore.activeAccounts
                                   .where((item) => item.type.name == 'asset')
                                   .map((item) => DropdownMenuItem(
                                       value: item.id, child: Text(item.name)))
                                   .toList(),
                               onChanged: (value) {
                                 if (value != null)
-                                  store.setDefaultAccount(value);
+                                  assetStore.setDefaultAccount(value);
                               })),
                     ),
                     const Divider(height: 1),
@@ -112,8 +116,7 @@ class SettingsPage extends StatelessWidget {
                         leading: Icon(Icons.account_balance_outlined),
                         title: Text('账户名称与账户配置'),
                         subtitle: Text('点击账户即可修改名称、币种、余额和用途')),
-                    ...store.state.accounts
-                        .where((item) => item.deletedAt == null)
+                    ...assetStore.activeAccounts
                         .map((account) => Column(children: [
                               const Divider(height: 1),
                               ListTile(
@@ -126,7 +129,9 @@ class SettingsPage extends StatelessWidget {
                                   onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute<void>(
                                           builder: (_) => AccountDetailPage(
-                                              store: store, account: account))))
+                                              store: store.assets,
+                                              ledger: store.ledger,
+                                              account: account))))
                             ])),
                   ])),
                   const SizedBox(height: 12),

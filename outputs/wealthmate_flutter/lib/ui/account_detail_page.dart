@@ -1,14 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
-import '../state/finance_store.dart';
+import '../features/assets/state/asset_store.dart';
+import '../features/ledger/state/ledger_store.dart';
 import 'widgets/ui_helpers.dart';
 
 class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage(
-      {required this.store, required this.account, super.key});
+      {required this.store,
+      required this.ledger,
+      required this.account,
+      super.key});
 
-  final FinanceStore store;
+  final AssetStore store;
+  final LedgerStore ledger;
   final Account account;
 
   @override
@@ -226,7 +231,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         amount: delta.abs(),
         accountId: widget.account.id,
         note: '余额调整（调整前 ${money(currentBalance)}）');
-    await widget.store.addTransaction(transaction);
+    await widget.ledger.addTransaction(transaction);
   }
 
   static String _accountKindLabel(AccountKind value) => const {

@@ -67,7 +67,7 @@ def test_limiter_is_bounded_and_window_expires():
 
 
 def test_rate_upstream_error_is_sanitized(api, monkeypatch):
-    from app import api as routes
+    from app.assets import service as routes
     client, sessions = api
     invite(sessions)
     auth = headers(register(client))

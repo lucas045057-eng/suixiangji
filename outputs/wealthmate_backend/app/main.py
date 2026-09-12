@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .api import router
+from .assets.router import router as assets_router
 from .config import get_settings
 from .db import ensure_schema
 from .ledger.router import router as ledger_router
@@ -31,6 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(assets_router)
 app.include_router(ledger_router)
 
 

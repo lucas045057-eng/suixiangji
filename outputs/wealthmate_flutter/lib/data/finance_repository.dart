@@ -3,6 +3,8 @@ import 'api_client.dart';
 import 'local_repository.dart';
 import 'sync_queue.dart';
 import '../domain/models.dart';
+import '../features/assets/data/assets_remote_data_source.dart';
+import '../features/assets/data/assets_repository.dart';
 import '../features/ledger/data/ledger_repository.dart';
 
 class FinanceRepository {
@@ -10,10 +12,16 @@ class FinanceRepository {
     required LocalRepository local,
     required this.queue,
     LocalStateSession? session,
+    AssetsRepository? assetsRepository,
     LedgerRepository? ledgerRepository,
     this.api,
   })  : _local = local,
         session = session ?? LocalStateSession(local: local, queue: queue) {
+    _assetsRepository = assetsRepository ??
+        AssetsRepository(
+          session: this.session,
+          remote: api == null ? null : AssetsRemoteDataSource(api: api!),
+        );
     _ledgerRepository =
         ledgerRepository ?? LedgerRepository(session: this.session);
   }
@@ -23,6 +31,7 @@ class FinanceRepository {
       _localOwnerUserId == null ? _local : _local.forUser(_localOwnerUserId!);
   final SyncQueue queue;
   final LocalStateSession session;
+  late final AssetsRepository _assetsRepository;
   late final LedgerRepository _ledgerRepository;
   final ApiClient? api;
   String? _localOwnerUserId;
@@ -31,6 +40,8 @@ class FinanceRepository {
   (int, int) get sessionIdentity =>
       (_ownerGeneration, api?.sessionGeneration ?? 0);
   final Set<String> _pendingConflictClientOpIds = <String>{};
+
+  AssetsRepository get assetsRepository => _assetsRepository;
 
   String? get localOwnerUserId => _localOwnerUserId;
 
@@ -153,27 +164,8 @@ class FinanceRepository {
     );
   }
 
-  Future<FinanceState> applyLocalAccount(
-      FinanceState state, Account account) async {
-    final next = state.copyWith(accounts: [
-      ...state.accounts.where((item) => item.id != account.id),
-      account
-    ]);
-    return session.write(
-      (_) => next,
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
-          entity: 'accounts',
-          entityId: account.id,
-          type: SyncOperationType.upsert,
-          payload: account.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
-    );
-  }
+  Future<FinanceState> applyLocalAccount(FinanceState state, Account account) =>
+      _assetsRepository.saveAccount(account, baseState: state);
 
   Future<FinanceState> applyLocalCategory(
           FinanceState state, Category category) =>

@@ -10,6 +10,7 @@ import '../domain/models.dart';
 import '../features/auth/data/auth_remote_data_source.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/state/auth_store.dart';
+import '../features/assets/state/asset_store.dart';
 import '../features/ledger/data/ledger_remote_data_source.dart';
 import '../features/ledger/data/ledger_repository.dart';
 import '../features/ledger/state/ledger_store.dart';
@@ -29,6 +30,13 @@ class FinanceStore extends ChangeNotifier {
                       remote: AuthRemoteDataSource(api: repository.api!),
                     ),
                   )),
+        assets = AssetStore(
+          repository: repository.assetsRepository,
+          initialState: initialState ??
+              (repository.api == null
+                  ? DemoData.create()
+                  : const FinanceState()),
+        ),
         ledger = LedgerStore(
           repository: LedgerRepository(
             session: repository.session,
@@ -37,10 +45,24 @@ class FinanceStore extends ChangeNotifier {
                 : LedgerRemoteDataSource(api: repository.api!),
           ),
           initialState: initialState ??
-              (repository.api == null ? DemoData.create() : const FinanceState()),
+              (repository.api == null
+                  ? DemoData.create()
+                  : const FinanceState()),
         ) {
     ledger.onStateChanged = (next) {
       _state = next;
+      assets.adoptState(next);
+      assets.notifyListeners();
+      _metricsState = null;
+      _metricsMonth = null;
+      _metricsCache = null;
+      notifyListeners();
+    };
+    assets.onStateChanged = (next) {
+      _state = next;
+      ledger.adoptState(next);
+      ledger.notifyListeners();
+      _message = assets.message;
       _metricsState = null;
       _metricsMonth = null;
       _metricsCache = null;
@@ -49,6 +71,7 @@ class FinanceStore extends ChangeNotifier {
   }
 
   final FinanceRepository repository;
+  final AssetStore assets;
   final LedgerStore ledger;
   FinanceState _state;
   AgentDraft? _draft;
@@ -97,6 +120,11 @@ class FinanceStore extends ChangeNotifier {
     return _metricsCache!;
   }
 
+  void _adoptFeatureState() {
+    assets.adoptState(_state);
+    ledger.adoptState(_state);
+  }
+
   Future<void> load() async {
     final started = _session;
     if (repository.api != null && repository.api!.token == null) {
@@ -126,7 +154,7 @@ class FinanceStore extends ChangeNotifier {
           !_pendingDeletionCleanupUserIds.contains(verifiedUserId);
       if (!currentIsDifferentVerifiedUser) {
         await repository.api?.logout();
-        repository.queue.replace(const []);
+        await repository.clearPendingOperations();
         repository.unbindLocalOwner();
         _state = const FinanceState();
         _draft = null;
@@ -135,7 +163,7 @@ class FinanceStore extends ChangeNotifier {
         _metricsState = null;
         _metricsMonth = null;
         _metricsCache = null;
-        ledger.adoptState(_state);
+        _adoptFeatureState();
         _authStore?.clearSession();
         await _attemptPendingDeletionCleanup(notify: false);
         notifyListeners();
@@ -152,17 +180,17 @@ class FinanceStore extends ChangeNotifier {
     if (_session != started) return;
     if (loaded != null) {
       _state = loaded;
-      ledger.adoptState(_state);
+      _adoptFeatureState();
     }
     notifyListeners();
   }
 
   Future<void> _failClosedForUnknownCleanupState() async {
     await repository.api?.logout();
-    repository.queue.replace(const []);
+    await repository.clearPendingOperations();
     repository.unbindLocalOwner();
     _state = const FinanceState();
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     _draft = null;
     _draftSourceText = null;
     _budgetAlerts = const [];
@@ -242,7 +270,7 @@ class FinanceStore extends ChangeNotifier {
       for (final memory in profile.quickMemories) memory.key: memory,
     };
     _state = _state.copyWith(quickMemories: memories.values.toList());
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     if (_session != started) return;
     await repository.save(_state);
     if (_session != started) return;
@@ -312,8 +340,8 @@ class FinanceStore extends ChangeNotifier {
         logout = api.logout();
         logoutGeneration = api.sessionGeneration;
         _state = const FinanceState();
-        ledger.adoptState(_state);
-        repository.queue.replace(const []);
+        _adoptFeatureState();
+        await repository.clearPendingOperations();
         repository.unbindLocalOwner();
         _sessionGeneration++;
         auth.clearSession();
@@ -367,50 +395,17 @@ class FinanceStore extends ChangeNotifier {
       String currency = 'CNY',
       double openingBalance = 0,
       AccountKind accountKind = AccountKind.other}) async {
-    final normalizedName = name.trim().toLowerCase();
-    if (normalizedName.isEmpty ||
-        _state.accounts.any((item) =>
-            item.deletedAt == null &&
-            item.name.trim().toLowerCase() == normalizedName)) {
-      _message = '账户名称不能重复';
-      notifyListeners();
-      return;
-    }
-    final id = 'account-${DateTime.now().microsecondsSinceEpoch}';
-    _state = await repository.applyLocalAccount(
-        _state,
-        Account(
-            id: id,
-            name: name,
-            type: type,
-            accountKind: accountKind,
-            currency: currency.toUpperCase(),
-            openingBalance: openingBalance));
-    ledger.adoptState(_state);
-    _message = '账户已保存到本地，联网后会同步';
-    notifyListeners();
+    await assets.addAccount(
+      name: name,
+      type: type,
+      currency: currency,
+      openingBalance: openingBalance,
+      accountKind: accountKind,
+    );
   }
 
   Future<void> updateAccount(Account account) async {
-    if (!_state.accounts.any((item) => item.id == account.id)) return;
-    final normalizedName = account.name.trim().toLowerCase();
-    if (normalizedName.isEmpty ||
-        _state.accounts.any((item) =>
-            item.id != account.id &&
-            item.deletedAt == null &&
-            item.name.trim().toLowerCase() == normalizedName)) {
-      _message = '账户名称不能重复';
-      notifyListeners();
-      return;
-    }
-    _state = await repository.applyLocalAccount(_state, account);
-    if (account.isDefaultPayment && account.type == AccountType.asset) {
-      _state = _state.copyWith(defaultAccountId: account.id);
-      await repository.save(_state);
-    }
-    ledger.adoptState(_state);
-    _message = '账户配置已保存';
-    notifyListeners();
+    await assets.updateAccount(account);
   }
 
   Future<void> addCategory(
@@ -558,14 +553,14 @@ class FinanceStore extends ChangeNotifier {
     final budget = Budget(
         id: budgetId, month: month, categoryId: categoryId, limit: limit);
     _state = await repository.applyLocalBudget(_state, budget);
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     _message = '预算已保存';
     notifyListeners();
   }
 
   Future<List<BudgetAlert>> checkBudgetAlerts() async {
-    final raw = await repository.local
-        .readMetadata(LocalRepository.budgetAlertsKey);
+    final raw =
+        await repository.local.readMetadata(LocalRepository.budgetAlertsKey);
     final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
     final seen =
         decoded is List ? decoded.whereType<String>().toSet() : <String>{};
@@ -585,22 +580,15 @@ class FinanceStore extends ChangeNotifier {
       if (seen.add(alert.key)) alerts.add(alert);
     }
     if (alerts.isNotEmpty) {
-      await repository.local
-          .writeMetadata(LocalRepository.budgetAlertsKey, jsonEncode(seen.toList()));
+      await repository.local.writeMetadata(
+          LocalRepository.budgetAlertsKey, jsonEncode(seen.toList()));
     }
     _budgetAlerts = alerts;
     return alerts;
   }
 
   Future<void> setDefaultAccount(String accountId) async {
-    if (!_state.accounts
-        .any((item) => item.id == accountId && item.type == AccountType.asset))
-      return;
-    _state = _state.copyWith(defaultAccountId: accountId);
-    await repository.save(_state);
-    ledger.adoptState(_state);
-    _message = '默认支付账户已更新';
-    notifyListeners();
+    await assets.setDefaultAccount(accountId);
   }
 
   Future<void> sync() async {
@@ -608,11 +596,11 @@ class FinanceStore extends ChangeNotifier {
     final pushed = await repository.pushPending(_state);
     if (_session != started) return;
     _state = pushed;
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     final pulled = await repository.pullChanges(_state);
     if (_session != started) return;
     _state = pulled;
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     if (_session != started) return;
     _message = _state.syncState.error ??
         (_state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步');
@@ -637,82 +625,21 @@ class FinanceStore extends ChangeNotifier {
       required double rate,
       required String rateDate,
       required String source}) async {
-    final base = baseCurrency.trim().toUpperCase();
-    if (base.length < 3 ||
-        base == 'CNY' ||
-        rate <= 0 ||
-        source.trim().isEmpty) {
-      _message = '汇率需要填写有效币种、正数汇率和来源';
-      notifyListeners();
-      return;
-    }
-    final snapshot = ExchangeRateSnapshot(
-        baseCurrency: base,
-        rate: rate,
-        rateDate: rateDate,
-        source: source.trim(),
-        updatedAt: DateTime.now().toIso8601String());
-    _applyExchangeRate(snapshot);
-    await repository.save(_state);
-    if (repository.api != null) {
-      try {
-        await repository.api!.saveExchangeRate(snapshot.toJson());
-        _message = '汇率已保存并同步';
-      } on ApiFailure {
-        _message = '汇率已保存在本机，联网后可再次同步';
-      }
-    } else {
-      _message = '汇率已保存到本地';
-    }
-    notifyListeners();
+    await assets.saveManualExchangeRate(
+      baseCurrency: baseCurrency,
+      rate: rate,
+      rateDate: rateDate,
+      source: source,
+    );
   }
 
   Future<void> refreshExchangeRate(String baseCurrency) async {
-    if (repository.api == null) {
-      _message = '当前未配置同步服务，无法获取公开汇率';
-      notifyListeners();
-      return;
-    }
-    try {
-      final json =
-          await repository.api!.fetchExchangeRate(baseCurrency.toUpperCase());
-      final snapshot = ExchangeRateSnapshot.fromJson(json);
-      if (snapshot.rate <= 0)
-        throw const ApiFailure(ApiFailureKind.validation, '公开汇率无效');
-      _applyExchangeRate(snapshot);
-      await repository.save(_state);
-      _message = '已获取并保存 ${snapshot.baseCurrency}/CNY 汇率';
-    } on ApiFailure {
-      _message = '获取汇率失败，已保留上一次可靠汇率';
-    } on Object {
-      _message = '获取汇率失败，已保留上一次可靠汇率';
-    }
-    notifyListeners();
-  }
-
-  void _applyExchangeRate(ExchangeRateSnapshot snapshot) {
-    final rates = [
-      ..._state.exchangeRates.where((item) =>
-          item.baseCurrency != snapshot.baseCurrency ||
-          item.quoteCurrency != snapshot.quoteCurrency),
-      snapshot
-    ];
-    final accounts = _state.accounts.map((account) {
-      if (account.currency.toUpperCase() != snapshot.baseCurrency)
-        return account;
-      return account.copyWith(
-          openingCnyAmount: account.openingBalance * snapshot.rate,
-          exchangeRate: snapshot.rate,
-          exchangeRateDate: snapshot.rateDate,
-          exchangeRateSource: snapshot.source);
-    }).toList();
-    _state = _state.copyWith(exchangeRates: rates, accounts: accounts);
-    ledger.adoptState(_state);
+    await assets.refreshExchangeRate(baseCurrency);
   }
 
   Future<void> restoreDemoData() async {
     _state = DemoData.create();
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     _draft = null;
     _draftSourceText = null;
     _message = '演示数据已恢复';
@@ -754,7 +681,7 @@ class FinanceStore extends ChangeNotifier {
           ..._state.reports.where((item) => item.month != metrics.monthKey),
           remoteReport
         ]);
-        ledger.adoptState(_state);
+        _adoptFeatureState();
         await repository.save(_state);
         _message = '月度报告已从服务端更新';
         notifyListeners();
@@ -776,7 +703,7 @@ class FinanceStore extends ChangeNotifier {
       ..._state.reports.where((item) => item.month != current.monthKey),
       report
     ]);
-    ledger.adoptState(_state);
+    _adoptFeatureState();
     await repository.save(_state);
     _message = '月度报告已更新';
     notifyListeners();

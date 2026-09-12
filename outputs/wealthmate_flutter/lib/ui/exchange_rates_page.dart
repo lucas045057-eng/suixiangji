@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
-import '../state/finance_store.dart';
+import '../features/assets/state/asset_store.dart';
 
 class ExchangeRatesPage extends StatelessWidget {
   const ExchangeRatesPage({required this.store, super.key});
 
-  final FinanceStore store;
+  final AssetStore store;
 
   @override
   Widget build(BuildContext context) {
-    final currencies = <String>{
-      ...store.state.accounts.map((item) => item.currency.toUpperCase()),
-      ...store.state.transactions.map((item) => item.currency.toUpperCase()),
-    }..remove('CNY');
+    final currencies = store.foreignCurrencies;
     return Scaffold(
       appBar: AppBar(title: const Text('汇率管理')),
       body: ListenableBuilder(
@@ -48,7 +45,7 @@ class ExchangeRatesPage extends StatelessWidget {
   }
 
   Widget _rateCard(BuildContext context, String currency) {
-    final snapshot = store.state.exchangeRates
+    final snapshot = store.exchangeRates
         .where((item) =>
             item.baseCurrency == currency && item.quoteCurrency == 'CNY')
         .firstOrNull;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/assets/domain/asset_rules.dart';
 import 'models.dart';
 
 class PeriodPoint {
@@ -127,12 +128,8 @@ class FinanceRules {
         .fold<double>(0, (sum, item) => sum + (_cnyAmount(item) ?? 0)));
     final savings = _round(income - expense);
     final savingsRate = income == 0 ? 0.0 : _round(savings / income, 3);
-    final accountBalances = state.accounts
-        .where((item) => item.deletedAt == null)
-        .map((account) => AccountBalance(
-            account: account,
-            balance: _accountBalance(account, visibleTransactions)))
-        .toList();
+    final accountBalances =
+        AssetRules.accountBalances(state, visibleTransactions);
     final assetTotal = _round(accountBalances
         .where((item) => item.account.type == AccountType.asset)
         .fold<double>(0, (sum, item) => sum + item.balance));
@@ -261,8 +258,10 @@ class FinanceRules {
   static String quickMemoryKey(String text) {
     var key = text.toLowerCase();
     key = key.replaceAll(RegExp(r'\d+(?:\.\d+)?'), '');
-    key = key.replaceAll(RegExp(
-        r'今天|明天|昨天|前天|花了|用了|买了|支出|收入|收到|支付|付款|共|元|块钱?|人民币|cny|usd|美元|微信|支付宝|现金|银行卡|信用卡'), '');
+    key = key.replaceAll(
+        RegExp(
+            r'今天|明天|昨天|前天|花了|用了|买了|支出|收入|收到|支付|付款|共|元|块钱?|人民币|cny|usd|美元|微信|支付宝|现金|银行卡|信用卡'),
+        '');
     key = key.replaceAll(RegExp(r'[\s,，。！？!?、:：¥￥]'), '');
     return key.length >= 2 ? key : text.trim();
   }
@@ -275,7 +274,8 @@ class FinanceRules {
         return category.id;
     }
     if (base.categoryId != null &&
-        active.any((item) => item.id == base.categoryId)) return base.categoryId;
+        active.any((item) => item.id == base.categoryId))
+      return base.categoryId;
     for (final memory in state.quickMemories.reversed) {
       if (memory.categoryId == null || !text.contains(memory.key)) continue;
       final category = active.where((item) => item.id == memory.categoryId);
@@ -326,30 +326,6 @@ class FinanceRules {
     if (defaultId != null && active.any((item) => item.id == defaultId))
       return defaultId;
     return null;
-  }
-
-  static double _accountBalance(
-      Account account, List<FinanceTransaction> transactions) {
-    var balance = account.currency == 'CNY'
-        ? account.openingBalance
-        : (account.openingCnyAmount ?? 0);
-    for (final transaction in transactions) {
-      final amount = _cnyAmount(transaction);
-      if (amount == null) continue;
-      if (transaction.type == TransactionType.transfer) {
-        if (transaction.fromAccountId == account.id) balance -= amount;
-        if (transaction.toAccountId == account.id) balance += amount;
-      } else if (transaction.accountId == account.id) {
-        if (account.type == AccountType.liability) {
-          balance +=
-              transaction.type == TransactionType.expense ? amount : -amount;
-        } else {
-          balance +=
-              transaction.type == TransactionType.income ? amount : -amount;
-        }
-      }
-    }
-    return _round(balance);
   }
 
   static double? _cnyAmount(FinanceTransaction transaction) {

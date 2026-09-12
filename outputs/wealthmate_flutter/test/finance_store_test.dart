@@ -100,10 +100,9 @@ void main() {
     expect(store.draft?.missingFacts, isEmpty);
   });
 
-  test('edited draft can be confirmed and teaches the quick memory',
-      () async {
-    final store = FinanceStore(
-        repository: storeRepository(), initialState: storeState());
+  test('edited draft can be confirmed and teaches the quick memory', () async {
+    final store =
+        FinanceStore(repository: storeRepository(), initialState: storeState());
 
     await store.createDraft('今天吃饭吃了30元', now: DateTime(2026, 9, 4, 10));
     final original = store.draft!;
@@ -212,8 +211,7 @@ void main() {
     final store = FinanceStore(
       repository: storeRepository(),
       initialState: storeState().copyWith(accounts: const [
-        Account(
-            id: 'alipay', name: '支付宝', type: AccountType.asset),
+        Account(id: 'alipay', name: '支付宝', type: AccountType.asset),
         Account(id: 'bank', name: '银行卡', type: AccountType.asset),
       ]),
     );
@@ -222,6 +220,29 @@ void main() {
 
     expect(store.state.accounts.last.name, '银行卡');
     expect(store.message, '账户名称不能重复');
+  });
+
+  test('wealth selectors notify when a ledger write changes shared state',
+      () async {
+    final store = FinanceStore(
+      repository: storeRepository(),
+      initialState: storeState().copyWith(accounts: const [
+        Account(id: 'cash', name: '现金', type: AccountType.asset),
+      ]),
+    );
+    var assetNotifications = 0;
+    store.assets.addListener(() => assetNotifications += 1);
+
+    await store.addTransaction(const FinanceTransaction(
+      id: 'cash-expense',
+      date: '2026-09-01',
+      type: TransactionType.expense,
+      amount: 100,
+      accountId: 'cash',
+    ));
+
+    expect(store.assets.netWorth, -100);
+    expect(assetNotifications, greaterThan(0));
   });
 
   test(

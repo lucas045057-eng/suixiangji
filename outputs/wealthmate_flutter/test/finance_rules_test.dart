@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:wealthmate_flutter/domain/finance_rules.dart';
 import 'package:wealthmate_flutter/domain/models.dart';
+import 'package:wealthmate_flutter/features/assets/domain/asset_rules.dart';
 
 FinanceState stateWith({
   List<Account> accounts = const [],
@@ -46,6 +47,23 @@ FinanceTransaction tx({
 }
 
 void main() {
+  test('asset rules keep missing foreign openings out of net worth', () {
+    const state = FinanceState(accounts: [
+      Account(
+          id: 'cny', name: '人民币', type: AccountType.asset, openingBalance: 100),
+      Account(
+          id: 'usd',
+          name: '美元',
+          type: AccountType.asset,
+          currency: 'USD',
+          openingBalance: 100),
+    ]);
+
+    final balances = AssetRules.accountBalances(state, const []);
+
+    expect(balances.map((item) => item.balance), [100, 0]);
+  });
+
   test('asset income increases the asset balance', () {
     final state = stateWith(
       accounts: const [
@@ -196,7 +214,8 @@ void main() {
     expect(FinanceRules.canPostDraft(lowConfidence), isFalse);
   });
 
-  test('natural language draft uses custom labels and recent account habit', () {
+  test('natural language draft uses custom labels and recent account habit',
+      () {
     final state = FinanceState(
       defaultAccountId: 'wechat',
       accounts: const [

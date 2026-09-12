@@ -4,7 +4,8 @@ from datetime import date
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from .api import _json_metrics, _records, _wealth
+from .api import _json_metrics, _records
+from .assets.service import wealth as _wealth
 from .config import get_settings
 from .db import SessionLocal
 from .models import AgentLog, MonthlyReport, NetWorthSnapshot, User

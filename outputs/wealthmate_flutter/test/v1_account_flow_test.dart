@@ -122,8 +122,8 @@ void main() {
     await h.repository.loadForUser('old-A');
     await h.seed();
     await h.logout();
-      await tester.pumpWidget(WealthMateApp(
-          store: h.store, api: h.api, auth: h.store.authStore));
+    await tester.pumpWidget(
+        WealthMateApp(store: h.store, api: h.api, auth: h.store.authStore));
     expect(find.byType(LoginPage), findsOneWidget);
     await tester.tap(find.text('注册账号'));
     await tester.pumpAndSettle();
@@ -286,8 +286,7 @@ void main() {
           return verified.future;
         }));
     await tester.pumpWidget(MaterialApp(
-        home: LoginPage(
-            auth: authFor(api), onLoggedIn: () => entered = true)));
+        home: LoginPage(auth: authFor(api), onLoggedIn: () => entered = true)));
     await tester.tap(find.text('注册账号'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('注册并登录'));
@@ -366,8 +365,8 @@ void main() {
       Account(id: 'usd', name: 'USD', type: AccountType.asset, currency: 'USD')
     ]));
     await h.store.load();
-    await tester
-        .pumpWidget(MaterialApp(home: ExchangeRatesPage(store: h.store)));
+    await tester.pumpWidget(
+        MaterialApp(home: ExchangeRatesPage(store: h.store.assets)));
     // The manual-entry control is part of the pre-Auth baseline UI. This test
     // is concerned with the trusted online GET contract, not its visibility.
     expect(find.text('手动录入'), findsOneWidget);

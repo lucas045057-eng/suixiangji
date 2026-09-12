@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
-import '../state/finance_store.dart';
+import '../features/assets/state/asset_store.dart';
+import '../features/ledger/state/ledger_store.dart';
 import 'widgets/ui_helpers.dart';
 import 'account_detail_page.dart';
 import 'exchange_rates_page.dart';
 
 class WealthPage extends StatelessWidget {
-  const WealthPage({required this.store, super.key});
+  const WealthPage({required this.store, required this.ledger, super.key});
 
-  final FinanceStore store;
+  final AssetStore store;
+  final LedgerStore ledger;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +25,7 @@ class WealthPage extends StatelessWidget {
           final liabilities = metrics.accountBalances
               .where((item) => item.account.type == AccountType.liability)
               .toList();
-          final goal = store.state.goals.firstOrNull;
+          final goal = store.goals.firstOrNull;
           return SafeArea(
               child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -178,7 +180,9 @@ class WealthPage extends StatelessWidget {
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                             builder: (_) => AccountDetailPage(
-                                store: store, account: item.account))),
+                                store: store,
+                                ledger: ledger,
+                                account: item.account))),
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                         backgroundColor: positive

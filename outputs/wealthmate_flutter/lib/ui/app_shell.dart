@@ -71,9 +71,10 @@ class _AppShellState extends State<AppShell> {
         ),
       1 => LedgerPage(store: widget.store),
       2 => StatsPage(store: widget.store),
-      3 => WealthPage(store: widget.store),
+      3 => WealthPage(store: widget.store.assets, ledger: widget.store.ledger),
       _ => SettingsPage(
           store: widget.store,
+          assets: widget.store.assets,
           auth: widget.auth,
           onLoggedOut: widget.onLoggedOut,
         ),

@@ -10,6 +10,7 @@ from app.domain import (
     monthly_metrics,
     push_idempotent,
 )
+from app.assets.domain import calculate_cny as calculate_asset_cny
 
 
 class DomainRulesTest(unittest.TestCase):
@@ -28,6 +29,18 @@ class DomainRulesTest(unittest.TestCase):
         self.assertIsNone(converted["cny_amount"])
         self.assertIsNone(converted["exchange_rate"])
         self.assertEqual(converted["conversion_status"], "pending")
+
+        asset_converted = calculate_asset_cny(
+            Decimal("100"),
+            "USD",
+            Decimal("7.25"),
+            rate_date=date(2026, 9, 3),
+            source="verified source",
+        )
+        self.assertEqual(asset_converted["cny_amount"], Decimal("725.00"))
+        self.assertEqual(asset_converted["exchange_rate"], Decimal("7.25"))
+        self.assertEqual(asset_converted["exchange_rate_date"], date(2026, 9, 3))
+        self.assertEqual(asset_converted["exchange_rate_source"], "verified source")
 
     def test_transfer_is_not_income_or_expense(self):
         rows = [
