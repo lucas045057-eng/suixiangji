@@ -6,6 +6,8 @@ import '../domain/models.dart';
 import '../features/assets/data/assets_remote_data_source.dart';
 import '../features/assets/data/assets_repository.dart';
 import '../features/ledger/data/ledger_repository.dart';
+import '../features/budget/data/budget_remote_data_source.dart';
+import '../features/budget/data/budget_repository.dart';
 
 class FinanceRepository {
   FinanceRepository({
@@ -14,6 +16,7 @@ class FinanceRepository {
     LocalStateSession? session,
     AssetsRepository? assetsRepository,
     LedgerRepository? ledgerRepository,
+    BudgetRepository? budgetRepository,
     this.api,
   })  : _local = local,
         session = session ?? LocalStateSession(local: local, queue: queue) {
@@ -24,6 +27,11 @@ class FinanceRepository {
         );
     _ledgerRepository =
         ledgerRepository ?? LedgerRepository(session: this.session);
+    _budgetRepository = budgetRepository ??
+        BudgetRepository(
+          session: this.session,
+          remote: api == null ? null : BudgetRemoteDataSource(api: api!),
+        );
   }
 
   final LocalRepository _local;
@@ -33,6 +41,7 @@ class FinanceRepository {
   final LocalStateSession session;
   late final AssetsRepository _assetsRepository;
   late final LedgerRepository _ledgerRepository;
+  late final BudgetRepository _budgetRepository;
   final ApiClient? api;
   String? _localOwnerUserId;
   int? _boundApiGeneration;
@@ -42,6 +51,8 @@ class FinanceRepository {
   final Set<String> _pendingConflictClientOpIds = <String>{};
 
   AssetsRepository get assetsRepository => _assetsRepository;
+
+  BudgetRepository get budgetRepository => _budgetRepository;
 
   String? get localOwnerUserId => _localOwnerUserId;
 
@@ -144,24 +155,7 @@ class FinanceRepository {
 
   Future<FinanceState> applyLocalBudget(
       FinanceState state, Budget budget) async {
-    final next = state.copyWith(budgets: [
-      ...state.budgets.where((item) => item.id != budget.id),
-      budget,
-    ]);
-    return session.write(
-      (_) => next,
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}',
-          entity: 'budgets',
-          entityId: budget.id,
-          type: SyncOperationType.upsert,
-          payload: budget.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
-    );
+    return _budgetRepository.saveBudget(budget, baseState: state);
   }
 
   Future<FinanceState> applyLocalAccount(FinanceState state, Account account) =>

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/budget/state/budget_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import '../domain/models.dart';
 import 'widgets/draft_confirmation_card.dart';
@@ -15,7 +16,8 @@ typedef OpenDashboardComposer = void Function(BuildContext context,
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     required this.ledger,
-    required this.budgetAlerts,
+    this.budget,
+    this.budgetAlerts = const [],
     required this.draft,
     required this.isDemoMode,
     required this.message,
@@ -28,6 +30,7 @@ class DashboardPage extends StatelessWidget {
   });
 
   final LedgerStore ledger;
+  final BudgetStore? budget;
   final List<BudgetAlert> budgetAlerts;
   final AgentDraft? draft;
   final bool isDemoMode;
@@ -40,11 +43,16 @@ class DashboardPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final listenable = budget == null
+        ? ledger
+        : Listenable.merge(<Listenable>[ledger, budget!]);
     return ListenableBuilder(
-      listenable: ledger,
+      listenable: listenable,
       builder: (context, _) {
         final metrics = ledger.metrics;
         final state = ledger.state;
+        final alerts = budget?.alerts ?? budgetAlerts;
+        final progress = budget?.progress ?? metrics.budgetProgress;
         final currentDraft = draft;
         final recent = state.transactions
             .where((item) => item.deletedAt == null)
@@ -79,8 +87,8 @@ class DashboardPage extends StatelessWidget {
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 20),
-              if (budgetAlerts.isNotEmpty) ...[
-                _newAlertBanner(budgetAlerts),
+              if (alerts.isNotEmpty) ...[
+                _newAlertBanner(alerts),
                 const SizedBox(height: 12),
               ],
               Card(
@@ -199,12 +207,12 @@ class DashboardPage extends StatelessWidget {
                 title: '本月预算',
                 trailing:
                     TextButton(onPressed: openBudgets, child: const Text('管理')),
-                child: metrics.budgetProgress.isEmpty
+                child: progress.isEmpty
                     ? const Text('还没有预算，可以在预算页添加。',
                         style:
                             TextStyle(color: Color(0xFF87958F), fontSize: 12))
                     : Column(
-                        children: metrics.budgetProgress
+                        children: progress
                             .take(4)
                             .map((item) => ProgressRow(
                                 progress: item,

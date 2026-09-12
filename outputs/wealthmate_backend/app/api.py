@@ -18,6 +18,14 @@ from .db import get_db
 from .domain import TransactionRecord, calculate_cny, classify_natural_language, monthly_metrics, money, period_metrics
 from .models import Account, AgentLog, Budget, Category, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
 from .schemas import BudgetIn, BudgetPatch, DraftIn, RestoreIn, SyncPushIn
+from .budget.service import budget_json as _budget_json
+from .budget.service import save_budget as _save_budget
+from .budget.router import (
+    create_budget,
+    delete_budget,
+    list_budgets,
+    update_budget,
+)
 from .ledger.service import (
     _attach_latest_rate,
     _category_json,
@@ -110,93 +118,6 @@ def health() -> dict:
         "git_sha": get_settings().git_sha,
         "server_time": datetime.now(timezone.utc),
     }
-
-
-def _budget_json(row: Budget) -> dict:
-    return _json_metrics({
-        "id": row.id,
-        "month": row.month,
-        "category_id": row.category_id,
-        "limit": row.limit,
-        "active": row.active,
-        "deleted_at": row.deleted_at,
-        "server_version": row.server_version,
-        "updated_at": row.updated_at,
-    })
-
-
-def _save_budget(db: Session, user: User, values: dict, *, server_version: int | None = None) -> Budget:
-    row = db.get(Budget, values["id"])
-    if row and row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="预算不存在")
-    category_id = values.get("category_id")
-    if category_id:
-        category = db.get(Category, category_id)
-        if not category or category.user_id != user.id:
-            raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
-    data = {
-        "month": values["month"],
-        "category_id": values["category_id"],
-        "limit": Decimal(str(values["limit"])),
-        "active": bool(values.get("active", True)),
-    }
-    if not row:
-        row = Budget(id=values["id"], user_id=user.id, **data)
-        db.add(row)
-    else:
-        for key, value in data.items():
-            setattr(row, key, value)
-        row.deleted_at = None
-    row.server_version = server_version if server_version is not None else row.server_version
-    return row
-
-
-@router.get("/budgets")
-def list_budgets(month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"), db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    query = db.query(Budget).filter(Budget.user_id == user.id, Budget.deleted_at.is_(None), Budget.active.is_(True))
-    if month:
-        query = query.filter(Budget.month == month)
-    rows = query.order_by(Budget.month.desc(), Budget.updated_at.desc()).all()
-    return {"items": [_budget_json(row) for row in rows], "server_version": user.sync_version}
-
-
-@router.post("/budgets")
-def create_budget(payload: BudgetIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    values = payload.model_dump()
-    values["id"] = values.get("id") or str(uuid4())
-    existing = db.query(Budget).filter(Budget.user_id == user.id, Budget.month == values["month"], Budget.category_id == values["category_id"], Budget.deleted_at.is_(None)).first()
-    if existing and not payload.id:
-        values["id"] = existing.id
-    user.sync_version += 1
-    row = _save_budget(db, user, values, server_version=user.sync_version)
-    db.commit()
-    return _budget_json(row)
-
-
-@router.patch("/budgets/{budget_id}")
-def update_budget(budget_id: str, payload: BudgetPatch, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Budget, budget_id)
-    if not row or row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="预算不存在")
-    values = payload.model_dump(exclude_unset=True)
-    values = {**_budget_json(row), **values, "id": budget_id}
-    user.sync_version += 1
-    row = _save_budget(db, user, values, server_version=user.sync_version)
-    db.commit()
-    return _budget_json(row)
-
-
-@router.delete("/budgets/{budget_id}")
-def delete_budget(budget_id: str, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    row = db.get(Budget, budget_id)
-    if not row or row.user_id != user.id:
-        raise HTTPException(status_code=404, detail="预算不存在")
-    user.sync_version += 1
-    row.active = False
-    row.deleted_at = datetime.now(timezone.utc)
-    row.server_version = user.sync_version
-    db.commit()
-    return {"deleted": True, "id": budget_id, "server_version": user.sync_version}
 
 
 @router.post("/agent/draft")

@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import '../data/finance_repository.dart';
 import '../data/api_client.dart';
-import '../data/local_repository.dart';
 import '../domain/demo_state.dart';
 import '../domain/finance_rules.dart';
 import '../domain/models.dart';
@@ -14,12 +13,14 @@ import '../features/assets/state/asset_store.dart';
 import '../features/ledger/data/ledger_remote_data_source.dart';
 import '../features/ledger/data/ledger_repository.dart';
 import '../features/ledger/state/ledger_store.dart';
+import '../features/budget/state/budget_store.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
     required this.repository,
     FinanceState? initialState,
     AuthStore? authStore,
+    BudgetStore? budgetStore,
   })  : _state = initialState ??
             (repository.api == null ? DemoData.create() : const FinanceState()),
         _authStore = authStore ??
@@ -48,11 +49,21 @@ class FinanceStore extends ChangeNotifier {
               (repository.api == null
                   ? DemoData.create()
                   : const FinanceState()),
-        ) {
+        ),
+        budget = budgetStore ??
+            BudgetStore(
+              repository: repository.budgetRepository,
+              initialState: initialState ??
+                  (repository.api == null
+                      ? DemoData.create()
+                      : const FinanceState()),
+            ) {
     ledger.onStateChanged = (next) {
       _state = next;
       assets.adoptState(next);
+      budget.adoptState(next);
       assets.notifyListeners();
+      budget.notifyListeners();
       _metricsState = null;
       _metricsMonth = null;
       _metricsCache = null;
@@ -61,7 +72,9 @@ class FinanceStore extends ChangeNotifier {
     assets.onStateChanged = (next) {
       _state = next;
       ledger.adoptState(next);
+      budget.adoptState(next);
       ledger.notifyListeners();
+      budget.notifyListeners();
       _message = assets.message;
       _metricsState = null;
       _metricsMonth = null;
@@ -72,17 +85,26 @@ class FinanceStore extends ChangeNotifier {
       _message = message;
       notifyListeners();
     };
+    budget.onStateChanged = (next) {
+      _state = next;
+      assets.adoptState(next);
+      ledger.adoptState(next);
+      _metricsState = null;
+      _metricsMonth = null;
+      _metricsCache = null;
+      notifyListeners();
+    };
   }
 
   final FinanceRepository repository;
   final AssetStore assets;
   final LedgerStore ledger;
+  final BudgetStore budget;
   FinanceState _state;
   AgentDraft? _draft;
   String? _draftSourceText;
   final AuthStore? _authStore;
   String? _message;
-  List<BudgetAlert> _budgetAlerts = const [];
   final Set<String> _pendingDeletionCleanupUserIds = <String>{};
   bool _pendingDeletionCleanupStateUnknown = false;
   int _sessionGeneration = 0;
@@ -107,7 +129,7 @@ class FinanceStore extends ChangeNotifier {
               : '账号已删除，但本机数据清理仍未完成，请重试本机清理';
   (int, int) get _session =>
       (_sessionGeneration, repository.sessionIdentity.$2);
-  List<BudgetAlert> get budgetAlerts => List.unmodifiable(_budgetAlerts);
+  List<BudgetAlert> get budgetAlerts => budget.alerts;
   bool get isDemoMode => repository.api == null;
   List<Category> get activeCategories =>
       _state.categories.where((item) => item.active).toList(growable: false);
@@ -127,6 +149,7 @@ class FinanceStore extends ChangeNotifier {
   void _adoptFeatureState() {
     assets.adoptState(_state);
     ledger.adoptState(_state);
+    budget.adoptState(_state);
   }
 
   Future<void> load() async {
@@ -163,7 +186,7 @@ class FinanceStore extends ChangeNotifier {
         _state = const FinanceState();
         _draft = null;
         _draftSourceText = null;
-        _budgetAlerts = const [];
+        budget.clearAlerts();
         _metricsState = null;
         _metricsMonth = null;
         _metricsCache = null;
@@ -197,7 +220,7 @@ class FinanceStore extends ChangeNotifier {
     _adoptFeatureState();
     _draft = null;
     _draftSourceText = null;
-    _budgetAlerts = const [];
+    budget.clearAlerts();
     _metricsState = null;
     _metricsMonth = null;
     _metricsCache = null;
@@ -553,43 +576,13 @@ class FinanceStore extends ChangeNotifier {
       required String month,
       required String categoryId,
       required double limit}) async {
-    final budgetId = id ?? 'budget-${DateTime.now().microsecondsSinceEpoch}';
-    final budget = Budget(
-        id: budgetId, month: month, categoryId: categoryId, limit: limit);
-    _state = await repository.applyLocalBudget(_state, budget);
-    _adoptFeatureState();
+    await budget.upsertBudget(
+        id: id, month: month, categoryId: categoryId, limit: limit);
     _message = '预算已保存';
     notifyListeners();
   }
 
-  Future<List<BudgetAlert>> checkBudgetAlerts() async {
-    final raw =
-        await repository.local.readMetadata(LocalRepository.budgetAlertsKey);
-    final decoded = raw == null || raw.isEmpty ? null : jsonDecode(raw);
-    final seen =
-        decoded is List ? decoded.whereType<String>().toSet() : <String>{};
-    final alerts = <BudgetAlert>[];
-    for (final progress in metrics.budgetProgress) {
-      final ratio = progress.ratio;
-      final level = ratio > 1
-          ? BudgetAlertLevel.over
-          : ratio >= 1
-              ? BudgetAlertLevel.exhausted
-              : ratio >= .8
-                  ? BudgetAlertLevel.warning
-                  : null;
-      if (level == null) continue;
-      final alert = BudgetAlert(
-          budget: progress.budget, spent: progress.spent, level: level);
-      if (seen.add(alert.key)) alerts.add(alert);
-    }
-    if (alerts.isNotEmpty) {
-      await repository.local.writeMetadata(
-          LocalRepository.budgetAlertsKey, jsonEncode(seen.toList()));
-    }
-    _budgetAlerts = alerts;
-    return alerts;
-  }
+  Future<List<BudgetAlert>> checkBudgetAlerts() => budget.checkBudgetAlerts();
 
   Future<void> setDefaultAccount(String accountId) async {
     await assets.setDefaultAccount(accountId);
@@ -617,7 +610,7 @@ class FinanceStore extends ChangeNotifier {
     _draft = null;
     _draftSourceText = null;
     _message = null;
-    _budgetAlerts = const [];
+    budget.clearAlerts();
     _metricsState = null;
     _metricsMonth = null;
     _metricsCache = null;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/assets/domain/asset_rules.dart';
+import '../features/budget/domain/budget_rules.dart' as budget_rules;
 import 'models.dart';
 
 class PeriodPoint {
@@ -137,23 +138,7 @@ class FinanceRules {
         .where((item) => item.account.type == AccountType.liability)
         .fold<double>(0, (sum, item) => sum + item.balance));
     final netWorth = _round(assetTotal - liabilityTotal);
-    final budgetProgress = state.budgets
-        .where((item) =>
-            item.deletedAt == null && item.active && item.month == monthKey)
-        .map((budget) {
-      final spent = _round(monthTransactions
-          .where((item) =>
-              item.type == TransactionType.expense &&
-              item.categoryId == budget.categoryId)
-          .fold<double>(0, (sum, item) => sum + (_cnyAmount(item) ?? 0)));
-      final ratio = budget.limit <= 0 ? 0 : spent / budget.limit;
-      final status = ratio >= 1
-          ? BudgetStatus.over
-          : ratio >= .8
-              ? BudgetStatus.warning
-              : BudgetStatus.healthy;
-      return BudgetProgress(budget: budget, spent: spent, status: status);
-    }).toList();
+    final budgetProgress = budget_rules.progressForMonth(state, monthKey);
     final goal = state.goals.isEmpty ? null : state.goals.first;
     final liquidAssets = accountBalances.where((item) {
       if (item.account.type != AccountType.asset || !item.account.isLiquid)

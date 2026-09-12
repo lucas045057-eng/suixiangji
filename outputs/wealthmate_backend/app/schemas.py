@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .auth.schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
+from .budget.schemas import BudgetIn, BudgetPatch
 
 
 class AccountIn(BaseModel):
@@ -84,18 +85,3 @@ class RateIn(BaseModel):
     rate: Decimal = Field(gt=0)
     rate_date: date
     source: str
-
-
-class BudgetIn(BaseModel):
-    id: str | None = None
-    month: str = Field(pattern=r"^\d{4}-\d{2}$")
-    category_id: str = Field(min_length=1, max_length=64)
-    limit: Decimal = Field(gt=0)
-    active: bool = True
-
-
-class BudgetPatch(BaseModel):
-    month: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}$")
-    category_id: str | None = Field(default=None, min_length=1, max_length=64)
-    limit: Decimal | None = Field(default=None, gt=0)
-    active: bool | None = None

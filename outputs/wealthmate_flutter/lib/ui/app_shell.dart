@@ -58,7 +58,7 @@ class _AppShellState extends State<AppShell> {
           listenable: widget.store,
           builder: (context, _) => DashboardPage(
             ledger: widget.store.ledger,
-            budgetAlerts: widget.store.budgetAlerts,
+            budget: widget.store.budget,
             draft: widget.store.draft,
             isDemoMode: widget.store.isDemoMode,
             message: widget.store.message,
@@ -88,7 +88,7 @@ class _AppShellState extends State<AppShell> {
 
   void _openBudgets() {
     Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => BudgetsPage(store: widget.store)));
+        builder: (_) => BudgetsPage(store: widget.store.budget)));
   }
 
   void _openComposer(BuildContext context, {bool smart = false}) {

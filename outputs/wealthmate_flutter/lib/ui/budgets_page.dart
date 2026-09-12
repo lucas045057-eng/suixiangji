@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
-import '../state/finance_store.dart';
+import '../features/budget/state/budget_store.dart';
 import 'widgets/progress_row.dart';
 import 'widgets/ui_helpers.dart';
 
 class BudgetsPage extends StatefulWidget {
   const BudgetsPage({required this.store, super.key});
 
-  final FinanceStore store;
+  final BudgetStore store;
 
   @override
   State<BudgetsPage> createState() => _BudgetsPageState();
@@ -33,14 +33,14 @@ class _BudgetsPageState extends State<BudgetsPage> {
       body: ListenableBuilder(
         listenable: widget.store,
         builder: (context, _) {
-          final metrics = widget.store.metrics;
-          final alerts = metrics.budgetProgress
+          final progress = widget.store.progress;
+          final alerts = progress
               .where((item) => item.ratio >= .8)
               .toList(growable: false);
           return ListView(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
             children: [
-              Text('${metrics.monthKey} · 给支出设一个轻量边界',
+              Text('${widget.store.state.currentMonth} · 给支出设一个轻量边界',
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 12),
@@ -53,11 +53,11 @@ class _BudgetsPageState extends State<BudgetsPage> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      if (metrics.budgetProgress.isEmpty)
+                      if (progress.isEmpty)
                         const Text('还没有预算记录',
                             style: TextStyle(
                                 color: Color(0xFF87958F), fontSize: 12)),
-                      for (final item in metrics.budgetProgress)
+                      for (final item in progress)
                         ProgressRow(
                             progress: item,
                             category: categoryName(
@@ -128,7 +128,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
         widget.store.activeCategories.firstOrNull?.id ??
         '');
     final monthController = TextEditingController(
-        text: existing?.month ?? widget.store.metrics.monthKey);
+        text: existing?.month ?? widget.store.state.currentMonth);
     final limitController = TextEditingController(
         text: existing == null ? '' : existing.limit.toString());
     final saved = await showDialog<bool>(
