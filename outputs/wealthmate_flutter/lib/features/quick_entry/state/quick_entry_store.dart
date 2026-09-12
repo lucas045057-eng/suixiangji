@@ -5,10 +5,14 @@ import '../data/quick_entry_repository.dart';
 import '../domain/quick_entry_rules.dart';
 
 class QuickEntryStore extends ChangeNotifier {
-  QuickEntryStore({required this.repository, FinanceState? initialState})
-      : _state = initialState ?? const FinanceState();
+  QuickEntryStore({
+    required this.repository,
+    FinanceState? initialState,
+    this.postConfirm,
+  }) : _state = initialState ?? const FinanceState();
 
   final QuickEntryRepository repository;
+  final Future<void> Function()? postConfirm;
   FinanceState _state;
   AgentDraft? _draft;
   String? _sourceText;
@@ -76,10 +80,12 @@ class QuickEntryStore extends ChangeNotifier {
     }
     _confirming = true;
     try {
+      final fingerprint = _fingerprint(draft);
       await postTransaction(repository.transactionFromDraft(draft));
-      if (sourceText != null) await rememberDraftChoice(sourceText, draft);
-      _lastConfirmedFingerprint = _fingerprint(draft);
+      _lastConfirmedFingerprint = fingerprint;
       clearDraft();
+      if (sourceText != null) await rememberDraftChoice(sourceText, draft);
+      await postConfirm?.call();
       return true;
     } finally {
       _confirming = false;

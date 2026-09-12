@@ -78,6 +78,7 @@ class FinanceStore extends ChangeNotifier {
         },
       ),
       initialState: _state,
+      postConfirm: repository.api == null ? null : sync,
     );
     if (!identical(budget.repository.session, repository.session)) {
       throw ArgumentError.value(
@@ -532,7 +533,6 @@ class FinanceStore extends ChangeNotifier {
       quickEntry.sourceText,
       ledger.addTransaction,
     );
-    if (posted && repository.api != null) await sync();
     notifyListeners();
     return posted;
   }
