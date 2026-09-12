@@ -266,15 +266,35 @@ class FinanceRepository {
       final acceptedByOperation = <String, Map<String, Object?>>{
         for (final item in accepted) item['client_op_id']! as String: item,
       };
-      final nextTransactions = [...state.transactions];
-      final nextAccounts = [...state.accounts];
-      final nextBudgets = [...state.budgets];
       final acceptedClientOpIds = <String>{};
       for (final operation in operations) {
         final receipt = acceptedByOperation[operation.clientOpId];
         if (receipt != null) {
           acceptedClientOpIds.add(operation.clientOpId);
-          final serverVersion = (receipt['server_version'] as num?)?.toInt();
+        }
+      }
+      await session.mutateQueue((pending) {
+        for (final clientOpId in acceptedClientOpIds) {
+          pending.complete(clientOpId);
+        }
+      });
+      final conflictItems =
+          ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
+              .map((item) => (item! as Map).cast<String, Object?>())
+              .toList();
+      _pendingConflictClientOpIds
+        ..clear()
+        ..addAll(conflictItems
+            .map((item) => item['client_op_id'])
+            .whereType<String>());
+      final nextState = await session.write((current) {
+        final base = _mergeCurrentWithRequested(current, state);
+        final nextTransactions = [...base.transactions];
+        final nextAccounts = [...base.accounts];
+        final nextBudgets = [...base.budgets];
+        for (final operation in operations) {
+          final receipt = acceptedByOperation[operation.clientOpId];
+          final serverVersion = (receipt?['server_version'] as num?)?.toInt();
           if (serverVersion == null) continue;
           if (operation.entity == 'transactions') {
             final index = nextTransactions
@@ -300,51 +320,36 @@ class FinanceRepository {
             if (index >= 0 &&
                 (nextBudgets[index].serverVersion == null ||
                     serverVersion >= nextBudgets[index].serverVersion!)) {
-              final current = nextBudgets[index];
+              final currentBudget = nextBudgets[index];
               nextBudgets[index] = Budget(
-                id: current.id,
-                month: current.month,
-                categoryId: current.categoryId,
-                limit: current.limit,
-                active: current.active,
+                id: currentBudget.id,
+                month: currentBudget.month,
+                categoryId: currentBudget.categoryId,
+                limit: currentBudget.limit,
+                active: currentBudget.active,
                 serverVersion: serverVersion,
-                updatedAt: current.updatedAt,
-                deletedAt: current.deletedAt,
+                updatedAt: currentBudget.updatedAt,
+                deletedAt: currentBudget.deletedAt,
               );
             }
           }
         }
-      }
-      await session.mutateQueue((pending) {
-        for (final clientOpId in acceptedClientOpIds) {
-          pending.complete(clientOpId);
-        }
-      });
-      final conflictItems =
-          ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
-              .map((item) => (item! as Map).cast<String, Object?>())
-              .toList();
-      _pendingConflictClientOpIds
-        ..clear()
-        ..addAll(conflictItems
-            .map((item) => item['client_op_id'])
-            .whereType<String>());
-      final conflicts =
-          conflictItems.map((item) => 'sync:${item['entity_id']}').toList();
-      final nextState = state.copyWith(
-          transactions: nextTransactions,
-          accounts: nextAccounts,
-          budgets: nextBudgets,
-          conflicts: [
-            ...state.conflicts,
-            for (final conflict in conflicts)
-              if (!state.conflicts.contains(conflict)) conflict,
-          ],
-          syncState: SyncState(
-              serverVersion: (result['server_version'] as num?)?.toInt() ??
-                  state.syncState.serverVersion,
-              lastSyncedAt: DateTime.now().toIso8601String()));
-      await session.replaceState(nextState);
+        final conflicts =
+            conflictItems.map((item) => 'sync:${item['entity_id']}').toList();
+        return current.copyWith(
+            transactions: nextTransactions,
+            accounts: nextAccounts,
+            budgets: nextBudgets,
+            conflicts: [
+              ...base.conflicts,
+              for (final conflict in conflicts)
+                if (!base.conflicts.contains(conflict)) conflict,
+            ],
+            syncState: SyncState(
+                serverVersion: (result['server_version'] as num?)?.toInt() ??
+                    base.syncState.serverVersion,
+                lastSyncedAt: DateTime.now().toIso8601String()));
+      }, initialState: state);
       return nextState;
     } on ApiFailure catch (failure) {
       return state.copyWith(
@@ -374,41 +379,43 @@ class FinanceRepository {
         return await _completeConflictRecovery(
             state, remote, conflictOperations);
       }
-      final freshBootstrap = _isFreshBootstrap(state);
-      var nextState = freshBootstrap
-          ? state.copyWith(
-              transactions: remote.transactions,
-              accounts: remote.accounts,
-              categories: remote.categories,
-              budgets: remote.budgets,
-            )
-          : mergePulledBudgets(
-              mergePulledCategories(
-                  mergePulledAccounts(
-                      mergePulled(state, remote.transactions), remote.accounts),
-                  remote.categories),
-              remote.budgets);
-      if (freshBootstrap) {
-        final activeAccounts = nextState.accounts
-            .where((item) => item.deletedAt == null)
-            .toList(growable: false);
-        final preferredAccounts = activeAccounts
-            .where((item) => item.isDefaultPayment)
-            .toList(growable: false);
-        final defaultAccount = preferredAccounts.length == 1
-            ? preferredAccounts.single
-            : activeAccounts.length == 1
-                ? activeAccounts.single
-                : null;
-        if (defaultAccount != null)
-          nextState = nextState.copyWith(defaultAccountId: defaultAccount.id);
-      }
-      final next = nextState.copyWith(
-          syncState: SyncState(
-        serverVersion: remote.serverVersion,
-        lastSyncedAt: DateTime.now().toIso8601String(),
-      ));
-      await session.replaceState(next);
+      final next = await session.write((current) {
+        final base = _mergeCurrentWithRequested(current, state);
+        final freshBootstrap = _isFreshBootstrap(base);
+        var nextState = freshBootstrap
+            ? base.copyWith(
+                transactions: remote.transactions,
+                accounts: remote.accounts,
+                categories: remote.categories,
+                budgets: remote.budgets,
+              )
+            : mergePulledBudgets(
+                mergePulledCategories(
+                    mergePulledAccounts(mergePulled(base, remote.transactions),
+                        remote.accounts),
+                    remote.categories),
+                remote.budgets);
+        if (freshBootstrap) {
+          final activeAccounts = nextState.accounts
+              .where((item) => item.deletedAt == null)
+              .toList(growable: false);
+          final preferredAccounts = activeAccounts
+              .where((item) => item.isDefaultPayment)
+              .toList(growable: false);
+          final defaultAccount = preferredAccounts.length == 1
+              ? preferredAccounts.single
+              : activeAccounts.length == 1
+                  ? activeAccounts.single
+                  : null;
+          if (defaultAccount != null)
+            nextState = nextState.copyWith(defaultAccountId: defaultAccount.id);
+        }
+        return nextState.copyWith(
+            syncState: SyncState(
+          serverVersion: remote.serverVersion,
+          lastSyncedAt: DateTime.now().toIso8601String(),
+        ));
+      }, initialState: state);
       return next;
     } on ApiFailure catch (failure) {
       return state.copyWith(
@@ -465,45 +472,48 @@ class FinanceRepository {
 
     if (conflictOperations
         .any((operation) => !hasAuthoritativeEntity(operation))) {
-      return state.copyWith(
-          syncState: state.syncState.copyWith(error: '冲突数据尚未恢复，请稍后重试'));
+      final current = await session.load() ?? state;
+      return current.copyWith(
+          syncState: current.syncState.copyWith(error: '冲突数据尚未恢复，请稍后重试'));
     }
 
-    var nextState = mergePulledBudgets(
-        mergePulledCategories(
-            mergePulledAccounts(
-                mergePulled(state, remote.transactions), remote.accounts),
-            remote.categories),
-        remote.budgets);
     final resolvedEntityIds = <String>{
       for (final operation in conflictOperations) operation.entityId,
     };
-    final remainingConflicts = state.conflicts.where((conflict) {
-      if (conflict.startsWith('sync:')) {
-        return !resolvedEntityIds.contains(conflict.substring('sync:'.length));
-      }
-      if (conflict.startsWith('transactions:')) {
-        return !resolvedEntityIds
-            .contains(conflict.substring('transactions:'.length));
-      }
-      return true;
-    }).toList(growable: false);
     await session.mutateQueue((pending) {
       for (final operation in conflictOperations) {
         pending.complete(operation.clientOpId);
         _pendingConflictClientOpIds.remove(operation.clientOpId);
       }
     });
-    final nextVersion = state.syncState.serverVersion > remote.serverVersion
-        ? state.syncState.serverVersion
-        : remote.serverVersion;
-    nextState = nextState.copyWith(
-        conflicts: remainingConflicts,
-        syncState: SyncState(
-          serverVersion: nextVersion,
-          lastSyncedAt: DateTime.now().toIso8601String(),
-        ));
-    await session.replaceState(nextState);
+    final nextState = await session.write((current) {
+      final merged = mergePulledBudgets(
+          mergePulledCategories(
+              mergePulledAccounts(
+                  mergePulled(current, remote.transactions), remote.accounts),
+              remote.categories),
+          remote.budgets);
+      final remainingConflicts = current.conflicts.where((conflict) {
+        if (conflict.startsWith('sync:')) {
+          return !resolvedEntityIds
+              .contains(conflict.substring('sync:'.length));
+        }
+        if (conflict.startsWith('transactions:')) {
+          return !resolvedEntityIds
+              .contains(conflict.substring('transactions:'.length));
+        }
+        return true;
+      }).toList(growable: false);
+      final nextVersion = current.syncState.serverVersion > remote.serverVersion
+          ? current.syncState.serverVersion
+          : remote.serverVersion;
+      return merged.copyWith(
+          conflicts: remainingConflicts,
+          syncState: SyncState(
+            serverVersion: nextVersion,
+            lastSyncedAt: DateTime.now().toIso8601String(),
+          ));
+    }, initialState: state);
     return nextState;
   }
 
@@ -520,5 +530,51 @@ class FinanceRepository {
         state.conflicts.isEmpty &&
         state.quickMemories.isEmpty &&
         queue.pending().isEmpty;
+  }
+
+  FinanceState _mergeCurrentWithRequested(
+      FinanceState current, FinanceState requested) {
+    return current.copyWith(
+      currentMonth: current.currentMonth.isEmpty
+          ? requested.currentMonth
+          : current.currentMonth,
+      accounts: _appendMissingById(current.accounts, requested.accounts,
+          (item) => item.id),
+      categories: _appendMissingById(current.categories, requested.categories,
+          (item) => item.id),
+      transactions: _appendMissingById(
+          current.transactions, requested.transactions, (item) => item.id),
+      budgets: _appendMissingById(
+          current.budgets, requested.budgets, (item) => item.id),
+      exchangeRates: _appendMissingById(
+          current.exchangeRates,
+          requested.exchangeRates,
+          (item) => '${item.baseCurrency}:${item.quoteCurrency}'),
+      goals: _appendMissingById(current.goals, requested.goals, (item) => item.id),
+      reports: _appendMissingById(
+          current.reports, requested.reports, (item) => item.id),
+      conflicts: [
+        ...current.conflicts,
+        for (final conflict in requested.conflicts)
+          if (!current.conflicts.contains(conflict)) conflict,
+      ],
+      quickMemories: _appendMissingById(
+          current.quickMemories, requested.quickMemories, (item) => item.key),
+      defaultAccountId: current.defaultAccountId ?? requested.defaultAccountId,
+      syncState: current.syncState.serverVersion == 0
+          ? requested.syncState
+          : current.syncState,
+    );
+  }
+
+  List<T> _appendMissingById<T>(
+      List<T> current, List<T> requested, String Function(T item) id) {
+    final merged = [...current];
+    for (final item in requested) {
+      if (!merged.any((existing) => id(existing) == id(item))) {
+        merged.add(item);
+      }
+    }
+    return merged;
   }
 }

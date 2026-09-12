@@ -222,6 +222,41 @@ void main() {
     expect(store.message, '账户名称不能重复');
   });
 
+  test('FinanceStore propagates AssetStore validation messages', () async {
+    final store = FinanceStore(
+      repository: storeRepository(),
+      initialState: storeState(),
+    );
+
+    await store.addAccount(name: '支付宝', type: AccountType.asset);
+
+    expect(store.message, '账户名称不能重复');
+  });
+
+  test('interleaved first Asset and Ledger writes preserve both changes',
+      () async {
+    final store = FinanceStore(
+      repository: storeRepository(),
+      initialState: storeState(),
+    );
+
+    await Future.wait([
+      store.addAccount(name: '银行卡', type: AccountType.asset),
+      store.addTransaction(const FinanceTransaction(
+        id: 'interleaved-tx',
+        date: '2026-09-12',
+        type: TransactionType.expense,
+        amount: 18,
+        categoryId: 'food',
+        accountId: 'alipay',
+      )),
+    ]);
+
+    expect(store.state.accounts.any((item) => item.name == '银行卡'), isTrue);
+    expect(store.state.transactions.any((item) => item.id == 'interleaved-tx'),
+        isTrue);
+  });
+
   test('wealth selectors notify when a ledger write changes shared state',
       () async {
     final store = FinanceStore(

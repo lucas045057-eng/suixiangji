@@ -18,7 +18,7 @@ class AssetsRepository {
 
   Future<FinanceState> saveAccount(Account account, {FinanceState? baseState}) {
     return session.write(
-      (current) => AssetRules.upsertAccount(baseState ?? current, account),
+      (current) => AssetRules.upsertAccount(current, account),
       appendOperations: [
         SyncOperation(
           clientOpId:
@@ -30,21 +30,23 @@ class AssetsRepository {
           createdAt: DateTime.now().toIso8601String(),
         ),
       ],
+      initialState: baseState,
     );
   }
 
   Future<FinanceState> setDefaultAccount(String accountId,
       {FinanceState? baseState}) {
     return session.write(
-      (current) =>
-          AssetRules.setDefaultAccount(baseState ?? current, accountId),
+      (current) => AssetRules.setDefaultAccount(current, accountId),
+      initialState: baseState,
     );
   }
 
   Future<FinanceState> saveExchangeRate(ExchangeRateSnapshot snapshot,
       {FinanceState? baseState}) {
     return session.write(
-      (current) => AssetRules.applyExchangeRate(baseState ?? current, snapshot),
+      (current) => AssetRules.applyExchangeRate(current, snapshot),
+      initialState: baseState,
     );
   }
 }

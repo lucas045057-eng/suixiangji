@@ -21,18 +21,19 @@ class LedgerRepository {
   Future<FinanceState> applyTransaction(
     FinanceState Function(FinanceState) mutation, {
     required SyncOperation operation,
+    FinanceState? initialState,
   }) {
     return session.write(
       mutation,
       appendOperations: [operation],
+      initialState: initialState,
     );
   }
 
   Future<FinanceState> saveTransaction(FinanceTransaction transaction,
       {FinanceState? baseState}) {
     return applyTransaction(
-      (current) =>
-          LedgerRules.upsertTransaction(baseState ?? current, transaction),
+      (current) => LedgerRules.upsertTransaction(current, transaction),
       operation: SyncOperation(
         clientOpId: transaction.clientOpId,
         entity: 'transactions',
@@ -41,13 +42,14 @@ class LedgerRepository {
         payload: transaction.toJson(),
         createdAt: DateTime.now().toIso8601String(),
       ),
+      initialState: baseState,
     );
   }
 
   Future<FinanceState> saveCategory(Category category,
       {FinanceState? baseState}) {
     return applyTransaction(
-      (current) => LedgerRules.upsertCategory(baseState ?? current, category),
+      (current) => LedgerRules.upsertCategory(current, category),
       operation: SyncOperation(
         clientOpId:
             'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
@@ -57,6 +59,7 @@ class LedgerRepository {
         payload: category.toJson(),
         createdAt: DateTime.now().toIso8601String(),
       ),
+      initialState: baseState,
     );
   }
 
@@ -68,8 +71,8 @@ class LedgerRepository {
     final timestamp = deletedAt ?? DateTime.now().toIso8601String();
     final deleted = existing.copyWith(deletedAt: timestamp);
     return applyTransaction(
-      (current) => LedgerRules.softDeleteTransaction(
-          baseState ?? current, transactionId, timestamp),
+      (current) =>
+          LedgerRules.softDeleteTransaction(current, transactionId, timestamp),
       operation: SyncOperation(
         clientOpId:
             'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
@@ -79,6 +82,7 @@ class LedgerRepository {
         payload: deleted.toJson(),
         createdAt: timestamp,
       ),
+      initialState: baseState,
     );
   }
 }

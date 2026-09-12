@@ -68,6 +68,10 @@ class FinanceStore extends ChangeNotifier {
       _metricsCache = null;
       notifyListeners();
     };
+    assets.onMessageChanged = (message) {
+      _message = message;
+      notifyListeners();
+    };
   }
 
   final FinanceRepository repository;

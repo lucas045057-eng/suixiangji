@@ -28,8 +28,7 @@ class LocalStateSession {
 
   LocalRepository get local => _current.local;
 
-  Future<T> _serial<T>(
-      _SessionContext context, Future<T> Function() action) {
+  Future<T> _serial<T>(_SessionContext context, Future<T> Function() action) {
     final run = context.tail.then((_) => action());
     context.tail = run.then<void>((_) {}, onError: (_, __) {});
     return run;
@@ -94,11 +93,13 @@ class LocalStateSession {
   Future<FinanceState> write(
     StateMutation mutation, {
     Iterable<SyncOperation> appendOperations = const [],
+    FinanceState? initialState,
   }) {
     final context = _current;
     return _serial(context, () async {
       await _ensureLoaded(context);
-      final next = mutation(context.state ?? const FinanceState());
+      final next =
+          mutation(context.state ?? initialState ?? const FinanceState());
       for (final operation in appendOperations) {
         context.queue.enqueue(operation);
       }

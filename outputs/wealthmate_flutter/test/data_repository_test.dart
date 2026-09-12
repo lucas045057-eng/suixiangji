@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -36,6 +37,27 @@ class SyncPushClient extends http.BaseClient {
       'conflicts': const [],
       'server_version': 7,
     });
+    return http.StreamedResponse(
+      Stream<List<int>>.value(utf8.encode(body)),
+      200,
+      request: request,
+      headers: const {'content-type': 'application/json'},
+    );
+  }
+}
+
+class BlockingSyncClient extends http.BaseClient {
+  BlockingSyncClient(this.response);
+
+  final Map<String, Object?> response;
+  final requestStarted = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (!requestStarted.isCompleted) requestStarted.complete();
+    await release.future;
+    final body = jsonEncode(response);
     return http.StreamedResponse(
       Stream<List<int>>.value(utf8.encode(body)),
       200,
@@ -316,6 +338,108 @@ void main() {
 
     expect(next.transactions.single.serverVersion, 7);
     expect(repository.queue.pending(), isEmpty);
+  });
+
+  test('push merges the current session state after the network response',
+      () async {
+    final transaction = repositoryTransaction();
+    final client = BlockingSyncClient({
+      'accepted': [
+        {
+          'client_op_id': transaction.clientOpId,
+          'entity_id': transaction.id,
+          'server_version': 7,
+          'created': true,
+        }
+      ],
+      'conflicts': const [],
+      'server_version': 7,
+    });
+    final repository = FinanceRepository(
+      local: LocalRepository(MemoryKeyValueStore()),
+      queue: SyncQueue(),
+      api: ApiClient(
+        baseUrl: 'http://example.test',
+        token: 'test-token',
+        client: client,
+      ),
+    );
+    await repository.ensureLocalOwner('repository-test-user');
+    await repository.save(FinanceState(transactions: [transaction]));
+    repository.queue.enqueue(SyncOperation(
+      clientOpId: transaction.clientOpId,
+      entity: 'transactions',
+      entityId: transaction.id,
+      type: SyncOperationType.upsert,
+      payload: transaction.toJson(),
+    ));
+    await repository.persistQueue();
+
+    final push =
+        repository.pushPending(FinanceState(transactions: [transaction]));
+    await client.requestStarted.future;
+    final account = const Account(
+      id: 'during-push',
+      name: '网络等待期间新增',
+      type: AccountType.asset,
+    );
+    await repository.session.write((current) =>
+        current.copyWith(accounts: [...current.accounts, account]));
+    client.release.complete();
+
+    final next = await push;
+
+    expect(next.accounts.any((item) => item.id == account.id), isTrue);
+    expect(
+        (await repository.load())
+            ?.accounts
+            .any((item) => item.id == account.id),
+        isTrue);
+    expect(next.transactions.single.serverVersion, 7);
+  });
+
+  test('pull merges the current session state after the network response',
+      () async {
+    final client = BlockingSyncClient({
+      'items': const [],
+      'accounts': const [],
+      'categories': const [],
+      'budgets': const [],
+      'server_version': 7,
+    });
+    final repository = FinanceRepository(
+      local: LocalRepository(MemoryKeyValueStore()),
+      queue: SyncQueue(),
+      api: ApiClient(
+        baseUrl: 'http://example.test',
+        token: 'test-token',
+        client: client,
+      ),
+    );
+    await repository.ensureLocalOwner('repository-test-user');
+    const initial = FinanceState(currentMonth: '2026-09');
+    await repository.save(initial);
+
+    final pull = repository.pullChanges(initial);
+    await client.requestStarted.future;
+    final account = const Account(
+      id: 'during-pull',
+      name: '网络等待期间新增',
+      type: AccountType.asset,
+    );
+    await repository.session.write((current) =>
+        current.copyWith(accounts: [...current.accounts, account]));
+    client.release.complete();
+
+    final next = await pull;
+
+    expect(next.accounts.any((item) => item.id == account.id), isTrue);
+    expect(
+        (await repository.load())
+            ?.accounts
+            .any((item) => item.id == account.id),
+        isTrue);
+    expect(next.syncState.serverVersion, 7);
   });
 
   test('an empty local repository merges all supported pulled entities', () {

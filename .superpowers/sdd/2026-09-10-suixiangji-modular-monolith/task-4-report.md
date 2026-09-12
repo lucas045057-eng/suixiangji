@@ -55,6 +55,17 @@ Backend 新增 Assets router/service/schema/domain，并在 `main.py` 注册：
 - Flutter 聚合状态与 queue 写入：Assets、Ledger、FinanceStore 相关写入均经同一 `LocalStateSession`；没有新增 `LocalRepository.save`/`saveQueue` 旁路。`saveOwnerUserId` 仍是 owner metadata 技术写入，不是聚合状态写入。
 - 未连接生产数据库，未执行 push、PR、部署或生产数据操作。
 
+## Fix round 1（基于 `4800d222314d45f0dd1e84da6dbe79b714cc680b`）
+
+- Initial commit: `4800d222314d45f0dd1e84da6dbe79b714cc680b`。
+- 修复范围：共享 `LocalStateSession` 的 Assets/Ledger 初始写入不再以旧 `baseState` 覆盖另一侧；push/pull 网络返回阶段改为在当前 session 写入闭包中合并，冲突恢复保持同一边界；FinanceStore façade 同步 AssetStore validation message。
+- 新增回归：交错新增账户与交易、push/pull 网络等待期间新增账户、FinanceStore 账户重复名错误消息。
+- TDD 记录：新增回归和既有大部分 focused 用例先暴露失败；首轮修复验证中新增回归通过，但旧 push 兼容用例因用户分区空状态与调用方内存 state 的兼容差异仍失败。随后已补充“当前 session 优先、只回填缺失实体”的最小兼容修复；遵照用户要求立即停止，最后补丁未重新运行测试。
+- 本轮未重新运行 Flutter analyze、Backend compile/pytest/unittest 或 full regression；上一节中的 Task 4 基线结果仍保留，不将其冒充为本轮结果。
+- 本轮 `git diff --check`：通过；仅有 Git LF/CRLF 提示，无 whitespace error。
+- API URL/method/request/response/status、schema/migrations、sync 协议/排序/cursor/冲突规则、tenant isolation、Auth/partition/session 语义未主动改变；未改 `app/models.py`，未 push/PR/部署/生产数据库。
+- Final commit: 待本地提交（`fix(assets): preserve serialized state updates`）。
+
 ## 未运行与剩余风险
 
 因用户要求停止长时间验证，本轮未运行：

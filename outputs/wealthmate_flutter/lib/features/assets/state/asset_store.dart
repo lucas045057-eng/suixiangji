@@ -18,6 +18,7 @@ class AssetStore extends ChangeNotifier {
 
   /// Called when an Assets mutation also needs to update a compatibility store.
   void Function(FinanceState state)? onStateChanged;
+  void Function(String? message)? onMessageChanged;
 
   FinanceState get state => _state;
   List<Account> get accounts => List.unmodifiable(_state.accounts);
@@ -73,6 +74,11 @@ class AssetStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _notifyMessageChanged() {
+    onMessageChanged?.call(_message);
+    notifyListeners();
+  }
+
   Future<void> addAccount({
     required String name,
     required AccountType type,
@@ -82,7 +88,7 @@ class AssetStore extends ChangeNotifier {
   }) async {
     if (AssetRules.hasDuplicateAccountName(_state, name)) {
       _message = '账户名称不能重复';
-      notifyListeners();
+      _notifyMessageChanged();
       return;
     }
     final account = Account(
@@ -109,7 +115,7 @@ class AssetStore extends ChangeNotifier {
       excludingId: account.id,
     )) {
       _message = '账户名称不能重复';
-      notifyListeners();
+      _notifyMessageChanged();
       return;
     }
     if (!await _apply(
@@ -146,7 +152,7 @@ class AssetStore extends ChangeNotifier {
         rate <= 0 ||
         source.trim().isEmpty) {
       _message = '汇率需要填写有效币种、正数汇率和来源';
-      notifyListeners();
+      _notifyMessageChanged();
       return;
     }
     final snapshot = ExchangeRateSnapshot(
@@ -176,7 +182,7 @@ class AssetStore extends ChangeNotifier {
   Future<void> refreshExchangeRate(String baseCurrency) async {
     if (repository.remote == null) {
       _message = '当前未配置同步服务，无法获取公开汇率';
-      notifyListeners();
+      _notifyMessageChanged();
       return;
     }
     try {
@@ -194,7 +200,7 @@ class AssetStore extends ChangeNotifier {
       _notifyChanged();
     } on Object {
       _message = '获取汇率失败，已保留上一次可靠汇率';
-      notifyListeners();
+      _notifyMessageChanged();
     }
   }
 
