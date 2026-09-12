@@ -474,11 +474,11 @@ Interfaces:
 - budget_rules.dart exposes pure BudgetAlertLevel? levelForRatio(double ratio) and BudgetProgress progressFor(Budget budget, double spent) with current 80%/100%/over semantics.
 - budget.service exposes list/create/update/delete operations with existing month filtering and response shapes.
 
-- [ ] Step 1: Add pure threshold and Store tests.
+- [x] Step 1: Add pure threshold and Store tests.
 
 Cover healthy, warning, exhausted, and over states; month/category filtering; local persistence; queue identity; alert deduplication. Preserve existing auxiliary alert key storage behavior, but route aggregate state writes through LocalStateSession.
 
-- [ ] Step 2: Run focused Budget tests before implementation.
+- [x] Step 2: Run focused Budget tests before implementation.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -487,7 +487,7 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest tests.test_api -v
 ~~~
 
-- [ ] Step 3: Extract Budget Store/Repository and deterministic rules.
+- [x] Step 3: Extract Budget Store/Repository and deterministic rules.
 
 Move budget mutation and alert calculation from FinanceStore/FinanceRules to the Budget module. All FinanceState updates use LocalStateSession.write; no page gets access to LocalRepository or SyncQueue.
 
@@ -502,7 +502,7 @@ BudgetAlertLevel? levelForRatio(double ratio) {
 }
 ~~~
 
-- [ ] Step 4: Extract Backend Budget Router/Service.
+- [x] Step 4: Extract Backend Budget Router/Service.
 
 Move budget serialization, category ownership checks, month query and CRUD persistence into app/budget. Import Budget from unchanged app.models; preserve status codes and soft-delete behavior.
 
@@ -514,11 +514,11 @@ def list_budgets(month: str | None = Query(default=None, pattern=r'^\d{4}-\d{2}$
     return budget_service.list_budgets(db, user, month)
 ~~~
 
-- [ ] Step 5: Migrate Budget page and overview composition.
+- [x] Step 5: Migrate Budget page and overview composition.
 
 BudgetsPage depends on BudgetStore; DashboardPage consumes its read-only alert/progress view. Keep page navigation and copy unchanged.
 
-- [ ] Step 6: Run the full phase gate, diff review, report and commit.
+- [x] Step 6: Run the full phase gate, diff review, report and commit.
 
 ~~~powershell
 git add outputs\wealthmate_flutter outputs\wealthmate_backend
