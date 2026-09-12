@@ -32,12 +32,24 @@ FinanceStore transactionStore() {
   );
 }
 
+DashboardPage transactionDashboard(FinanceStore store) => DashboardPage(
+      ledger: store.ledger,
+      budgetAlerts: store.budgetAlerts,
+      draft: store.draft,
+      isDemoMode: store.isDemoMode,
+      message: store.message,
+      onSync: store.sync,
+      onUpdateDraft: store.updateDraft,
+      onConfirmDraft: store.confirmDraft,
+      openComposer: (_, {smart = false}) {},
+      openBudgets: () {},
+    );
+
 void main() {
   testWidgets('dashboard renders the cash-flow metrics', (tester) async {
     final store = transactionStore();
     await tester.pumpWidget(MaterialApp(
-        theme: wealthMateTheme(),
-        home: DashboardPage(store: store, openBudgets: () {})));
+        theme: wealthMateTheme(), home: transactionDashboard(store)));
 
     expect(find.text('本月收入'), findsOneWidget);
     expect(find.text('本月支出'), findsOneWidget);
@@ -92,8 +104,7 @@ void main() {
         accountId: 'alipay',
         note: '晚餐'));
     await tester.pumpWidget(MaterialApp(
-        theme: wealthMateTheme(),
-        home: DashboardPage(store: store, openBudgets: () {})));
+        theme: wealthMateTheme(), home: transactionDashboard(store)));
 
     await tester.scrollUntilVisible(find.text('晚餐'), 400,
         scrollable: find.byType(Scrollable).first);

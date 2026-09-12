@@ -2,37 +2,50 @@ import 'package:flutter/material.dart';
 
 import '../features/ledger/state/ledger_store.dart';
 import '../domain/models.dart';
-import '../state/finance_store.dart';
 import 'widgets/draft_confirmation_card.dart';
 import 'widgets/draft_editor.dart';
 import 'widgets/metric_card.dart';
 import 'widgets/progress_row.dart';
-import 'widgets/transaction_form.dart';
 import 'widgets/ui_helpers.dart';
 import 'transaction_detail_page.dart';
 
+typedef OpenDashboardComposer = void Function(BuildContext context,
+    {bool smart});
+
 class DashboardPage extends StatelessWidget {
-  DashboardPage(
-      {LedgerStore? ledger,
-      FinanceStore? store,
-      required this.openBudgets,
-      super.key})
-      : ledger = ledger ?? store!.ledger,
-        financeStore = store;
+  const DashboardPage({
+    required this.ledger,
+    required this.budgetAlerts,
+    required this.draft,
+    required this.isDemoMode,
+    required this.message,
+    required this.onSync,
+    required this.onUpdateDraft,
+    required this.onConfirmDraft,
+    required this.openComposer,
+    required this.openBudgets,
+    super.key,
+  });
 
   final LedgerStore ledger;
-  final FinanceStore? financeStore;
+  final List<BudgetAlert> budgetAlerts;
+  final AgentDraft? draft;
+  final bool isDemoMode;
+  final String? message;
+  final Future<void> Function()? onSync;
+  final ValueChanged<AgentDraft> onUpdateDraft;
+  final Future<bool> Function(AgentDraft) onConfirmDraft;
+  final OpenDashboardComposer openComposer;
   final VoidCallback openBudgets;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: financeStore ?? ledger,
+      listenable: ledger,
       builder: (context, _) {
-        final metrics = financeStore?.metrics ?? ledger.metrics;
+        final metrics = ledger.metrics;
         final state = ledger.state;
-        final alerts = financeStore?.budgetAlerts ?? const <BudgetAlert>[];
-        final draft = financeStore?.draft;
+        final currentDraft = draft;
         final recent = state.transactions
             .where((item) => item.deletedAt == null)
             .toList()
@@ -58,7 +71,7 @@ class DashboardPage extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                             letterSpacing: -.7))),
                 IconButton(
-                    onPressed: financeStore?.sync,
+                    onPressed: onSync,
                     tooltip: '同步',
                     icon: const Icon(Icons.sync_rounded)),
               ]),
@@ -66,8 +79,8 @@ class DashboardPage extends StatelessWidget {
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 20),
-              if (alerts.isNotEmpty) ...[
-                _newAlertBanner(alerts),
+              if (budgetAlerts.isNotEmpty) ...[
+                _newAlertBanner(budgetAlerts),
                 const SizedBox(height: 12),
               ],
               Card(
@@ -90,7 +103,7 @@ class DashboardPage extends StatelessWidget {
                                 fontWeight: FontWeight.w800)),
                         const SizedBox(height: 8),
                         Text(
-                            '储蓄率 ${(metrics.savingsRate * 100).round()}%，当前净资产 ${money(metrics.netWorth)}。${(financeStore?.isDemoMode ?? ledger.isDemoMode) ? '当前为本地演示，数据只保存在本机。' : '同步服务已配置。'}',
+                            '储蓄率 ${(metrics.savingsRate * 100).round()}%，当前净资产 ${money(metrics.netWorth)}。${isDemoMode ? '当前为本地演示，数据只保存在本机。' : '同步服务已配置。'}',
                             style: const TextStyle(
                                 color: Color(0xFFA9BDB5),
                                 fontSize: 11,
@@ -154,16 +167,18 @@ class DashboardPage extends StatelessWidget {
                 ]);
               }),
               const SizedBox(height: 16),
-              if (draft != null && financeStore != null) ...[
+              if (currentDraft != null) ...[
                 DraftConfirmationCard(
-                    draft: draft,
+                    draft: currentDraft,
                     state: state,
                     onEdit: () async {
                       final edited = await showDraftEditor(context,
-                          draft: draft, state: state);
-                      if (edited != null) financeStore!.updateDraft(edited);
+                          draft: currentDraft, state: state);
+                      if (edited != null) onUpdateDraft(edited);
                     },
-                    onConfirm: () async => financeStore!.confirmDraft(draft)),
+                    onConfirm: () async {
+                      await onConfirmDraft(currentDraft);
+                    }),
                 const SizedBox(height: 16),
               ],
               _sectionCard(
@@ -197,9 +212,9 @@ class DashboardPage extends StatelessWidget {
                                     state, item.budget.categoryId)))
                             .toList()),
               ),
-              if ((financeStore?.message ?? ledger.message) != null) ...[
+              if ((message ?? ledger.message) != null) ...[
                 const SizedBox(height: 12),
-                Text(financeStore?.message ?? ledger.message!,
+                Text(message ?? ledger.message!,
                     style: const TextStyle(
                         color: Color(0xFF2F9F7D),
                         fontSize: 11,
@@ -290,10 +305,6 @@ class DashboardPage extends StatelessWidget {
   }
 
   void _openComposer(BuildContext context, {bool smart = false}) {
-    showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        builder: (_) => TransactionForm(
-            ledger: ledger, store: financeStore, smartMode: smart));
+    openComposer(context, smart: smart);
   }
 }

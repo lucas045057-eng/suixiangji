@@ -44,14 +44,12 @@ class LedgerStore extends ChangeNotifier {
     }
   }
 
-  Future<bool> _apply(FinanceState Function(FinanceState) mutation,
-      SyncOperation operation) async {
+  Future<bool> _apply(
+      Future<FinanceState> Function(FinanceState? baseState) write) async {
     final startedLocal = repository.session.local;
-    final next = await repository.applyTransaction((current) {
-      final base = _initialStatePending ? _state : current;
-      _initialStatePending = false;
-      return mutation(base);
-    }, operation: operation);
+    final baseState = _initialStatePending ? _state : null;
+    _initialStatePending = false;
+    final next = await write(baseState);
     if (!identical(repository.session.local, startedLocal)) return false;
     _state = next;
     onStateChanged?.call(next);
@@ -61,8 +59,8 @@ class LedgerStore extends ChangeNotifier {
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
     final applied = await _apply(
-      (state) => LedgerRules.upsertTransaction(state, transaction),
-      _transactionOperation(transaction),
+      (baseState) =>
+          repository.saveTransaction(transaction, baseState: baseState),
     );
     if (!applied) return;
     _message = '已保存到本地';
@@ -80,8 +78,8 @@ class LedgerStore extends ChangeNotifier {
           : _newEditOperationId(),
     );
     final applied = await _apply(
-      (state) => LedgerRules.upsertTransaction(state, effective),
-      _transactionOperation(effective),
+      (baseState) =>
+          repository.saveTransaction(effective, baseState: baseState),
     );
     if (!applied) return;
     _message = '账目已更新';
@@ -93,17 +91,11 @@ class LedgerStore extends ChangeNotifier {
         .firstOrNull;
     if (existing == null) return;
     final deletedAt = DateTime.now().toIso8601String();
-    final deleted = existing.copyWith(deletedAt: deletedAt);
     final applied = await _apply(
-      (state) =>
-          LedgerRules.softDeleteTransaction(state, transactionId, deletedAt),
-      SyncOperation(
-        clientOpId: _newDeleteOperationId(),
-        entity: 'transactions',
-        entityId: transactionId,
-        type: SyncOperationType.delete,
-        payload: deleted.toJson(),
-        createdAt: deletedAt,
+      (baseState) => repository.deleteTransaction(
+        transactionId,
+        baseState: baseState,
+        deletedAt: deletedAt,
       ),
     );
     if (!applied) return;
@@ -118,8 +110,7 @@ class LedgerStore extends ChangeNotifier {
       type: type,
     );
     final applied = await _apply(
-      (state) => LedgerRules.upsertCategory(state, category),
-      _categoryOperation(category),
+      (baseState) => repository.saveCategory(category, baseState: baseState),
     );
     if (!applied) return;
     _message = '分类已保存';
@@ -137,8 +128,7 @@ class LedgerStore extends ChangeNotifier {
       type: existing.type,
     );
     final applied = await _apply(
-      (state) => LedgerRules.upsertCategory(state, category),
-      _categoryOperation(category),
+      (baseState) => repository.saveCategory(category, baseState: baseState),
     );
     if (!applied) return;
     _message = active ? '分类已更新' : '分类已归档';
@@ -160,31 +150,8 @@ class LedgerStore extends ChangeNotifier {
             operation.clientOpId == transaction.clientOpId);
   }
 
-  SyncOperation _transactionOperation(FinanceTransaction transaction) =>
-      SyncOperation(
-        clientOpId: transaction.clientOpId,
-        entity: 'transactions',
-        entityId: transaction.id,
-        type: SyncOperationType.upsert,
-        payload: transaction.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      );
-
-  SyncOperation _categoryOperation(Category category) => SyncOperation(
-        clientOpId:
-            'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
-        entity: 'categories',
-        entityId: category.id,
-        type: SyncOperationType.upsert,
-        payload: category.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      );
-
   String _newEditOperationId() =>
       'edit-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
-
-  String _newDeleteOperationId() =>
-      'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
 
   static String _monthKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}';

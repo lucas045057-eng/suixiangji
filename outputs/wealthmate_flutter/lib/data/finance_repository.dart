@@ -1,27 +1,29 @@
-import 'dart:math';
-
 import '../core/database/local_state_session.dart';
 import 'api_client.dart';
 import 'local_repository.dart';
 import 'sync_queue.dart';
 import '../domain/models.dart';
 import '../features/ledger/data/ledger_repository.dart';
-import '../features/ledger/domain/ledger_rules.dart';
 
 class FinanceRepository {
   FinanceRepository({
     required LocalRepository local,
     required this.queue,
     LocalStateSession? session,
+    LedgerRepository? ledgerRepository,
     this.api,
   })  : _local = local,
-        session = session ?? LocalStateSession(local: local, queue: queue);
+        session = session ?? LocalStateSession(local: local, queue: queue) {
+    _ledgerRepository =
+        ledgerRepository ?? LedgerRepository(session: this.session);
+  }
 
   final LocalRepository _local;
   LocalRepository get local =>
       _localOwnerUserId == null ? _local : _local.forUser(_localOwnerUserId!);
   final SyncQueue queue;
   final LocalStateSession session;
+  late final LedgerRepository _ledgerRepository;
   final ApiClient? api;
   String? _localOwnerUserId;
   int? _boundApiGeneration;
@@ -120,23 +122,8 @@ class FinanceRepository {
   }
 
   Future<FinanceState> applyLocalTransaction(
-      FinanceState state, FinanceTransaction transaction) async {
-    final next = state.copyWith(transactions: [
-      ...state.transactions.where((item) => item.id != transaction.id),
-      transaction,
-    ]);
-    return LedgerRepository(session: session).applyTransaction(
-      (_) => next,
-      operation: SyncOperation(
-        clientOpId: transaction.clientOpId,
-        entity: 'transactions',
-        entityId: transaction.id,
-        type: SyncOperationType.upsert,
-        payload: transaction.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      ),
-    );
-  }
+          FinanceState state, FinanceTransaction transaction) =>
+      _ledgerRepository.saveTransaction(transaction, baseState: state);
 
   /*
    * The remaining aggregate and sync methods stay below this boundary. They
@@ -189,44 +176,11 @@ class FinanceRepository {
   }
 
   Future<FinanceState> applyLocalCategory(
-      FinanceState state, Category category) async {
-    final next = LedgerRules.upsertCategory(state, category);
-    return LedgerRepository(session: session).applyTransaction(
-      (_) => next,
-      operation: SyncOperation(
-        clientOpId:
-            'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
-        entity: 'categories',
-        entityId: category.id,
-        type: SyncOperationType.upsert,
-        payload: category.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      ),
-    );
-  }
+          FinanceState state, Category category) =>
+      _ledgerRepository.saveCategory(category, baseState: state);
 
-  Future<FinanceState> softDelete(
-      FinanceState state, String transactionId) async {
-    final now = DateTime.now().toIso8601String();
-    final nextTransactions = state.transactions.map((item) {
-      return item.id == transactionId ? item.copyWith(deletedAt: now) : item;
-    }).toList();
-    final deleted =
-        nextTransactions.firstWhere((item) => item.id == transactionId);
-    final next = state.copyWith(transactions: nextTransactions);
-    return LedgerRepository(session: session).applyTransaction(
-      (_) => next,
-      operation: SyncOperation(
-        clientOpId:
-            'delete-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}',
-        entity: 'transactions',
-        entityId: transactionId,
-        type: SyncOperationType.delete,
-        payload: deleted.toJson(),
-        createdAt: now,
-      ),
-    );
-  }
+  Future<FinanceState> softDelete(FinanceState state, String transactionId) =>
+      _ledgerRepository.deleteTransaction(transactionId, baseState: state);
 
   FinanceState mergePulled(
       FinanceState localState, List<FinanceTransaction> remoteTransactions) {

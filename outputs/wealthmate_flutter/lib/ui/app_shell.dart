@@ -9,6 +9,7 @@ import 'dashboard_page.dart';
 import 'ledger_page.dart';
 import 'settings_page.dart';
 import 'stats_page.dart';
+import 'widgets/transaction_form.dart';
 import 'wealth_page.dart';
 
 class AppShell extends StatefulWidget {
@@ -53,7 +54,21 @@ class _AppShellState extends State<AppShell> {
 
   Widget _buildPage(int index) {
     return switch (index) {
-      0 => DashboardPage(store: widget.store, openBudgets: _openBudgets),
+      0 => ListenableBuilder(
+          listenable: widget.store,
+          builder: (context, _) => DashboardPage(
+            ledger: widget.store.ledger,
+            budgetAlerts: widget.store.budgetAlerts,
+            draft: widget.store.draft,
+            isDemoMode: widget.store.isDemoMode,
+            message: widget.store.message,
+            onSync: widget.store.sync,
+            onUpdateDraft: widget.store.updateDraft,
+            onConfirmDraft: widget.store.confirmDraft,
+            openComposer: _openComposer,
+            openBudgets: _openBudgets,
+          ),
+        ),
       1 => LedgerPage(store: widget.store),
       2 => StatsPage(store: widget.store),
       3 => WealthPage(store: widget.store),
@@ -73,6 +88,18 @@ class _AppShellState extends State<AppShell> {
   void _openBudgets() {
     Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => BudgetsPage(store: widget.store)));
+  }
+
+  void _openComposer(BuildContext context, {bool smart = false}) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => TransactionForm(
+        ledger: widget.store.ledger,
+        store: smart ? widget.store : null,
+        smartMode: smart,
+      ),
+    );
   }
 
   @override

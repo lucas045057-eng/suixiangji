@@ -153,7 +153,18 @@ void main() {
     await editTransaction(tester, store, amount: '92.92');
     await tester.pumpWidget(MaterialApp(
       theme: wealthMateTheme(),
-      home: DashboardPage(store: store, openBudgets: () {}),
+      home: DashboardPage(
+        ledger: store.ledger,
+        budgetAlerts: store.budgetAlerts,
+        draft: store.draft,
+        isDemoMode: store.isDemoMode,
+        message: store.message,
+        onSync: store.sync,
+        onUpdateDraft: store.updateDraft,
+        onConfirmDraft: store.confirmDraft,
+        openComposer: (_, {smart = false}) {},
+        openBudgets: () {},
+      ),
     ));
 
     expect(store.metrics.expense, 92.92);
