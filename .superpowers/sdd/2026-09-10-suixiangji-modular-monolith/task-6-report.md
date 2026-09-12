@@ -51,6 +51,17 @@ Baseline: `7aaea3a`.
 - Verification: QuickEntry focused tests passed 10/10; `flutter analyze` passed with `No issues found!`.
 - API, schema, migration, model, and sync protocol/algorithm files were not changed. Full regression remains intentionally unrun.
 
+## Scoped re-review and post-fix full regression
+
+- Scoped re-review: APPROVE; both Important findings were addressed and no new Critical/Important issue was found.
+- Root `npm test`: 7 passed, 0 failed。
+- Backend `python -m compileall -q app tests`: passed。
+- Backend `python -m pytest tests -q --basetemp=C:\\Users\\Admin\\AppData\\Local\\Temp\\suixiangji-pytest-quick-entry-fix`: 120 passed, 0 failed, 1 pre-existing warning。
+- Backend `python -m unittest discover -s tests -v`: 50 passed, 0 failed。
+- Flutter `flutter analyze`: no issues found。
+- Flutter full `flutter test`: 234 passed, 0 failed。
+- Fix commits: `7aaea3a` and `c155feb`; no push, PR, deployment, or production database access。
+
 ## Fix round 1 — confirmation lifecycle completion
 
 - Baseline: `7aaea3a`; the working diff contains only this report, `QuickEntryStore`, `FinanceStore`, and the QuickEntry focused test file.
