@@ -70,3 +70,139 @@ python -m pytest -q --basetemp E:\codex\pytest-task3-20260911
 - The full backend suite passes with one pre-existing LangGraph pending-deprecation warning about `allowed_objects`.
 
 No migrations, production database changes, push, PR, deployment, generated product artifacts, or unrelated cleanup were performed.
+
+---
+
+# Task 3 Fix Round 1
+
+## Result
+
+`DONE_WITH_CONCERNS`
+
+Both Important review findings are corrected. `DashboardPage` no longer imports, accepts, or reads `FinanceStore`; `AppShell` supplies the Ledger read model plus the existing non-Ledger projections and actions needed to preserve sync, budget-alert, draft-confirmation, and composer behavior. `FinanceRepository` now retains its public compatibility entry points while delegating transaction save, category save, and transaction delete directly to one injected `LedgerRepository`. Ledger state reconstruction and the corresponding sync-operation construction now live under `features/ledger`.
+
+## Commits
+
+- Task 3 implementation commit: `a571eed` (`refactor(ledger): extract ledger module`)
+- Task 3 report commit: `3aef7c2` (`docs(ledger): record task 3 verification`)
+- Fix Round 1 implementation commit: `894aec1` (`fix(ledger): enforce dashboard and repository boundaries`)
+
+## RED evidence
+
+### Finding 1 — Dashboard universal-store boundary
+
+The existing dashboard widget test was first changed to construct `DashboardPage` from Ledger and narrow non-Ledger inputs, before changing production code.
+
+```text
+Command:
+flutter test test\transaction_flow_test.dart --plain-name "dashboard renders the cash-flow metrics"
+
+Output:
+test\transaction_flow_test.dart:37:7: Error: No named parameter with the name 'budgetAlerts'.
+      budgetAlerts: store.budgetAlerts,
+      ^^^^^^^^^^^^
+lib\ui\dashboard_page.dart:15:3: Context: Found this candidate, but the arguments don't match.
+  DashboardPage(
+  ^^^^^^^^^^^^^
+00:00 +0 -1: Failed to load ".../test/transaction_flow_test.dart": Compilation failed for testPath=.../test/transaction_flow_test.dart
+00:00 +0 -1: Some tests failed.
+Exit code: 1
+```
+
+This was the expected boundary failure: the production widget still exposed the old universal-store constructor instead of the required narrow inputs.
+
+### Finding 2 — FinanceRepository compatibility delegation
+
+A sentinel `LedgerRepository` test double was added first. It returns an identity-distinct state from each Ledger mutation method, allowing the test to prove that every FinanceRepository compatibility method delegates rather than reconstructing state or operations itself.
+
+```text
+Command:
+flutter test test\features\ledger\ledger_store_test.dart --plain-name "FinanceRepository delegates Ledger mutation compatibility methods"
+
+Output:
+test\features\ledger\ledger_store_test.dart:155:7: Error: No named parameter with the name 'ledgerRepository'.
+      ledgerRepository:
+      ^^^^^^^^^^^^^^^^
+lib\data\finance_repository.dart:9:3: Context: Found this candidate, but the arguments don't match.
+  FinanceRepository({
+  ^^^^^^^^^^^^^^^^^
+00:00 +0 -1: Failed to load ".../test/features/ledger/ledger_store_test.dart": Compilation failed for testPath=.../test/features/ledger/ledger_store_test.dart
+00:00 +0 -1: Some tests failed.
+Exit code: 1
+```
+
+This was the expected façade failure: FinanceRepository had no injectable Ledger delegate and still owned the implementation.
+
+## GREEN evidence
+
+```text
+Command:
+flutter test test\transaction_flow_test.dart --plain-name "dashboard renders the cash-flow metrics"
+Output: 00:01 +1: All tests passed!
+
+Command:
+flutter test test\features\ledger\ledger_store_test.dart --plain-name "FinanceRepository delegates Ledger mutation compatibility methods"
+Output: 00:00 +1: All tests passed!
+
+Command:
+flutter test test\features\ledger\ledger_store_test.dart test\transaction_flow_test.dart test\data_repository_test.dart test\pending_create_edit_queue_consistency_test.dart test\v1_session_partition_test.dart
+Output: 00:02 +35: All tests passed!
+
+Command:
+flutter test test\transaction_flow_test.dart test\dashboard_stale_state_diagnostic_test.dart test\overview_pages_test.dart
+Output: 00:02 +16: All tests passed!
+
+Command:
+flutter test --reporter compact
+Output: 00:08 +203: All tests passed!
+
+Command:
+flutter analyze
+First output: 1 info issue, `use_super_parameters`, in the new test sentinel constructor.
+Correction: converted the test constructor to a super parameter.
+Final output: No issues found! (ran in 2.7s)
+
+Command:
+python -m unittest discover -s tests -p test_api.py -v
+Output: Ran 32 tests in 4.172s — OK
+
+Command:
+python -m unittest discover -s tests -p test_domain.py -v
+Output: Ran 5 tests in 0.001s — OK
+
+Command:
+python -m pytest -q --basetemp E:\codex\pytest-task3-fix1-20260912
+Output: 118 passed, 1 warning in 37.29s
+
+Command:
+git diff --check
+Output: no whitespace errors
+```
+
+Boundary audit results:
+
+- `DashboardPage` has no `FinanceStore`, `financeStore`, or `store:` reference. It reads Ledger state/metrics from `LedgerStore` and receives existing cross-feature values/actions explicitly.
+- `AppShell` remains the composition root and supplies those narrow inputs. Normal and smart transaction composers retain their previous Ledger and draft-only wiring.
+- `FinanceRepository.applyLocalTransaction`, `applyLocalCategory`, and `softDelete` are direct `_ledgerRepository` delegations.
+- Transaction/category state reconstruction and sync-operation creation are in `features/ledger/data/ledger_repository.dart`.
+- All Ledger aggregate/queue writes continue through `LocalStateSession.write`; no page performs a direct local/queue write.
+- Backend files and `app/models.py` are unchanged in this fix round.
+
+## Changed files
+
+- `outputs/wealthmate_flutter/lib/ui/dashboard_page.dart`
+- `outputs/wealthmate_flutter/lib/ui/app_shell.dart`
+- `outputs/wealthmate_flutter/lib/data/finance_repository.dart`
+- `outputs/wealthmate_flutter/lib/features/ledger/data/ledger_repository.dart`
+- `outputs/wealthmate_flutter/lib/features/ledger/state/ledger_store.dart`
+- `outputs/wealthmate_flutter/test/transaction_flow_test.dart`
+- `outputs/wealthmate_flutter/test/dashboard_stale_state_diagnostic_test.dart`
+- `outputs/wealthmate_flutter/test/features/ledger/ledger_store_test.dart`
+- `.superpowers/sdd/2026-09-10-suixiangji-modular-monolith/task-3-report.md`
+
+## Concerns
+
+- The brief's literal backend command, `python -m unittest tests.test_api tests.test_domain -v`, still cannot import the repository's existing absolute `test_sync_acceptance` module from the backend root. Equivalent discovery invocations pass all 37 requested tests without changing test imports.
+- The full backend suite remains green with one pre-existing LangGraph pending-deprecation warning about `allowed_objects`.
+
+No migration, production database access, push, PR, deployment, generated artifact, or unrelated cleanup was performed in Fix Round 1.
