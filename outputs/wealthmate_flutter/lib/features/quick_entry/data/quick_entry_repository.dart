@@ -1,6 +1,5 @@
 import '../../../core/database/local_state_session.dart';
 import '../../../data/api_client.dart';
-import '../../../data/local_repository.dart';
 import '../../../domain/models.dart';
 import '../domain/quick_entry_rules.dart';
 import 'quick_entry_remote_data_source.dart';

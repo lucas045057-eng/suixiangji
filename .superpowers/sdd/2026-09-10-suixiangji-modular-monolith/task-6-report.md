@@ -32,3 +32,10 @@ Full regression was not run, as requested. Full Flutter analyze/compile was also
 ## Remaining risk
 
 The full phase gate remains outstanding by design: full Flutter tests, full Flutter analyze, backend full test suite, and Node/full repository tests were not run in this handoff.
+
+## Fix round 1 — analyzer warning
+
+- Failure: Flutter analyze reported the unused import `../../../data/local_repository.dart` in `features/quick_entry/data/quick_entry_repository.dart` at line 3.
+- Fix: removed only that unused import; no behavior, payload, clientOpId, API, schema, or sync code changed.
+- Verification: `flutter analyze` passed with `No issues found!`; QuickEntry focused tests passed 7/7.
+- Full regression and other long-running suites remain intentionally unrun.
