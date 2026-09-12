@@ -54,13 +54,7 @@ async def make_draft(text: str, model: ModelAdapter | None = None) -> tuple[dict
 
 
 def deterministic_report_text(metrics: dict[str, Any], previous: dict[str, Any] | None) -> str:
-    if not metrics.get("data_sufficient"):
-        return "当前数据不足，无法判断完整的月度财务情况。请补充账目或汇率后重新生成。"
-    change = ""
-    if previous:
-        delta = metrics["expense"] - previous.get("expense", 0)
-        change = f"与上月相比，本月支出变化为 {delta:.2f} 元。"
-    advice = "建议继续保持当前记录习惯，并优先检查支出最高的分类。"
-    if metrics["savings_rate"] < 20:
-        advice = "本月储蓄率低于 20%，建议下月先为高频支出分类设置一个可执行上限。"
-    return f"本月收入 {metrics['income']:.2f} 元，支出 {metrics['expense']:.2f} 元，结余 {metrics['balance']:.2f} 元，储蓄率 {metrics['savings_rate']:.2f}%。{change}{advice}"
+    """Compatibility façade for callers that have not moved to Insights yet."""
+    from ..insights.service import deterministic_report_text as build_report_text
+
+    return build_report_text(metrics, previous)

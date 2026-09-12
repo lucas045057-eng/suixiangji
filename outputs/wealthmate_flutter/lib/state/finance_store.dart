@@ -4,7 +4,6 @@ import 'dart:convert';
 import '../data/finance_repository.dart';
 import '../data/api_client.dart';
 import '../domain/demo_state.dart';
-import '../domain/finance_rules.dart';
 import '../domain/models.dart';
 import '../features/auth/data/auth_remote_data_source.dart';
 import '../features/auth/data/auth_repository.dart';
@@ -17,6 +16,9 @@ import '../features/budget/state/budget_store.dart';
 import '../features/quick_entry/data/quick_entry_remote_data_source.dart';
 import '../features/quick_entry/data/quick_entry_repository.dart';
 import '../features/quick_entry/state/quick_entry_store.dart';
+import '../features/insights/data/insights_remote_data_source.dart';
+import '../features/insights/data/insights_repository.dart';
+import '../features/insights/state/insights_store.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
@@ -60,7 +62,19 @@ class FinanceStore extends ChangeNotifier {
                   (repository.api == null
                       ? DemoData.create()
                       : const FinanceState()),
-            ) {
+            ),
+        insights = InsightsStore(
+          repository: InsightsRepository(
+            session: repository.session,
+            remote: repository.api == null
+                ? null
+                : InsightsRemoteDataSource(api: repository.api!),
+          ),
+          initialState: initialState ??
+              (repository.api == null
+                  ? DemoData.create()
+                  : const FinanceState()),
+        ) {
     quickEntry = QuickEntryStore(
       repository: QuickEntryRepository(
         session: repository.session,
@@ -92,23 +106,19 @@ class FinanceStore extends ChangeNotifier {
       quickEntry.adoptState(next);
       assets.adoptState(next);
       budget.adoptState(next);
+      insights.adoptState(next, notify: true);
       assets.notifyListeners();
       budget.notifyListeners();
-      _metricsState = null;
-      _metricsMonth = null;
-      _metricsCache = null;
       notifyListeners();
     };
     assets.onStateChanged = (next) {
       _state = next;
       ledger.adoptState(next);
       budget.adoptState(next);
+      insights.adoptState(next, notify: true);
       ledger.notifyListeners();
       budget.notifyListeners();
       _message = assets.message;
-      _metricsState = null;
-      _metricsMonth = null;
-      _metricsCache = null;
       notifyListeners();
     };
     assets.onMessageChanged = (message) {
@@ -119,9 +129,7 @@ class FinanceStore extends ChangeNotifier {
       _state = next;
       assets.adoptState(next);
       ledger.adoptState(next);
-      _metricsState = null;
-      _metricsMonth = null;
-      _metricsCache = null;
+      insights.adoptState(next, notify: true);
       notifyListeners();
     };
     quickEntry.onStateChanged = (next) {
@@ -129,9 +137,7 @@ class FinanceStore extends ChangeNotifier {
       assets.adoptState(next);
       ledger.adoptState(next);
       budget.adoptState(next);
-      _metricsState = null;
-      _metricsMonth = null;
-      _metricsCache = null;
+      insights.adoptState(next, notify: true);
       notifyListeners();
     };
   }
@@ -140,6 +146,7 @@ class FinanceStore extends ChangeNotifier {
   final AssetStore assets;
   final LedgerStore ledger;
   final BudgetStore budget;
+  final InsightsStore insights;
   late final QuickEntryStore quickEntry;
   FinanceState _state;
   final AuthStore? _authStore;
@@ -147,9 +154,6 @@ class FinanceStore extends ChangeNotifier {
   final Set<String> _pendingDeletionCleanupUserIds = <String>{};
   bool _pendingDeletionCleanupStateUnknown = false;
   int _sessionGeneration = 0;
-  FinanceState? _metricsState;
-  String? _metricsMonth;
-  FinanceMetrics? _metricsCache;
 
   FinanceState get state => _state;
   AgentDraft? get draft => quickEntry.draft;
@@ -172,24 +176,14 @@ class FinanceStore extends ChangeNotifier {
   bool get isDemoMode => repository.api == null;
   List<Category> get activeCategories =>
       _state.categories.where((item) => item.active).toList(growable: false);
-  FinanceMetrics get metrics {
-    final month = _state.currentMonth.isEmpty
-        ? _monthKey(DateTime.now())
-        : _state.currentMonth;
-    if (identical(_metricsState, _state) &&
-        _metricsMonth == month &&
-        _metricsCache != null) return _metricsCache!;
-    _metricsState = _state;
-    _metricsMonth = month;
-    _metricsCache = FinanceRules.deriveMetrics(_state, month);
-    return _metricsCache!;
-  }
+  FinanceMetrics get metrics => insights.metrics;
 
   void _adoptFeatureState() {
     assets.adoptState(_state);
     ledger.adoptState(_state);
     budget.adoptState(_state);
     quickEntry.adoptState(_state);
+    insights.adoptState(_state);
   }
 
   Future<void> load() async {
@@ -226,9 +220,6 @@ class FinanceStore extends ChangeNotifier {
         _state = const FinanceState();
         quickEntry.clearDraft();
         budget.clearAlerts();
-        _metricsState = null;
-        _metricsMonth = null;
-        _metricsCache = null;
         _adoptFeatureState();
         _authStore?.clearSession();
         await _attemptPendingDeletionCleanup(notify: false);
@@ -259,9 +250,6 @@ class FinanceStore extends ChangeNotifier {
     _adoptFeatureState();
     quickEntry.clearDraft();
     budget.clearAlerts();
-    _metricsState = null;
-    _metricsMonth = null;
-    _metricsCache = null;
     _authStore?.clearSession();
     _message = pendingDeletionCleanupMessage;
   }
@@ -583,9 +571,6 @@ class FinanceStore extends ChangeNotifier {
     quickEntry.clearDraft();
     _message = null;
     budget.clearAlerts();
-    _metricsState = null;
-    _metricsMonth = null;
-    _metricsCache = null;
     notifyListeners();
   }
 
@@ -630,52 +615,10 @@ class FinanceStore extends ChangeNotifier {
   String exportJson() => jsonEncode(_state.toJson());
 
   Future<void> generateMonthlyReport() async {
-    if (repository.api != null) {
-      try {
-        final result = await repository.api!
-            .fetchMonthlyReport(metrics.monthKey, force: true);
-        final remoteReport = Report(
-          id: '${result['id'] ?? 'report-${metrics.monthKey}'}',
-          month: result['month'] as String? ?? metrics.monthKey,
-          title: ((result['ai_status'] as String?) == 'success')
-              ? 'AI 月度财务分析'
-              : '本月程序统计（AI 未配置）',
-          summary: result['summary'] as String? ?? '当前数据不足，无法判断。',
-          generatedAt: result['generated_at'] as String? ??
-              DateTime.now().toIso8601String(),
-        );
-        _state = _state.copyWith(reports: [
-          ..._state.reports.where((item) => item.month != metrics.monthKey),
-          remoteReport
-        ]);
-        _adoptFeatureState();
-        await repository.save(_state);
-        _message = '月度报告已从服务端更新';
-        notifyListeners();
-        return;
-      } on ApiFailure {
-        _message = '报告服务暂不可用，保留本地程序统计';
-      }
-    }
-    final current = metrics;
-    final report = Report(
-      id: 'report-${current.monthKey}',
-      month: current.monthKey,
-      title: current.savings >= 0 ? '本月结余正在形成安全垫' : '本月支出超过收入，需要留意节奏',
-      summary:
-          '本月收入 ${current.income.toStringAsFixed(0)} 元，支出 ${current.expense.toStringAsFixed(0)} 元，储蓄率 ${(current.savingsRate * 100).round()}%。',
-      generatedAt: DateTime.now().toIso8601String(),
-    );
-    _state = _state.copyWith(reports: [
-      ..._state.reports.where((item) => item.month != current.monthKey),
-      report
-    ]);
+    await insights.generateMonthlyReport();
+    _state = insights.state;
     _adoptFeatureState();
-    await repository.save(_state);
-    _message = '月度报告已更新';
+    _message = insights.message;
     notifyListeners();
   }
-
-  static String _monthKey(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}';
 }

@@ -1,22 +1,17 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
-from typing import Literal
+from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from .assets import service as assets_service
 from .auth.router import router as auth_router
-from .auth.service import profile_json as _profile_json
 from .config import get_settings
 from .core.dependencies import get_current_user as _user
-from .core.dependencies import oauth2_scheme
 from .db import get_db
-from .domain import TransactionRecord, calculate_cny, classify_natural_language, monthly_metrics, money, period_metrics
-from .models import Account, AgentLog, Budget, Category, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
+from .models import Account, Budget, Category, SyncOperation, Transaction, User
 from .quick_entry.router import agent_draft, router as quick_entry_router
 from .quick_entry.schemas import DraftIn
 from .schemas import RestoreIn, SyncPushIn
@@ -30,26 +25,22 @@ from .ledger.service import (
     _save_tx,
     _tx_json,
 )
-from .services.agent import configured_model, deterministic_report_text, make_draft
+from .services.agent import configured_model
 from .assets.service import fetch_frankfurter_rate
+from .insights.router import router as insights_router
+from .insights import service as insights_service
+from .insights.service import json_metrics as _json_metrics
+from .insights.service import records as _records
 
 
 router = APIRouter()
 router.include_router(auth_router)
 router.include_router(quick_entry_router)
-
-
-def _date(value: str | date | None, fallback: date | None = None) -> date:
-    if isinstance(value, date):
-        return value
-    if value:
-        return date.fromisoformat(value[:10])
-    return fallback or date.today()
+router.include_router(insights_router)
 
 
 _account_json = assets_service.account_json
 _save_account = assets_service.save_account
-_wealth = assets_service.wealth
 
 
 def _order_sync_operations(operations: list) -> list:
@@ -75,38 +66,6 @@ def _order_sync_operations(operations: list) -> list:
     ]
 
 
-def _records(db: Session, user: User) -> list[TransactionRecord]:
-    account_names = {row.id: row.name for row in db.query(Account).filter(Account.user_id == user.id).all()}
-    return [
-        TransactionRecord(
-            row.id,
-            row.kind,
-            row.amount,
-            row.currency,
-            row.cny_amount,
-            row.category_name,
-            row.occurred_on,
-            row.account_id,
-            row.deleted_at is not None,
-            row.occurred_at,
-            account_names.get(row.account_id or ""),
-        )
-        for row in db.query(Transaction).filter(Transaction.user_id == user.id).all()
-    ]
-
-
-def _json_metrics(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    if isinstance(value, (date, datetime)):
-        return value.isoformat()
-    if isinstance(value, dict):
-        return {key: _json_metrics(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_json_metrics(item) for item in value]
-    return value
-
-
 @router.get("/health")
 def health() -> dict:
     return {
@@ -117,92 +76,8 @@ def health() -> dict:
     }
 
 
-@router.get("/stats")
-def stats(
-    month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
-    period: Literal["day", "week", "month", "custom"] | None = Query(default=None),
-    start: str | None = Query(default=None),
-    end: str | None = Query(default=None),
-    db: Session = Depends(get_db),
-    user: User = Depends(_user),
-) -> dict:
-    rows = _records(db, user)
-    if period is None:
-        if month is None:
-            raise HTTPException(status_code=422, detail="month 或 period 必须提供")
-        year, month_number = map(int, month.split("-"))
-        range_start = date(year, month_number, 1)
-        range_end = date(year + (month_number == 12), 1 if month_number == 12 else month_number + 1, 1) - timedelta(days=1)
-        current = monthly_metrics(rows, month)
-        aggregate = period_metrics(rows, "month", range_start, range_end)
-        previous = f"{year - 1:04d}-12" if month_number == 1 else f"{year:04d}-{month_number - 1:02d}"
-        prior = monthly_metrics(rows, previous)
-        current.update(aggregate)
-        current["previous"] = prior
-        current["expense_change"] = current["expense"] - prior["expense"]
-        return _json_metrics(current)
-
-    if start is None:
-        raise HTTPException(status_code=422, detail="period 统计必须提供 start")
-    range_start = _date(start)
-    if end is not None:
-        range_end = _date(end)
-    elif period == "day":
-        range_end = range_start
-    elif period == "week":
-        range_end = range_start + timedelta(days=6)
-    elif period == "month":
-        range_end = date(range_start.year + (range_start.month == 12), 1 if range_start.month == 12 else range_start.month + 1, 1) - timedelta(days=1)
-    else:
-        range_end = range_start
-    aggregate = period_metrics(rows, period, range_start, range_end)
-    return _json_metrics({
-        "month": month or f"{range_start.year:04d}-{range_start.month:02d}",
-        "income": aggregate["income_total"],
-        "expense": aggregate["expense_total"],
-        "balance": aggregate["net_worth_change"],
-        "savings_rate": money(aggregate["net_worth_change"] / aggregate["income_total"] * 100) if aggregate["income_total"] else Decimal("0"),
-        "category_totals": aggregate["expense_by_category"],
-        "data_sufficient": bool(rows) and aggregate["pending_conversion_count"] == 0,
-        **aggregate,
-    })
-
-
-@router.get("/reports/monthly/{month}")
 async def monthly_report(month: str, force: bool = False, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    existing = db.query(MonthlyReport).filter(MonthlyReport.user_id == user.id, MonthlyReport.month == month).first()
-    if existing and not force:
-        return {"id": existing.id, "month": existing.month, "metrics": existing.metrics, "summary": existing.narrative, "ai_status": existing.ai_status, "generated_at": existing.created_at}
-    metrics = stats(month=month, period=None, start=None, end=None, db=db, user=user)
-    prior_report = db.query(MonthlyReport).filter(MonthlyReport.user_id == user.id, MonthlyReport.month != month).order_by(MonthlyReport.month.desc()).first()
-    narrative = deterministic_report_text(metrics, prior_report.metrics if prior_report else None)
-    ai_status = "unavailable"
-    model = configured_model()
-    if get_settings().llm_provider.lower() not in ("", "none", "disabled"):
-        try:
-            narrative, meta = await model.complete("monthly_report", {"month": month, "metrics": metrics})
-            ai_status = "success"
-            db.add(AgentLog(user_id=user.id, task="monthly_report", model=meta.get("model"), status="success", input_tokens=meta.get("input_tokens"), output_tokens=meta.get("output_tokens"), result_summary="structured metrics only"))
-        except Exception:
-            db.add(AgentLog(user_id=user.id, task="monthly_report", model=get_settings().llm_model or None, status="unavailable", result_summary="Provider unavailable; sensitive error details omitted"))
-    stored_metrics = _json_metrics(metrics)
-    if existing:
-        existing.metrics = stored_metrics
-        existing.narrative = narrative
-        existing.ai_status = ai_status
-        row = existing
-    else:
-        row = MonthlyReport(user_id=user.id, month=month, metrics=stored_metrics, narrative=narrative, ai_status=ai_status)
-        db.add(row)
-    wealth_data = _wealth(db, user)
-    snapshot = db.query(NetWorthSnapshot).filter(NetWorthSnapshot.user_id == user.id, NetWorthSnapshot.month == month).first()
-    snapshot_data = {"total_assets_cny": wealth_data["total_assets"], "total_liabilities_cny": wealth_data["total_liabilities"], "net_worth_cny": wealth_data["net_worth"], "pending_conversion_count": wealth_data["pending_conversion_count"]}
-    if not snapshot:
-        # A month's snapshot is immutable once written, so later exchange-rate refreshes cannot rewrite history.
-        db.add(NetWorthSnapshot(user_id=user.id, month=month, **snapshot_data))
-    db.commit()
-    return {"id": row.id, "month": month, "metrics": metrics, "summary": narrative, "ai_status": ai_status, "generated_at": row.created_at}
-
+    return await insights_service.monthly_report(db, user, month, force=force)
 
 @router.post("/sync/push")
 def sync_push(payload: SyncPushIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
