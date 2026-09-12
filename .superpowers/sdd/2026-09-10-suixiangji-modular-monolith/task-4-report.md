@@ -64,7 +64,22 @@ Backend 新增 Assets router/service/schema/domain，并在 `main.py` 注册：
 - 本轮未重新运行 Flutter analyze、Backend compile/pytest/unittest 或 full regression；上一节中的 Task 4 基线结果仍保留，不将其冒充为本轮结果。
 - 本轮 `git diff --check`：通过；仅有 Git LF/CRLF 提示，无 whitespace error。
 - API URL/method/request/response/status、schema/migrations、sync 协议/排序/cursor/冲突规则、tenant isolation、Auth/partition/session 语义未主动改变；未改 `app/models.py`，未 push/PR/部署/生产数据库。
-- Final commit: 待本地提交（`fix(assets): preserve serialized state updates`）。
+- Final fix commit: `3c47dc9` (`fix(assets): preserve serialized state updates`).
+
+## Post-fix verification
+
+After fix round 1 and the scoped re-review approval, the following commands were rerun from the working tree at `3c47dc9`:
+
+- Root `npm test`: 7 passed, 0 failed.
+- Backend `python -m compileall -q app tests`: passed.
+- Backend `python -m pytest tests -q --basetemp=C:\\Users\\Admin\\AppData\\Local\\Temp\\suixiangji-pytest-assets`: 119 passed, 0 failed, 1 pre-existing warning.
+- Backend `python -m unittest discover -s tests -v`: 49 passed, 0 failed.
+- Flutter focused `flutter test test/data_repository_test.dart test/finance_store_test.dart test/features/assets/asset_store_test.dart`: 36 passed, 0 failed.
+- Flutter `flutter analyze`: no issues found.
+- Flutter full `flutter test`: 214 passed, 0 failed.
+- `git diff --check`: passed.
+
+The old push compatibility assertion and the new interleaving/session regression tests both pass after the final fix. The temporary pytest directory was removed after verification and was not committed.
 
 ## 未运行与剩余风险
 
