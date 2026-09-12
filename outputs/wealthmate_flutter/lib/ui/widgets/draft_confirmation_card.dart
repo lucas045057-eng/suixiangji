@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/finance_rules.dart';
 import '../../domain/models.dart';
+import '../../features/quick_entry/domain/quick_entry_rules.dart';
 import 'ui_helpers.dart';
 
 class DraftConfirmationCard extends StatelessWidget {
@@ -19,7 +19,7 @@ class DraftConfirmationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canPost = FinanceRules.canPostDraft(draft);
+    final canPost = QuickEntryRules.canPost(draft);
     return Card(
       color: const Color(0xFFF7F6FF),
       shape: RoundedRectangleBorder(
@@ -65,8 +65,8 @@ class DraftConfirmationCard extends StatelessWidget {
           const SizedBox(height: 14),
           Row(children: [
             Expanded(
-                child: OutlinedButton(
-                    onPressed: onEdit, child: const Text('修改'))),
+                child:
+                    OutlinedButton(onPressed: onEdit, child: const Text('修改'))),
             const SizedBox(width: 10),
             Expanded(
                 child: FilledButton(

@@ -14,6 +14,9 @@ import '../features/ledger/data/ledger_remote_data_source.dart';
 import '../features/ledger/data/ledger_repository.dart';
 import '../features/ledger/state/ledger_store.dart';
 import '../features/budget/state/budget_store.dart';
+import '../features/quick_entry/data/quick_entry_remote_data_source.dart';
+import '../features/quick_entry/data/quick_entry_repository.dart';
+import '../features/quick_entry/state/quick_entry_store.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
@@ -58,6 +61,24 @@ class FinanceStore extends ChangeNotifier {
                       ? DemoData.create()
                       : const FinanceState()),
             ) {
+    quickEntry = QuickEntryStore(
+      repository: QuickEntryRepository(
+        session: repository.session,
+        remote: repository.api == null
+            ? null
+            : QuickEntryRemoteDataSource(api: repository.api),
+        onQuickMemoriesChanged: (memories) async {
+          final auth = _authStore;
+          if (auth == null) return;
+          try {
+            await auth.updateProfile(quickMemories: memories);
+          } on ApiFailure {
+            // The confirmed transaction remains safe locally and will sync later.
+          }
+        },
+      ),
+      initialState: _state,
+    );
     if (!identical(budget.repository.session, repository.session)) {
       throw ArgumentError.value(
         budgetStore,
@@ -67,6 +88,7 @@ class FinanceStore extends ChangeNotifier {
     }
     ledger.onStateChanged = (next) {
       _state = next;
+      quickEntry.adoptState(next);
       assets.adoptState(next);
       budget.adoptState(next);
       assets.notifyListeners();
@@ -101,15 +123,24 @@ class FinanceStore extends ChangeNotifier {
       _metricsCache = null;
       notifyListeners();
     };
+    quickEntry.onStateChanged = (next) {
+      _state = next;
+      assets.adoptState(next);
+      ledger.adoptState(next);
+      budget.adoptState(next);
+      _metricsState = null;
+      _metricsMonth = null;
+      _metricsCache = null;
+      notifyListeners();
+    };
   }
 
   final FinanceRepository repository;
   final AssetStore assets;
   final LedgerStore ledger;
   final BudgetStore budget;
+  late final QuickEntryStore quickEntry;
   FinanceState _state;
-  AgentDraft? _draft;
-  String? _draftSourceText;
   final AuthStore? _authStore;
   String? _message;
   final Set<String> _pendingDeletionCleanupUserIds = <String>{};
@@ -120,7 +151,7 @@ class FinanceStore extends ChangeNotifier {
   FinanceMetrics? _metricsCache;
 
   FinanceState get state => _state;
-  AgentDraft? get draft => _draft;
+  AgentDraft? get draft => quickEntry.draft;
   AuthStore? get authStore => _authStore;
   UserProfile? get profile => _authStore?.profile;
   String? get message => _message;
@@ -157,6 +188,7 @@ class FinanceStore extends ChangeNotifier {
     assets.adoptState(_state);
     ledger.adoptState(_state);
     budget.adoptState(_state);
+    quickEntry.adoptState(_state);
   }
 
   Future<void> load() async {
@@ -191,8 +223,7 @@ class FinanceStore extends ChangeNotifier {
         await repository.clearPendingOperations();
         repository.unbindLocalOwner();
         _state = const FinanceState();
-        _draft = null;
-        _draftSourceText = null;
+        quickEntry.clearDraft();
         budget.clearAlerts();
         _metricsState = null;
         _metricsMonth = null;
@@ -225,8 +256,7 @@ class FinanceStore extends ChangeNotifier {
     repository.unbindLocalOwner();
     _state = const FinanceState();
     _adoptFeatureState();
-    _draft = null;
-    _draftSourceText = null;
+    quickEntry.clearDraft();
     budget.clearAlerts();
     _metricsState = null;
     _metricsMonth = null;
@@ -478,97 +508,33 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> createDraft(String text, {DateTime? now}) async {
-    final localDraft = FinanceRules.completeNaturalLanguageDraft(text,
-        now: now ?? DateTime.now(), state: _state);
-    _draft = localDraft;
-    _draftSourceText = text;
-    _message = null;
+    await quickEntry.createDraft(text, now: now);
+    _message = quickEntry.message;
     notifyListeners();
-    if (repository.api != null) {
-      try {
-        final remoteDraft = await repository.api!.postAgentDraft(text);
-        _draft = localDraft.copyWith(
-          amount:
-              remoteDraft.amount > 0 ? remoteDraft.amount : localDraft.amount,
-          type: remoteDraft.type,
-          date: remoteDraft.date.isEmpty ? localDraft.date : remoteDraft.date,
-          note: remoteDraft.note.isEmpty ? localDraft.note : remoteDraft.note,
-          currency: remoteDraft.currency,
-        );
-        _message = '已从同步服务生成待确认草稿';
-        notifyListeners();
-      } on ApiFailure {
-        _message = '同步服务暂不可用，已使用本地规则草稿';
-        notifyListeners();
-      }
-    }
   }
 
   void updateDraft(AgentDraft draft) {
-    final missingFacts = <String>[];
-    if (draft.amount <= 0) missingFacts.add('请输入金额');
-    if (draft.categoryId == null) missingFacts.add('请选择分类');
-    if (draft.accountId == null) missingFacts.add('请选择支付账户');
-    _draft = draft.copyWith(
-      confidence: missingFacts.isEmpty ? .98 : .55,
-      missingFacts: missingFacts,
-    );
+    quickEntry.updateDraft(draft);
     _message = null;
     notifyListeners();
   }
 
   Future<void> rememberDraftChoice(String sourceText, AgentDraft draft) async {
-    final key = FinanceRules.quickMemoryKey(sourceText);
-    if (key.isEmpty || draft.categoryId == null || draft.accountId == null)
-      return;
-    final memory = QuickMemory(
-        key: key,
-        categoryId: draft.categoryId,
-        accountId: draft.accountId,
-        updatedAt: DateTime.now().toIso8601String());
-    _state = _state.copyWith(quickMemories: [
-      ..._state.quickMemories.where((item) => item.key != key),
-      memory
-    ]);
-    await repository.save(_state);
-    if (repository.api != null) {
-      try {
-        await _authStore?.updateProfile(quickMemories: _state.quickMemories);
-      } on ApiFailure {
-        // The confirmed transaction remains safe locally and will sync later.
-      }
-    }
+    await quickEntry.rememberDraftChoice(sourceText, draft);
+    _state = quickEntry.state;
+    _message = null;
+    notifyListeners();
   }
 
   Future<bool> confirmDraft(AgentDraft draft) async {
-    if (!FinanceRules.canPostDraft(draft)) {
-      _message = draft.missingFacts.isEmpty
-          ? '这笔记录仍需确认关键字段'
-          : draft.missingFacts.join('、');
-      notifyListeners();
-      return false;
-    }
-    final id = 'tx-${DateTime.now().microsecondsSinceEpoch}';
-    final sourceText = _draftSourceText;
-    await addTransaction(FinanceTransaction(
-      id: id,
-      date: draft.date,
-      type: draft.type,
-      amount: draft.amount,
-      currency: draft.currency,
-      categoryId: draft.categoryId,
-      accountId: draft.accountId,
-      fromAccountId: draft.fromAccountId,
-      toAccountId: draft.toAccountId,
-      note: draft.note,
-      clientOpId: id,
-    ));
-    if (sourceText != null) await rememberDraftChoice(sourceText, draft);
-    _draft = null;
-    _draftSourceText = null;
-    if (repository.api != null) await sync();
+    final posted = await quickEntry.confirmDraft(
+      draft,
+      quickEntry.sourceText,
+      ledger.addTransaction,
+    );
+    if (posted && repository.api != null) await sync();
     notifyListeners();
-    return true;
+    return posted;
   }
 
   Future<void> deleteTransaction(String transactionId) async {
@@ -614,8 +580,7 @@ class FinanceStore extends ChangeNotifier {
   void clearAuthenticatedSession() {
     _sessionGeneration++;
     _authStore?.clearSession();
-    _draft = null;
-    _draftSourceText = null;
+    quickEntry.clearDraft();
     _message = null;
     budget.clearAlerts();
     _metricsState = null;
@@ -644,8 +609,7 @@ class FinanceStore extends ChangeNotifier {
   Future<void> restoreDemoData() async {
     _state = DemoData.create();
     _adoptFeatureState();
-    _draft = null;
-    _draftSourceText = null;
+    quickEntry.clearDraft();
     _message = '演示数据已恢复';
     await repository.clearPendingOperations();
     await repository.save(_state);
@@ -658,9 +622,8 @@ class FinanceStore extends ChangeNotifier {
   }
 
   void clearDraft() {
-    _draft = null;
-    _draftSourceText = null;
-    _message = null;
+    quickEntry.clearDraft();
+    _message = quickEntry.message;
     notifyListeners();
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../features/budget/state/budget_store.dart';
 import '../features/ledger/state/ledger_store.dart';
+import '../features/quick_entry/state/quick_entry_store.dart';
 import '../domain/models.dart';
 import 'widgets/draft_confirmation_card.dart';
 import 'widgets/draft_editor.dart';
@@ -18,12 +19,13 @@ class DashboardPage extends StatelessWidget {
     required this.ledger,
     this.budget,
     this.budgetAlerts = const [],
-    required this.draft,
+    this.quickEntry,
+    this.draft,
     required this.isDemoMode,
-    required this.message,
-    required this.onSync,
-    required this.onUpdateDraft,
-    required this.onConfirmDraft,
+    this.message,
+    this.onSync,
+    this.onUpdateDraft,
+    this.onConfirmDraft,
     required this.openComposer,
     required this.openBudgets,
     super.key,
@@ -32,20 +34,27 @@ class DashboardPage extends StatelessWidget {
   final LedgerStore ledger;
   final BudgetStore? budget;
   final List<BudgetAlert> budgetAlerts;
+  final QuickEntryStore? quickEntry;
+
+  /// Compatibility inputs for callers that still compose Dashboard directly
+  /// through FinanceStore. The AppShell path uses [quickEntry].
   final AgentDraft? draft;
   final bool isDemoMode;
   final String? message;
   final Future<void> Function()? onSync;
-  final ValueChanged<AgentDraft> onUpdateDraft;
-  final Future<bool> Function(AgentDraft) onConfirmDraft;
+  final ValueChanged<AgentDraft>? onUpdateDraft;
+  final Future<bool> Function(AgentDraft)? onConfirmDraft;
   final OpenDashboardComposer openComposer;
   final VoidCallback openBudgets;
 
   @override
   Widget build(BuildContext context) {
-    final listenable = budget == null
-        ? ledger
-        : Listenable.merge(<Listenable>[ledger, budget!]);
+    final listenables = <Listenable>[ledger];
+    if (budget != null) listenables.add(budget!);
+    if (quickEntry != null) listenables.add(quickEntry!);
+    final listenable = listenables.length == 1
+        ? listenables.single
+        : Listenable.merge(listenables);
     return ListenableBuilder(
       listenable: listenable,
       builder: (context, _) {
@@ -53,7 +62,7 @@ class DashboardPage extends StatelessWidget {
         final state = ledger.state;
         final alerts = budget?.alerts ?? budgetAlerts;
         final progress = budget?.progress ?? metrics.budgetProgress;
-        final currentDraft = draft;
+        final currentDraft = quickEntry?.draft ?? draft;
         final recent = state.transactions
             .where((item) => item.deletedAt == null)
             .toList()
@@ -182,10 +191,10 @@ class DashboardPage extends StatelessWidget {
                     onEdit: () async {
                       final edited = await showDraftEditor(context,
                           draft: currentDraft, state: state);
-                      if (edited != null) onUpdateDraft(edited);
+                      if (edited != null) _updateDraft(edited);
                     },
                     onConfirm: () async {
-                      await onConfirmDraft(currentDraft);
+                      await _confirmDraft(currentDraft);
                     }),
                 const SizedBox(height: 16),
               ],
@@ -220,9 +229,10 @@ class DashboardPage extends StatelessWidget {
                                     state, item.budget.categoryId)))
                             .toList()),
               ),
-              if ((message ?? ledger.message) != null) ...[
+              if ((message ?? quickEntry?.message ?? ledger.message) !=
+                  null) ...[
                 const SizedBox(height: 12),
-                Text(message ?? ledger.message!,
+                Text(message ?? quickEntry?.message ?? ledger.message!,
                     style: const TextStyle(
                         color: Color(0xFF2F9F7D),
                         fontSize: 11,
@@ -314,5 +324,23 @@ class DashboardPage extends StatelessWidget {
 
   void _openComposer(BuildContext context, {bool smart = false}) {
     openComposer(context, smart: smart);
+  }
+
+  void _updateDraft(AgentDraft draft) {
+    final store = quickEntry;
+    if (store != null) {
+      store.updateDraft(draft);
+    } else {
+      onUpdateDraft?.call(draft);
+    }
+  }
+
+  Future<bool> _confirmDraft(AgentDraft draft) {
+    final store = quickEntry;
+    if (store != null) {
+      return store.confirmDraft(draft, store.sourceText, ledger.addTransaction);
+    }
+    final callback = onConfirmDraft;
+    return callback == null ? Future<bool>.value(false) : callback(draft);
   }
 }

@@ -54,6 +54,7 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         self.assertEqual(response.json()["type"], "expense")
         self.assertEqual(response.json()["amount"], 23.0)
         self.assertTrue(response.json()["requires_confirmation"])
+        self.assertEqual(self.client.get("/transactions", headers=self.headers).json()["items"], [])
 
     def test_transfer_is_excluded_from_stats_and_backup_round_trips(self):
         self.client.post("/accounts", headers=self.headers, json={"id": "bank", "name": "银行卡", "kind": "asset"})

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../features/ledger/state/ledger_store.dart';
+import '../../features/quick_entry/state/quick_entry_store.dart';
 import '../../domain/models.dart';
 import '../../state/finance_store.dart';
 import 'draft_confirmation_card.dart';
@@ -11,14 +12,17 @@ class TransactionForm extends StatefulWidget {
   TransactionForm(
       {LedgerStore? ledger,
       FinanceStore? store,
+      QuickEntryStore? quickEntry,
       this.initial,
       this.smartMode = false,
       super.key})
       : ledger = ledger ?? store!.ledger,
-        financeStore = store;
+        financeStore = store,
+        quickEntry = quickEntry ?? store?.quickEntry;
 
   final LedgerStore ledger;
   final FinanceStore? financeStore;
+  final QuickEntryStore? quickEntry;
   final FinanceTransaction? initial;
   final bool smartMode;
 
@@ -74,7 +78,12 @@ class _TransactionFormState extends State<TransactionForm> {
         padding: EdgeInsets.fromLTRB(
             20, 16, 20, MediaQuery.viewInsetsOf(context).bottom + 20),
         child: ListenableBuilder(
-          listenable: widget.financeStore ?? widget.ledger,
+          listenable: widget.quickEntry == null
+              ? (widget.financeStore ?? widget.ledger)
+              : Listenable.merge(<Listenable>[
+                  widget.ledger,
+                  widget.quickEntry!,
+                ]),
           builder: (context, _) => _buildContent(context),
         ),
       ),
@@ -83,28 +92,37 @@ class _TransactionFormState extends State<TransactionForm> {
 
   Widget _buildContent(BuildContext context) {
     final financeStore = widget.financeStore;
-    if (widget.smartMode && financeStore?.draft != null) {
-      final activeFinanceStore = financeStore!;
+    final quickEntry = widget.quickEntry;
+    final activeDraft = quickEntry?.draft ?? financeStore?.draft;
+    if (widget.smartMode && activeDraft != null) {
       return SingleChildScrollView(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _sheetHeader(context, '确认这笔草稿', 'Agent 只会整理，不会跳过你的确认。'),
         DraftConfirmationCard(
-          draft: activeFinanceStore.draft!,
+          draft: activeDraft,
           state: widget.ledger.state,
           onEdit: () async {
             final edited = await showDraftEditor(context,
-                draft: activeFinanceStore.draft!, state: widget.ledger.state);
-            if (edited != null) activeFinanceStore.updateDraft(edited);
+                draft: activeDraft, state: widget.ledger.state);
+            if (edited != null) {
+              if (quickEntry != null) {
+                quickEntry.updateDraft(edited);
+              } else {
+                financeStore?.updateDraft(edited);
+              }
+            }
           },
           onConfirm: () async {
-            final posted = await activeFinanceStore
-                .confirmDraft(activeFinanceStore.draft!);
+            final posted = quickEntry != null
+                ? await quickEntry.confirmDraft(activeDraft,
+                    quickEntry.sourceText, widget.ledger.addTransaction)
+                : await financeStore?.confirmDraft(activeDraft) ?? false;
             if (posted && context.mounted) Navigator.pop(context);
           },
         ),
         TextButton(
-            onPressed: activeFinanceStore.clearDraft,
+            onPressed: quickEntry?.clearDraft ?? financeStore?.clearDraft,
             child: const Text('重新输入')),
       ]));
     }
@@ -162,7 +180,8 @@ class _TransactionFormState extends State<TransactionForm> {
           child: FilledButton.icon(
             onPressed: () async {
               if (formKey.currentState!.validate())
-                await widget.financeStore?.createDraft(smartController.text);
+                await (widget.quickEntry?.createDraft(smartController.text) ??
+                    widget.financeStore?.createDraft(smartController.text));
             },
             icon: const Icon(Icons.auto_awesome, size: 17),
             label: const Text('生成待确认草稿'),

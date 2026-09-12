@@ -56,16 +56,17 @@ class _AppShellState extends State<AppShell> {
   Widget _buildPage(int index) {
     return switch (index) {
       0 => ListenableBuilder(
-          listenable: widget.store,
+          listenable: Listenable.merge(<Listenable>[
+            widget.store,
+            widget.store.quickEntry,
+          ]),
           builder: (context, _) => DashboardPage(
             ledger: widget.store.ledger,
             budget: widget.store.budget,
-            draft: widget.store.draft,
+            quickEntry: widget.store.quickEntry,
             isDemoMode: widget.store.isDemoMode,
             message: widget.store.message,
             onSync: widget.store.sync,
-            onUpdateDraft: widget.store.updateDraft,
-            onConfirmDraft: widget.store.confirmDraft,
             openComposer: _openComposer,
             openBudgets: _openBudgets,
           ),
@@ -98,7 +99,7 @@ class _AppShellState extends State<AppShell> {
       isScrollControlled: true,
       builder: (_) => TransactionForm(
         ledger: widget.store.ledger,
-        store: smart ? widget.store : null,
+        quickEntry: smart ? widget.store.quickEntry : null,
         smartMode: smart,
       ),
     );

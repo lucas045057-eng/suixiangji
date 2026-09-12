@@ -17,7 +17,9 @@ from .core.dependencies import oauth2_scheme
 from .db import get_db
 from .domain import TransactionRecord, calculate_cny, classify_natural_language, monthly_metrics, money, period_metrics
 from .models import Account, AgentLog, Budget, Category, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
-from .schemas import DraftIn, RestoreIn, SyncPushIn
+from .quick_entry.router import agent_draft, router as quick_entry_router
+from .quick_entry.schemas import DraftIn
+from .schemas import RestoreIn, SyncPushIn
 from .budget.service import budget_json as _budget_json
 from .budget.service import save_budget as _save_budget
 from .ledger.service import (
@@ -34,6 +36,7 @@ from .assets.service import fetch_frankfurter_rate
 
 router = APIRouter()
 router.include_router(auth_router)
+router.include_router(quick_entry_router)
 
 
 def _date(value: str | date | None, fallback: date | None = None) -> date:
@@ -112,22 +115,6 @@ def health() -> dict:
         "git_sha": get_settings().git_sha,
         "server_time": datetime.now(timezone.utc),
     }
-
-
-@router.post("/agent/draft")
-async def agent_draft(payload: DraftIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    draft, meta = await make_draft(payload.text)
-    if draft.get("account_hint"):
-        account = db.query(Account).filter(Account.user_id == user.id, Account.name == draft["account_hint"], Account.deleted_at.is_(None)).first()
-        if account:
-            draft["account_id"] = account.id
-    if draft.get("category_hint"):
-        category = db.query(Category).filter(Category.user_id == user.id, Category.name == draft["category_hint"]).first()
-        if category:
-            draft["category_id"] = category.id
-    db.add(AgentLog(user_id=user.id, task="draft", model=meta.get("model"), status=meta.get("status", "unknown"), input_tokens=meta.get("input_tokens"), output_tokens=meta.get("output_tokens"), result_summary=meta.get("result_summary") or "rules-first draft"))
-    db.commit()
-    return _json_metrics({**draft, "type": draft["kind"], "date": draft["occurred_on"], "account_name": draft.get("account_hint"), "category_name": draft.get("category_hint"), "currency": draft.get("currency", "CNY")})
 
 
 @router.get("/stats")
