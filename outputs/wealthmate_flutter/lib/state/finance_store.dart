@@ -58,6 +58,13 @@ class FinanceStore extends ChangeNotifier {
                       ? DemoData.create()
                       : const FinanceState()),
             ) {
+    if (!identical(budget.repository.session, repository.session)) {
+      throw ArgumentError.value(
+        budgetStore,
+        'budgetStore',
+        'BudgetStore must use FinanceRepository.session',
+      );
+    }
     ledger.onStateChanged = (next) {
       _state = next;
       assets.adoptState(next);

@@ -37,3 +37,23 @@ Budget 职责已抽取并接入 Flutter 与 Backend：
 - 本次仅做 Task 5 范围的聚焦验证，未覆盖全量回归；跨模块已有调用方的潜在回归仍需后续阶段统一验证。
 - BudgetRepository 当前主要负责本地优先写入与远端数据源封装，远端 CRUD 方法由现有 ApiClient 保持兼容；本阶段未改变在线同步生命周期。
 - 当前工作区已有其他阶段的未提交变更，本 commit 按用户要求包含本次 Budget 收尾相关工作区内容；未执行 reset、checkout、merge 或 cherry-pick。
+
+## Fix round 1 — scoped review findings
+
+基于 HEAD `437a69f` 完成以下最小修正，未进入下一 Phase：
+
+- `FinanceStore` 现在拒绝 `BudgetStore.repository.session` 与主 `FinanceRepository.session` 不同的注入，确保 Budget 的 FinanceState/queue 写入不会旁路主 session。
+- Budget focused tests 改为用重建的 `LocalStateSession`/`LocalRepository` 验证持久化，并断言 `clientOpId`、`entity`、`type`、`entityId` 和完整 payload；新增 warning、exhausted、over 的真实提醒路径与重复调用去重覆盖。
+- AppShell 桌面详情面板改从 `BudgetStore.progress` 读取预算存在性；Dashboard 的兼容参数仍保留，但正式 AppShell 路径不再从 `FinanceStore.metrics.budgetProgress` 取预算视图。
+- 删除 `app/api.py` 中未使用的 Budget route/schema imports；API、schema、migration、sync、Auth、Assets、Ledger 未改行为。
+
+TDD 记录：新增 foreign-session 边界测试先在 `437a69f` 上失败（未抛出 `ArgumentError`），加入 session 身份校验后通过。
+
+Fix round 1 验证：
+
+- `flutter test test/features/budget/budget_store_test.dart`：8 项通过。
+- 目标 Flutter 文件 `flutter analyze`：无问题。
+- Backend Budget/API 目标文件 `compileall`：通过。
+- `git diff --check`：通过。
+
+本轮仍未运行 Flutter full test、pytest 全量、unittest 全量、`npm test`；未执行 push、PR、部署或生产数据库操作。

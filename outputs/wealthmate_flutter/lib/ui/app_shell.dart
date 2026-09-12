@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
+import '../features/budget/state/budget_store.dart';
 import '../state/finance_store.dart';
 import 'budgets_page.dart';
 import 'dashboard_page.dart';
@@ -189,7 +190,8 @@ class _AppShellState extends State<AppShell> {
         Container(
           width: 260,
           padding: const EdgeInsets.fromLTRB(0, 32, 22, 32),
-          child: _DesktopDetailPanel(store: widget.store),
+          child: _DesktopDetailPanel(
+              store: widget.store, budget: widget.store.budget),
         ),
       ],
     );
@@ -237,14 +239,15 @@ class _AppShellState extends State<AppShell> {
 }
 
 class _DesktopDetailPanel extends StatelessWidget {
-  const _DesktopDetailPanel({required this.store});
+  const _DesktopDetailPanel({required this.store, required this.budget});
 
   final FinanceStore store;
+  final BudgetStore budget;
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: store,
+      listenable: Listenable.merge(<Listenable>[store, budget]),
       builder: (context, _) {
         final metrics = store.metrics;
         return Column(
@@ -263,10 +266,7 @@ class _DesktopDetailPanel extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                               fontSize: 12)),
                       const SizedBox(height: 14),
-                      Text(
-                          metrics.budgetProgress.isEmpty
-                              ? '还没有预算提醒'
-                              : '先看看本月预算节奏',
+                      Text(budget.progress.isEmpty ? '还没有预算提醒' : '先看看本月预算节奏',
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 8),

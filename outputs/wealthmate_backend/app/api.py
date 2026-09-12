@@ -17,15 +17,9 @@ from .core.dependencies import oauth2_scheme
 from .db import get_db
 from .domain import TransactionRecord, calculate_cny, classify_natural_language, monthly_metrics, money, period_metrics
 from .models import Account, AgentLog, Budget, Category, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
-from .schemas import BudgetIn, BudgetPatch, DraftIn, RestoreIn, SyncPushIn
+from .schemas import DraftIn, RestoreIn, SyncPushIn
 from .budget.service import budget_json as _budget_json
 from .budget.service import save_budget as _save_budget
-from .budget.router import (
-    create_budget,
-    delete_budget,
-    list_budgets,
-    update_budget,
-)
 from .ledger.service import (
     _attach_latest_rate,
     _category_json,
