@@ -548,11 +548,11 @@ Interfaces:
 - QuickEntryRepository.transactionFromDraft(AgentDraft draft) -> FinanceTransaction creates the same transaction payload currently used by confirmation.
 - quick_entry.service.make_draft(db, user, payload) -> dict only returns a reviewable structured draft; it never inserts a Transaction.
 
-- [ ] Step 1: Write tests proving draft-only behavior.
+- [x] Step 1: Write tests proving draft-only behavior.
 
 Cover local parsing, remote fallback, missing facts, confidence threshold, editable draft fields, QuickMemory persistence through LocalStateSession, and the rule that confirm delegates exactly one real transaction mutation to LedgerStore.
 
-- [ ] Step 2: Run focused QuickEntry tests before implementation.
+- [x] Step 2: Run focused QuickEntry tests before implementation.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -561,7 +561,7 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest tests.test_domain tests.test_api -v
 ~~~
 
-- [ ] Step 3: Extract QuickEntry local rules and Store.
+- [x] Step 3: Extract QuickEntry local rules and Store.
 
 Move draft state, source text, memory lookup, remote draft merge, and confirmation orchestration out of FinanceStore. The confirmation callback must be the Ledger boundary; QuickEntry cannot call LocalRepository, SyncQueue, or a backend transaction endpoint directly.
 
@@ -581,7 +581,7 @@ Future<bool> confirmDraft(
 }
 ~~~
 
-- [ ] Step 4: Extract Backend QuickEntry Router/Service.
+- [x] Step 4: Extract Backend QuickEntry Router/Service.
 
 Move only the existing /agent/draft endpoint and agent adapter invocation. Keep AgentLog handling and configuration behavior intact; no new model, AI provider, or auto-post endpoint.
 
@@ -594,11 +594,11 @@ async def make_draft(db: Session, user: User, payload: DraftIn) -> dict:
     return draft
 ~~~
 
-- [ ] Step 5: Migrate dashboard draft widgets.
+- [x] Step 5: Migrate dashboard draft widgets.
 
 Dashboard receives QuickEntryStore for draft operations and LedgerStore for the final transaction callback. Visual layout, confirmation wording, and modify-before-posting behavior remain unchanged.
 
-- [ ] Step 6: Run full regression, inspect the no-auto-post invariant, report and commit.
+- [x] Step 6: Run full regression, inspect the no-auto-post invariant, report and commit.
 
 ~~~powershell
 git add outputs\wealthmate_flutter outputs\wealthmate_backend
