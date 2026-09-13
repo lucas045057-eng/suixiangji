@@ -42,15 +42,16 @@ UI 只通过对应 Feature Store 执行业务操作。FinanceStore、FinanceRepo
 outputs/wealthmate_flutter/lib/
 ├── core/
 │   ├── database/local_state_session.dart
-│   ├── network/api_transport.dart
-│   └── sync/sync_coordinator.dart
+│   ├── network/{api_session,api_response,api_transport}.dart
+│   └── sync/{sync_coordinator,sync_remote_data_source}.dart
 ├── features/
 │   ├── auth/{data,state,domain}/
 │   ├── ledger/{data,state,domain}/
 │   ├── assets/{data,state,domain}/
 │   ├── budget/{data,state,domain}/
 │   ├── quick_entry/{data,state,domain}/
-│   └── insights/{data,state,domain}/
+│   ├── insights/{data,state,domain}/
+│   └── backup/data/
 └── data/{finance_repository,api_client,local_repository,sync_queue}.dart
 
 outputs/wealthmate_backend/app/

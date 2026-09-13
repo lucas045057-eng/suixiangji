@@ -28,12 +28,12 @@ void main() {
 
   test('feature stores do not write local state or queue directly', () {
     final root = _packageRoot();
-    final storeFiles = _dartFiles(Directory('${root.path}/lib/features'))
-        .where((file) => file.path.endsWith('_store.dart'));
-    for (final file in storeFiles) {
+    final featureFiles = _dartFiles(Directory('${root.path}/lib/features'));
+    for (final file in featureFiles) {
       final source = file.readAsStringSync();
-      expect(source, isNot(contains('LocalRepository.save')), reason: file.path);
-      expect(source, isNot(contains('SyncQueue.enqueue')), reason: file.path);
+      expect(source, isNot(contains('local.save(')), reason: file.path);
+      expect(source, isNot(contains('local.saveQueue(')), reason: file.path);
+      expect(source, isNot(contains('queue.enqueue(')), reason: file.path);
     }
   });
 
@@ -47,5 +47,31 @@ void main() {
       '${root.path}/lib/core/database/local_state_session.dart',
     ).readAsStringSync();
     expect(sessionSource, contains('Future<FinanceState> write('));
+  });
+
+  test('ApiClient keeps compatibility methods but no endpoint implementations', () {
+    final source = File(
+      '${_packageRoot().path}/lib/data/api_client.dart',
+    ).readAsStringSync();
+    for (final endpoint in <String>[
+      '/auth/login',
+      '/auth/register',
+      '/auth/me',
+      '/auth/password',
+      '/accounts',
+      '/categories',
+      '/transactions',
+      '/budgets',
+      '/stats',
+      '/wealth',
+      '/reports/monthly',
+      '/backup/export',
+      '/backup/restore',
+      '/agent/draft',
+      '/sync/push',
+      '/sync/pull',
+    ]) {
+      expect(source, isNot(contains(endpoint)), reason: endpoint);
+    }
   });
 }

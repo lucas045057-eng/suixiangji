@@ -4,6 +4,12 @@ from pathlib import Path
 def test_models_py_is_the_only_sqlalchemy_model_module():
     backend = Path(__file__).parents[1] / "app"
     assert sorted(backend.rglob("models.py")) == [backend / "models.py"]
+    for path in backend.rglob("*.py"):
+        if path.name in {"models.py", "db.py"}:
+            continue
+        source = path.read_text(encoding="utf-8")
+        assert "mapped_column(" not in source, path
+        assert "Column(" not in source, path
 
 
 def test_http_routers_do_not_commit_or_define_domain_calculations():

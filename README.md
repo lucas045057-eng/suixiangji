@@ -19,7 +19,7 @@
 - `docs/`：产品规格和实施计划。
 - `tests/`：Web/PWA 测试。
 
-模块化边界已完成：Flutter 的 Auth、Ledger、Assets、Budget、QuickEntry、Insights 和 Sync 分别位于 `lib/features/` 与 `lib/core/sync/`；Backend 对应模块位于 `app/{auth,ledger,assets,budget,quick_entry,insights,sync,backup}/`。旧的 `FinanceStore`、`FinanceRepository`、`ApiClient` 和 `app/api.py` 仅作为兼容 façade/聚合入口。本地 FinanceState 与 SyncQueue 的写入统一经过 `LocalStateSession`，`app/models.py` 仍是唯一 SQLAlchemy 模型定义文件。
+模块化边界已完成：Flutter 的 Auth、Ledger、Assets、Budget、QuickEntry、Insights、Backup 和 Sync 分别位于 `lib/features/` 与 `lib/core/`；Backend 对应模块位于 `app/{auth,ledger,assets,budget,quick_entry,insights,sync,backup}/`。旧的 `FinanceStore`、`FinanceRepository`、`ApiClient` 和 `app/api.py` 仅作为兼容 façade/聚合入口。本地 FinanceState 与 SyncQueue 的写入统一经过 `LocalStateSession`，`app/models.py` 仍是唯一 SQLAlchemy 模型定义文件。
 
 ## 本地启动服务端
 

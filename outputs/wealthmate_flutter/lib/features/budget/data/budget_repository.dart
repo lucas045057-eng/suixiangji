@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import '../../../core/database/local_state_session.dart';
-import '../../../data/api_client.dart';
+import '../../../core/network/api_session.dart';
 import '../../../data/local_repository.dart';
 import '../../../data/sync_queue.dart';
 import '../../../domain/models.dart';
@@ -13,7 +13,7 @@ class BudgetRepository {
   final LocalStateSession session;
   final BudgetRemoteDataSource? remote;
 
-  ApiClient? get api => remote?.api;
+  ApiSession? get api => remote?.api;
   SyncQueue get queue => session.queue;
 
   Future<FinanceState?> load() => session.load();

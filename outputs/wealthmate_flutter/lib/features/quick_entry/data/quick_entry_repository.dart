@@ -1,5 +1,6 @@
 import '../../../core/database/local_state_session.dart';
-import '../../../data/api_client.dart';
+import '../../../core/network/api_session.dart';
+import '../../../core/network/api_transport.dart';
 import '../../../domain/models.dart';
 import '../domain/quick_entry_rules.dart';
 import 'quick_entry_remote_data_source.dart';
@@ -19,7 +20,7 @@ class QuickEntryRepository {
   final QuickMemoriesUpdater? onQuickMemoriesChanged;
   bool remoteFallbackUsed = false;
 
-  ApiClient? get api => remote?.api;
+  ApiSession? get api => remote?.api;
 
   Future<AgentDraft> createDraft(
     String text,
