@@ -628,11 +628,11 @@ Interfaces:
 - insight_rules.dart exposes pure deriveMetrics(FinanceState state, String monthKey) -> FinanceMetrics, periodExpenseSeries(FinanceState state, DateTimeRange range) -> List<PeriodPoint>, expenseByCategory(FinanceState state, DateTimeRange range) -> Map<String, double>, and expenseByAccount(FinanceState state, DateTimeRange range) -> Map<String, double> with current calculation results.
 - insights.service exposes stats and monthly-report operations; deterministic numbers are calculated before optional AI text generation.
 
-- [ ] Step 1: Add pure metric/report tests and Store tests.
+- [x] Step 1: Add pure metric/report tests and Store tests.
 
 Cover day/week/month zero-filled series, category/account aggregations, savings rate, budget progress composition, report fallback when AI is unavailable, and cache invalidation after a Ledger/Assets mutation.
 
-- [ ] Step 2: Run focused Insights tests before implementation.
+- [x] Step 2: Run focused Insights tests before implementation.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -641,7 +641,7 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest tests.test_api tests.test_domain -v
 ~~~
 
-- [ ] Step 3: Extract pure calculations and Insights Store.
+- [x] Step 3: Extract pure calculations and Insights Store.
 
 Move metrics cache, period aggregations and report state out of FinanceStore. The Store consumes read-only snapshots from Ledger, Assets and Budget; it may not mutate their entities. Any report cache/aggregate snapshot write goes through LocalStateSession.
 
@@ -658,7 +658,7 @@ class InsightsStore extends ChangeNotifier {
 }
 ~~~
 
-- [ ] Step 4: Extract Backend Insights Router/Service.
+- [x] Step 4: Extract Backend Insights Router/Service.
 
 Move /stats and /reports/monthly/{month} route bodies, response conversion and deterministic report numbers into app/insights. Keep scheduler.py calling services rather than Router functions. Do not change AI provider configuration or report response fields.
 
@@ -670,11 +670,11 @@ def monthly_report(db: Session, user: User, month: str, force: bool = False) -> 
     return report_service.build_report(db, user, month, metrics, force=force)
 ~~~
 
-- [ ] Step 5: Migrate Stats and Dashboard views.
+- [x] Step 5: Migrate Stats and Dashboard views.
 
 StatsPage depends on InsightsStore; Dashboard receives a read-only metrics projection. Remove all new-page imports of FinanceStore, retaining only the thin compatibility façade for old tests during cleanup.
 
-- [ ] Step 6: Run full regression, diff review, report and commit.
+- [x] Step 6: Run full regression, diff review, report and commit.
 
 ~~~powershell
 git add outputs\wealthmate_flutter outputs\wealthmate_backend
