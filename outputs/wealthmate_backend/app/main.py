@@ -11,6 +11,7 @@ from .budget.router import router as budget_router
 from .config import get_settings
 from .db import ensure_schema
 from .ledger.router import router as ledger_router
+from .release.router import router as release_router
 from .scheduler import create_scheduler
 
 
@@ -36,6 +37,7 @@ app.include_router(router)
 app.include_router(assets_router)
 app.include_router(ledger_router)
 app.include_router(budget_router)
+app.include_router(release_router)
 
 
 @app.exception_handler(RequestValidationError)

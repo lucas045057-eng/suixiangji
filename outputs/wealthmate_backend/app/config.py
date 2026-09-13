@@ -1,5 +1,7 @@
 from functools import lru_cache
+import re
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,10 +26,26 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     frankfurter_base_url: str = "https://api.frankfurter.dev/v2"
     cors_origins: str = "*"
+    app_latest_version: str = "1.0.0"
+    app_latest_build: int = Field(default=3, ge=1)
+    app_minimum_supported_version: str = "1.0.0"
+    app_minimum_supported_build: int = Field(default=3, ge=1)
+    app_force_update: bool = False
+    app_download_url: str = ""
+    app_release_notes: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="WEALTHMATE_", extra="ignore")
 
     def validate_runtime(self) -> None:
+        for field_name in ("app_latest_version", "app_minimum_supported_version"):
+            value = getattr(self, field_name).strip()
+            if not re.fullmatch(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", value):
+                raise ValueError(f"{field_name} must use numeric major.minor.patch format")
+        download_url = self.app_download_url.strip()
+        if download_url:
+            parsed = urlparse(download_url)
+            if parsed.scheme.lower() != "https" or not parsed.netloc:
+                raise ValueError("app_download_url must be an HTTPS URL")
         if self.environment in ("beta", "production"):
             if len(self.jwt_secret) < 32 or self.jwt_secret.startswith(("change", "replace")):
                 raise ValueError("Beta requires a unique strong JWT secret")
