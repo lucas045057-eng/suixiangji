@@ -76,6 +76,26 @@ def health() -> dict:
     }
 
 
+def stats(
+    *,
+    month: str | None = None,
+    period: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    db: Session,
+    user: User,
+) -> dict:
+    """Compatibility façade; the Insights router owns the HTTP endpoint."""
+    return insights_service.stats(
+        db,
+        user,
+        month=month,
+        period=period,  # type: ignore[arg-type]
+        start=start,
+        end=end,
+    )
+
+
 async def monthly_report(month: str, force: bool = False, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
     return await insights_service.monthly_report(db, user, month, force=force)
 
