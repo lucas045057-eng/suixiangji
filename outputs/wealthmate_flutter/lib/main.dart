@@ -120,6 +120,7 @@ class _WealthMateAppState extends State<WealthMateApp> {
   @override
   void dispose() {
     widget.auth?.onAuthExpired = null;
+    widget.api?.close();
     super.dispose();
   }
 

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:wealthmate_flutter/core/network/http_client_factory.dart';
 import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/token_store.dart';
 
@@ -48,7 +49,49 @@ class ResponseClient extends http.BaseClient {
   }
 }
 
+class CloseTrackingClient extends ResponseClient {
+  CloseTrackingClient() : super(200, '{}');
+
+  var closeCalls = 0;
+
+  @override
+  void close() {
+    closeCalls++;
+    super.close();
+  }
+}
+
 void main() {
+  test('ApiClient closes an internally created client exactly once', () {
+    final client = CloseTrackingClient();
+    final factory = PlatformHttpClientFactory(
+      transportKind: HttpTransportKind.packageHttp,
+      clientBuilder: () => client,
+    );
+    final api = ApiClient(
+      baseUrl: 'http://example.test',
+      clientFactory: factory,
+    );
+
+    api.close();
+    api.close();
+
+    expect(api.client, same(client));
+    expect(client.closeCalls, 1);
+  });
+
+  test('ApiClient does not close an externally injected client', () {
+    final client = CloseTrackingClient();
+    final api = ApiClient(
+      baseUrl: 'http://example.test',
+      client: client,
+    );
+
+    api.close();
+
+    expect(client.closeCalls, 0);
+  });
+
   test('login persists a token and a new client restores it', () async {
     final tokenStore = MemoryTokenStore();
     final api = ApiClient(

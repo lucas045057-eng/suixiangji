@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  cronet_http: 1.9.0
   shared_preferences: ^2.3.2
   drift: ^2.20.0
   sqlite3_flutter_libs: ^0.5.24

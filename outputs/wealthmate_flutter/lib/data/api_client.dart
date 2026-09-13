@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/network/api_session.dart';
 import '../core/network/api_transport.dart';
+import '../core/network/http_client_factory.dart';
 import '../core/sync/sync_remote_data_source.dart';
 import '../domain/models.dart';
 import '../features/assets/data/assets_remote_data_source.dart';
@@ -29,9 +30,12 @@ class ApiClient implements ApiSession {
     required this.baseUrl,
     this.token,
     http.Client? client,
+    HttpClientFactory? clientFactory,
     TokenStore? tokenStore,
     this.onAuthExpired,
-  })  : client = client ?? http.Client(),
+  })  : _ownsClient = client == null,
+        client = client ??
+            (clientFactory ?? createPlatformHttpClientFactory()).create(),
         tokenStore = tokenStore ?? SecureTokenStore() {
     transport = ApiTransport(
       baseUrl: baseUrl,
@@ -54,6 +58,7 @@ class ApiClient implements ApiSession {
   String? token;
   String? lastVerifiedUserId;
   final http.Client client;
+  final bool _ownsClient;
   final TokenStore tokenStore;
   @override
   FutureOr<void> Function()? onAuthExpired;
@@ -70,6 +75,7 @@ class ApiClient implements ApiSession {
   late final SyncRemoteDataSource syncDataSource;
 
   int _sessionGeneration = 0;
+  bool _clientClosed = false;
   @override
   int get sessionGeneration => _sessionGeneration;
   Future<void> _credentialWrites = Future<void>.value();
@@ -167,6 +173,12 @@ class ApiClient implements ApiSession {
     token = null;
     lastVerifiedUserId = null;
     await _persistCredentials(_clearPersistedCredentialsBestEffort);
+  }
+
+  void close() {
+    if (_clientClosed) return;
+    _clientClosed = true;
+    if (_ownsClient) client.close();
   }
 
   @override
