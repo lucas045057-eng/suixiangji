@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/budget/state/budget_store.dart';
+import '../features/insights/state/insights_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import '../features/quick_entry/state/quick_entry_store.dart';
 import '../domain/models.dart';
@@ -17,6 +18,7 @@ typedef OpenDashboardComposer = void Function(BuildContext context,
 class DashboardPage extends StatelessWidget {
   const DashboardPage({
     required this.ledger,
+    this.insights,
     this.budget,
     this.budgetAlerts = const [],
     this.quickEntry,
@@ -32,6 +34,7 @@ class DashboardPage extends StatelessWidget {
   });
 
   final LedgerStore ledger;
+  final InsightsStore? insights;
   final BudgetStore? budget;
   final List<BudgetAlert> budgetAlerts;
   final QuickEntryStore? quickEntry;
@@ -50,6 +53,7 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final listenables = <Listenable>[ledger];
+    if (insights != null) listenables.add(insights!);
     if (budget != null) listenables.add(budget!);
     if (quickEntry != null) listenables.add(quickEntry!);
     final listenable = listenables.length == 1
@@ -58,7 +62,7 @@ class DashboardPage extends StatelessWidget {
     return ListenableBuilder(
       listenable: listenable,
       builder: (context, _) {
-        final metrics = ledger.metrics;
+        final metrics = insights?.metrics ?? ledger.metrics;
         final state = ledger.state;
         final alerts = budget?.alerts ?? budgetAlerts;
         final progress = budget?.progress ?? metrics.budgetProgress;

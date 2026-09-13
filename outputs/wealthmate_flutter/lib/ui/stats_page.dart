@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../domain/finance_rules.dart';
-import '../state/finance_store.dart';
+import '../features/insights/state/insights_store.dart';
 import 'widgets/bar_chart.dart';
 import 'widgets/line_chart.dart';
 import 'widgets/pie_chart.dart';
@@ -10,9 +9,9 @@ import 'widgets/ui_helpers.dart';
 enum StatsPeriod { day, week, month }
 
 class StatsPage extends StatefulWidget {
-  const StatsPage({required this.store, super.key});
+  const StatsPage({required this.insights, super.key});
 
-  final FinanceStore store;
+  final InsightsStore insights;
 
   @override
   State<StatsPage> createState() => _StatsPageState();
@@ -24,15 +23,12 @@ class _StatsPageState extends State<StatsPage> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: widget.store,
+      listenable: widget.insights,
       builder: (context, _) {
-        final range = _rangeFor(period, widget.store.metrics.monthKey);
-        final points =
-            FinanceRules.periodExpenseSeries(widget.store.state, range);
-        final categoryTotals =
-            FinanceRules.expenseByCategory(widget.store.state, range);
-        final accountTotals =
-            FinanceRules.expenseByAccount(widget.store.state, range);
+        final range = _rangeFor(period, widget.insights.metrics.monthKey);
+        final points = widget.insights.trend(range);
+        final categoryTotals = widget.insights.expenseByCategory(range);
+        final accountTotals = widget.insights.expenseByAccount(range);
         final categories = _sortedCategoryItems(categoryTotals);
         final totalExpense =
             categoryTotals.values.fold<double>(0, (sum, value) => sum + value);
@@ -167,7 +163,7 @@ class _StatsPageState extends State<StatsPage> {
                         ]),
                   ),
                 ),
-                if (widget.store.metrics.pendingConversionCount > 0) ...[
+                if (widget.insights.metrics.pendingConversionCount > 0) ...[
                   const SizedBox(height: 12),
                   const Text('有外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
                       style: TextStyle(color: Color(0xFFB65B55), fontSize: 11)),
@@ -191,7 +187,7 @@ class _StatsPageState extends State<StatsPage> {
         _summaryCard(
             width,
             '最高支付账户',
-            accountName(widget.store.state, highestAccount),
+            accountName(widget.insights.state, highestAccount),
             Icons.account_balance_wallet_outlined),
       ]);
     });
@@ -273,7 +269,7 @@ class _StatsPageState extends State<StatsPage> {
                 ? '未分类'
                 : top[index].key == 'other'
                     ? '其他'
-                    : categoryName(widget.store.state, top[index].key),
+                    : categoryName(widget.insights.state, top[index].key),
             value: top[index].value,
             color: colors[index % colors.length])
     ];

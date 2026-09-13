@@ -62,6 +62,7 @@ class _AppShellState extends State<AppShell> {
           ]),
           builder: (context, _) => DashboardPage(
             ledger: widget.store.ledger,
+            insights: widget.store.insights,
             budget: widget.store.budget,
             quickEntry: widget.store.quickEntry,
             isDemoMode: widget.store.isDemoMode,
@@ -72,7 +73,7 @@ class _AppShellState extends State<AppShell> {
           ),
         ),
       1 => LedgerPage(store: widget.store),
-      2 => StatsPage(store: widget.store),
+      2 => StatsPage(insights: widget.store.insights),
       3 => WealthPage(store: widget.store.assets, ledger: widget.store.ledger),
       _ => SettingsPage(
           store: widget.store,
