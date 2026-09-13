@@ -27,11 +27,21 @@ flutter run -d windows --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-d
 
 未提供基址时，界面会显示“离线演示/待配置”，不会显示虚假的同步成功。
 
-正式环境只能注入 HTTPS API 地址，并使用 `1.0.0+3`。正式域名尚未提供：
+正式环境只能注入 HTTPS API 地址。V1.0.1 目标版本为 `1.0.1+4`，正式 API 为 `https://api.suixiangji.icu`。
 
 ```text
-PRODUCTION DOMAIN: NOT CONFIGURED
+PRODUCTION DOMAIN: api.suixiangji.icu
 ```
+
+Android 运行、Android 集成测试和 Release 构建必须统一使用 Embedded Cronet，不依赖 Google Play Services：
+
+```text
+flutter run -d <android-device> --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+flutter test --dart-define=cronetHttpNoPlay=true
+flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+```
+
+目标 Cronet distribution 为 `Embedded`，Google Play Services required 为 `NO`。Android App 内所有请求继续经过 `ApiClient → ApiTransport`。
 
 应用会按 `latest_build > local_build` 判断是否有更新；历史 Beta `1.2.0+2` 会识别正式 `1.0.0+3` 为可更新。更新下载仅打开经过校验的 HTTPS 地址，不执行静默安装。当前仓库没有 Beta APK 或其证书指纹证据，因此：
 

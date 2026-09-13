@@ -271,8 +271,7 @@ class ApiClient implements ApiSession {
   Future<Map<String, Object?>> fetchStats(String monthKey) =>
       insightsDataSource.fetchStats(monthKey);
 
-  Future<Map<String, Object?>> fetchWealth() =>
-      assetsDataSource.fetchWealth();
+  Future<Map<String, Object?>> fetchWealth() => assetsDataSource.fetchWealth();
 
   Future<Map<String, Object?>> fetchMonthlyReport(String monthKey,
           {bool force = false}) =>
@@ -297,8 +296,7 @@ class ApiClient implements ApiSession {
   Future<Budget> createBudget(Budget budget) =>
       budgetDataSource.createBudget(budget);
 
-  Future<Budget> updateBudget(
-          String budgetId, Map<String, Object?> changes) =>
+  Future<Budget> updateBudget(String budgetId, Map<String, Object?> changes) =>
       budgetDataSource.updateBudget(budgetId, changes);
 
   Future<void> deleteBudget(String budgetId) =>

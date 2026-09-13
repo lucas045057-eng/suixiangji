@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../core/config/app_config.dart';
 import '../domain/models.dart';
 import '../features/app_update/state/app_update_store.dart';
 import '../features/auth/state/auth_store.dart';
@@ -18,8 +19,8 @@ class SettingsPage extends StatelessWidget {
     this.assets,
     this.onLoggedOut,
     this.updates,
-    this.appVersion = '1.0.0',
-    this.appBuild = 3,
+    this.appVersion = kProductVersion,
+    this.appBuild = kProductBuild,
     this.configurationError,
     super.key,
   });

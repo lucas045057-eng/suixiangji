@@ -52,7 +52,12 @@ void main() {
       (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: wealthMateTheme(),
-      home: AppShell(store: demoStore(), updates: updateStore()),
+      home: AppShell(
+        store: demoStore(),
+        updates: updateStore(),
+        appVersion: '1.0.0',
+        appBuild: 3,
+      ),
     ));
 
     await tester.tap(find.text('我的'));

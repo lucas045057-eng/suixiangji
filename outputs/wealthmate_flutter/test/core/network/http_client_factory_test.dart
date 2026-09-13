@@ -49,7 +49,8 @@ void main() {
     expect(packageHttpBuilds, 0);
   });
 
-  test('non-Android selects one package:http client for the factory lifetime', () {
+  test('non-Android selects one package:http client for the factory lifetime',
+      () {
     final cronetClient = _TrackedClient();
     final packageHttpClient = _TrackedClient();
     var cronetBuilds = 0;

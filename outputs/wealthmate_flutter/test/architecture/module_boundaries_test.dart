@@ -12,15 +12,20 @@ Iterable<File> _dartFiles(Directory directory) =>
 void main() {
   test('feature and UI layers do not reach storage or transport internals', () {
     final root = _packageRoot();
-    final featureFiles = _dartFiles(Directory('${root.path}/lib/features')).where(
-      (file) => file.path.contains('${Platform.pathSeparator}state${Platform.pathSeparator}') ||
-          file.path.contains('${Platform.pathSeparator}ui${Platform.pathSeparator}'),
+    final featureFiles =
+        _dartFiles(Directory('${root.path}/lib/features')).where(
+      (file) =>
+          file.path.contains(
+              '${Platform.pathSeparator}state${Platform.pathSeparator}') ||
+          file.path
+              .contains('${Platform.pathSeparator}ui${Platform.pathSeparator}'),
     );
     final uiFiles = _dartFiles(Directory('${root.path}/lib/ui'));
     for (final file in [...featureFiles, ...uiFiles]) {
       final source = file.readAsStringSync();
       expect(source, isNot(contains('drift_database.dart')), reason: file.path);
-      expect(source, isNot(contains('local_repository.dart')), reason: file.path);
+      expect(source, isNot(contains('local_repository.dart')),
+          reason: file.path);
       expect(source, isNot(contains('api_transport.dart')), reason: file.path);
       expect(source, isNot(contains('http.Client(')), reason: file.path);
     }
@@ -37,7 +42,8 @@ void main() {
     }
   });
 
-  test('the app has one SyncCoordinator and one LocalStateSession write seam', () {
+  test('the app has one SyncCoordinator and one LocalStateSession write seam',
+      () {
     final root = _packageRoot();
     final coordinators = _dartFiles(Directory('${root.path}/lib'))
         .where((file) => file.path.endsWith('sync_coordinator.dart'))
@@ -49,7 +55,8 @@ void main() {
     expect(sessionSource, contains('Future<FinanceState> write('));
   });
 
-  test('ApiClient keeps compatibility methods but no endpoint implementations', () {
+  test('ApiClient keeps compatibility methods but no endpoint implementations',
+      () {
     final source = File(
       '${_packageRoot().path}/lib/data/api_client.dart',
     ).readAsStringSync();
@@ -91,7 +98,8 @@ void main() {
         expect(source, isNot(contains('http.Client.new')), reason: file.path);
         expect(source, isNot(contains('CronetClient')), reason: file.path);
         expect(source, isNot(contains('CronetEngine')), reason: file.path);
-        expect(source, isNot(contains('package:cronet_http')), reason: file.path);
+        expect(source, isNot(contains('package:cronet_http')),
+            reason: file.path);
         expect(source, isNot(contains('HttpClient(')), reason: file.path);
       }
     }
@@ -103,8 +111,7 @@ void main() {
       final source = File(
         '${root.path}/lib/core/network/$fileName',
       ).readAsStringSync();
-      expect(source, isNot(contains('package:cronet_http')),
-          reason: fileName);
+      expect(source, isNot(contains('package:cronet_http')), reason: fileName);
       expect(source, isNot(contains('dart:io')), reason: fileName);
     }
   });

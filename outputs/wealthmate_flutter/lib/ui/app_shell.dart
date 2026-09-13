@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/config/app_config.dart';
 import '../features/auth/state/auth_store.dart';
 import '../features/app_update/state/app_update_store.dart';
 import '../features/budget/state/budget_store.dart';
@@ -20,8 +21,8 @@ class AppShell extends StatefulWidget {
     this.auth,
     this.onLoggedOut,
     this.updates,
-    this.appVersion = '1.0.0',
-    this.appBuild = 3,
+    this.appVersion = kProductVersion,
+    this.appBuild = kProductBuild,
     this.configurationError,
     super.key,
   });

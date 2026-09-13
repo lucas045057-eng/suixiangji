@@ -33,3 +33,19 @@
 | 真实推送 | BLOCKED | Bark/ntfy 未配置，未作任何成功声称 |
 
 源码级检查已做：所有测试引用的模型、规则、仓库、状态和页面文件均已建立；未把缺少工具链的项目写成 PASS。
+
+## V1.0.1 Android Network Contract
+
+V1.0.1 目标版本为 `1.0.1+4`，Android `versionCode=4`。Android 请求使用 `cronet_http: 1.9.0` 的 Embedded Cronet；Google Play Services required 为 `NO`。Web 和非 Android 平台继续使用现有 `package:http` transport。
+
+所有 Android 相关 Flutter 命令必须带：
+
+```text
+--dart-define=cronetHttpNoPlay=true
+```
+
+Release candidate 使用：
+
+```text
+flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+```
