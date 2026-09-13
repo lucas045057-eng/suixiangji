@@ -11,7 +11,7 @@ from .auth.router import router as auth_router
 from .config import get_settings
 from .core.dependencies import get_current_user as _user
 from .db import get_db
-from .models import Account, Budget, Category, SyncOperation, Transaction, User
+from .models import Account, Budget, Category, Transaction, User
 from .quick_entry.router import agent_draft, router as quick_entry_router
 from .quick_entry.schemas import DraftIn
 from .schemas import RestoreIn
@@ -33,8 +33,8 @@ from .insights.service import json_metrics as _json_metrics
 from .insights.service import records as _records
 from .sync.ordering import order_operations as _order_sync_operations
 from .sync.router import router as sync_router
-from .sync.service import pull as sync_pull
-from .sync.service import push as sync_push
+from .sync import service as sync_service
+from .sync.schemas import SyncPushIn
 
 
 router = APIRouter()
@@ -80,6 +80,16 @@ def stats(
 
 async def monthly_report(month: str, force: bool = False, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
     return await insights_service.monthly_report(db, user, month, force=force)
+
+
+def sync_push(payload: SyncPushIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
+    """Compatibility façade; the Sync router owns the HTTP route."""
+    return sync_service.push(payload, db, user)
+
+
+def sync_pull(since_version: int = 0, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
+    """Compatibility façade; the Sync router owns the HTTP route."""
+    return sync_service.pull(since_version, db, user)
 
 @router.get("/backup/export")
 def backup_export(db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
