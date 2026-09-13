@@ -9,7 +9,7 @@
 - 收支、转账、净资产、储蓄率、预算阈值、应急金口径规则
 - 自然语言金额/分类/账户解析和 85% 确认门
 - local repository、幂等同步队列、软删除、过期更新冲突记录
-- API client：auth、accounts、categories、transactions、stats、wealth、budgets、agent、sync 资源边界
+- Feature RemoteDataSource：auth、accounts、categories、transactions、stats、wealth、budgets、agent、backup、sync 资源边界；ApiClient 仅保留兼容 façade
 - 模块化 Feature Store/Repository：Auth、Ledger、Assets、Budget、QuickEntry、Insights、Backup；SyncCoordinator 只编排既有同步行为
 - LocalStateSession 作为 FinanceState、SyncQueue、cursor 和冲突恢复的唯一串行写入口
 - 平台安全 Token 存储、App 重启恢复和 401 自动清除登录状态

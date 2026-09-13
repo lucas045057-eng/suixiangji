@@ -34,7 +34,7 @@ FastAPI Sync API
 PostgreSQL
 ```
 
-UI 只通过对应 Feature Store 执行业务操作。FinanceStore、FinanceRepository、ApiClient 保留旧入口作为兼容 façade；真实职责分别归属 Auth、Ledger、Assets、Budget、QuickEntry、Insights 和 Sync 模块。所有 FinanceState、Queue、cursor、冲突恢复和 tombstone 写入都必须经过同一个 LocalStateSession。联网后由 FastAPI 校验身份、实体归属、依赖和版本，再写入 PostgreSQL。
+UI 只通过对应 Feature Store 执行业务操作。FinanceStore、FinanceRepository、ApiClient 保留旧入口作为兼容 façade；真实职责分别归属 Auth、Ledger、Assets、Budget、QuickEntry、Insights、Backup 和 Sync 模块。所有 FinanceState、Queue、cursor、冲突恢复和 tombstone 写入都必须经过同一个 LocalStateSession。联网后由 FastAPI 校验身份、实体归属、依赖和版本，再写入 PostgreSQL。
 
 ## 3. 最终模块树
 
