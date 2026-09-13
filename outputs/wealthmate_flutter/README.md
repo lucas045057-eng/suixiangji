@@ -19,13 +19,27 @@ flutter pub get
 flutter run -d windows
 ```
 
-接入后端时通过构建参数注入：
+接入后端时通过集中构建参数注入。开发/测试可以使用本机 HTTP：
 
 ```text
-flutter run -d windows --dart-define=WEALTHMATE_API_BASE_URL=http://127.0.0.1:18000 --dart-define=WEALTHMATE_API_TOKEN=<jwt>
+flutter run -d windows --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-define=WEALTHMATE_API_BASE_URL=http://127.0.0.1:18000 --dart-define=WEALTHMATE_API_TOKEN=<jwt>
 ```
 
 未提供基址时，界面会显示“离线演示/待配置”，不会显示虚假的同步成功。
+
+正式环境只能注入 HTTPS API 地址，并使用 `1.0.0+3`。正式域名尚未提供：
+
+```text
+PRODUCTION DOMAIN: NOT CONFIGURED
+```
+
+应用会按 `latest_build > local_build` 判断是否有更新；历史 Beta `1.2.0+2` 会识别正式 `1.0.0+3` 为可更新。更新下载仅打开经过校验的 HTTPS 地址，不执行静默安装。当前仓库没有 Beta APK 或其证书指纹证据，因此：
+
+```text
+APK UPDATE SIGNING: NOT VERIFIED
+```
+
+在签名连续性得到证明前，不得声称现有用户可以直接覆盖安装，也不得通过卸载旧 App 规避本地数据问题。
 
 ## 结构
 

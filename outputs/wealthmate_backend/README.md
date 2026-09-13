@@ -17,13 +17,25 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## 客户端配置
 
-Windows 客户端连接 `http://服务器地址:18000`。手机不能使用 `127.0.0.1`，应连接运行 API 的电脑在同一 Wi-Fi 下的局域网地址，例如 `http://192.168.1.20:18000`。在公网部署时使用 HTTPS 域名。
+开发/测试时，Windows 客户端可以连接本机 `http://127.0.0.1:18000`；手机不能使用 `127.0.0.1`，局域网联调可以使用局域网地址。正式环境必须由发布环境注入 HTTPS API 域名。本项目当前没有提供最终正式域名，不得把局域网地址、IP 或占位域名用于正式 V1.0.0。
 
 Flutter 参数示例：
 
 ```text
-flutter run -d windows --dart-define=WEALTHMATE_API_BASE_URL=http://192.168.1.20:18000
-flutter run -d <android-device> --dart-define=WEALTHMATE_API_BASE_URL=http://192.168.1.20:18000
+flutter run -d windows --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-define=WEALTHMATE_API_BASE_URL=http://127.0.0.1:18000
+flutter run -d <android-device> --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-define=WEALTHMATE_API_BASE_URL=http://192.168.1.20:18000
+```
+
+版本接口为匿名 `GET /app/version`，由 `WEALTHMATE_APP_LATEST_VERSION`、`WEALTHMATE_APP_LATEST_BUILD`、`WEALTHMATE_APP_MINIMUM_SUPPORTED_BUILD`、`WEALTHMATE_APP_FORCE_UPDATE`、`WEALTHMATE_APP_DOWNLOAD_URL` 和 `WEALTHMATE_APP_RELEASE_NOTES` 提供静态发布元数据。正式下载地址必须是 HTTPS；空地址表示尚未配置发布下载页。
+
+当前发布状态：
+
+```text
+产品版本：1.0.0
+Flutter Version：1.0.0+3
+Android versionCode：3
+PRODUCTION DOMAIN：NOT CONFIGURED
+APK UPDATE SIGNING：NOT VERIFIED
 ```
 
 ## 已实现的 V1 边界

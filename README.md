@@ -2,7 +2,7 @@
 
 随想记是一款个人记账与极简资产管理应用，支持 Android、Windows 和 Web/PWA。
 
-## V1.2 能力
+## V1.0.0 能力
 
 - 自然语言快捷记：输入“今天吃饭吃了 30 元”，系统按分类、账户、默认设置和已确认记忆自动补齐。
 - 自动补齐后始终可以“修改”，确认后才正式入账。
@@ -32,16 +32,23 @@ docker compose up -d --build
 
 健康检查：`http://127.0.0.1:18000/health`
 
-客户端构建时注入服务端地址：
+客户端构建时通过集中配置注入服务端地址。下面的地址仅用于开发/测试：
 
 ```powershell
 cd outputs/wealthmate_flutter
 flutter pub get
-flutter build apk --release --dart-define=WEALTHMATE_API_BASE_URL=http://服务器地址:18000
-flutter build windows --release --dart-define=WEALTHMATE_API_BASE_URL=http://服务器地址:18000
+flutter build windows --release --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-define=WEALTHMATE_API_BASE_URL=http://127.0.0.1:18000
 ```
 
-完整部署和验收记录见 [随想记 V1.2 部署说明](outputs/WEALTHMATE-V1-DEPLOYMENT.md) 和 [验收状态](outputs/ACCEPTANCE-STATUS.md)。
+正式环境必须注入最终的 HTTPS API 地址；本仓库当前没有猜测或固化正式域名：
+
+```powershell
+flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=<final-https-api-url>
+```
+
+PRODUCTION DOMAIN：NOT CONFIGURED
+
+版本冻结与 Git 收口记录见 [V1.0.0 项目状态](docs/PROJECT_STATE.md) 和 [Git 清理报告](docs/V1.0.0-GIT-CLEANUP-REPORT.md)。
 
 ## Sync Status
 
