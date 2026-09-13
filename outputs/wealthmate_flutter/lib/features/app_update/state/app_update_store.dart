@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../../../core/network/api_transport.dart';
 import '../data/app_update_remote_data_source.dart';
 import '../domain/app_version.dart';
 
@@ -38,10 +37,10 @@ class AppUpdateStore extends ChangeNotifier {
       _status = remoteVersion.isUpdateAvailable(currentBuild)
           ? AppUpdateStatus.available
           : AppUpdateStatus.upToDate;
-    } on ApiFailure catch (failure) {
+    } on Exception catch (failure) {
       _remoteVersion = null;
       _status = AppUpdateStatus.failed;
-      _error = failure.message;
+      _error = failure.toString();
     } catch (_) {
       _remoteVersion = null;
       _status = AppUpdateStatus.failed;

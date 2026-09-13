@@ -39,7 +39,9 @@ void main() {
     expect(remote.isUpdateAvailable(3), isFalse);
   });
 
-  test('a build below the minimum supported build requires a valid forced update', () {
+  test(
+      'a build below the minimum supported build requires a valid forced update',
+      () {
     final remote = AppVersion.fromJson(releaseJson());
 
     expect(remote.requiresForceUpdate(2), isTrue);

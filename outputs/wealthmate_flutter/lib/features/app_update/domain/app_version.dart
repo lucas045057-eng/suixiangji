@@ -37,7 +37,9 @@ class AppVersion {
         throw const FormatException('download_url 必须是 HTTPS URL 或 null');
       }
       final uri = Uri.tryParse(downloadUrl.trim());
-      if (uri == null || uri.scheme.toLowerCase() != 'https' || uri.host.isEmpty) {
+      if (uri == null ||
+          uri.scheme.toLowerCase() != 'https' ||
+          uri.host.isEmpty) {
         throw const FormatException('download_url 必须使用 HTTPS');
       }
       normalizedDownloadUrl = uri.toString();

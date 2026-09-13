@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
+import '../features/app_update/state/app_update_store.dart';
 import '../features/budget/state/budget_store.dart';
 import '../state/finance_store.dart';
 import 'budgets_page.dart';
@@ -14,11 +15,24 @@ import 'widgets/transaction_form.dart';
 import 'wealth_page.dart';
 
 class AppShell extends StatefulWidget {
-  const AppShell({required this.store, this.auth, this.onLoggedOut, super.key});
+  const AppShell({
+    required this.store,
+    this.auth,
+    this.onLoggedOut,
+    this.updates,
+    this.appVersion = '1.0.0',
+    this.appBuild = 3,
+    this.configurationError,
+    super.key,
+  });
 
   final FinanceStore store;
   final AuthStore? auth;
   final VoidCallback? onLoggedOut;
+  final AppUpdateStore? updates;
+  final String appVersion;
+  final int appBuild;
+  final String? configurationError;
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -80,6 +94,10 @@ class _AppShellState extends State<AppShell> {
           assets: widget.store.assets,
           auth: widget.auth,
           onLoggedOut: widget.onLoggedOut,
+          updates: widget.updates,
+          appVersion: widget.appVersion,
+          appBuild: widget.appBuild,
+          configurationError: widget.configurationError,
         ),
     };
   }

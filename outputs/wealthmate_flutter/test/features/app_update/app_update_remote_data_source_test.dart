@@ -32,7 +32,8 @@ class CapturingClient extends http.BaseClient {
 }
 
 void main() {
-  test('fetch requests public version metadata without Authorization', () async {
+  test('fetch requests public version metadata without Authorization',
+      () async {
     final client = CapturingClient();
     final api = ApiClient(
       baseUrl: 'https://api.example.invalid',

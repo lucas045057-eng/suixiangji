@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/models.dart';
+import '../features/app_update/state/app_update_store.dart';
 import '../features/auth/state/auth_store.dart';
 import '../features/assets/state/asset_store.dart';
 import '../state/finance_store.dart';
 import 'account_detail_page.dart';
+import 'app_update_dialog.dart';
 import 'category_management_page.dart';
 import 'profile_settings_page.dart';
 
@@ -15,6 +17,10 @@ class SettingsPage extends StatelessWidget {
     this.auth,
     this.assets,
     this.onLoggedOut,
+    this.updates,
+    this.appVersion = '1.0.0',
+    this.appBuild = 3,
+    this.configurationError,
     super.key,
   });
 
@@ -22,12 +28,17 @@ class SettingsPage extends StatelessWidget {
   final AuthStore? auth;
   final AssetStore? assets;
   final VoidCallback? onLoggedOut;
+  final AppUpdateStore? updates;
+  final String appVersion;
+  final int appBuild;
+  final String? configurationError;
 
   @override
   Widget build(BuildContext context) {
     final assetStore = assets ?? store.assets;
+    final listenables = <Listenable>[store, if (updates != null) updates!];
     return ListenableBuilder(
-        listenable: store,
+        listenable: Listenable.merge(listenables),
         builder: (context, _) => SafeArea(
                 child: ListView(
                     padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -136,6 +147,22 @@ class SettingsPage extends StatelessWidget {
                   ])),
                   const SizedBox(height: 12),
                   Card(
+                      child: ListTile(
+                          leading: const Icon(Icons.system_update_outlined),
+                          title: const Text('应用版本'),
+                          subtitle: Text(configurationError == null
+                              ? '当前版本 $appVersion ($appBuild)'
+                              : '配置错误：$configurationError'),
+                          trailing: updates == null
+                              ? null
+                              : TextButton(
+                                  onPressed: updates!.status ==
+                                          AppUpdateStatus.checking
+                                      ? null
+                                      : () => _checkForUpdates(context),
+                                  child: const Text('检查更新')))),
+                  const SizedBox(height: 12),
+                  Card(
                       child: Column(children: [
                     ListTile(
                         leading: const Icon(Icons.label_outline),
@@ -187,10 +214,37 @@ class SettingsPage extends StatelessWidget {
                   ],
                   const SizedBox(height: 18),
                   const Text(
-                      'API 基址与 JWT 通过构建参数注入：WEALTHMATE_API_BASE_URL / WEALTHMATE_API_TOKEN。当前缺少配置时，客户端只运行离线演示，不会伪造同步成功。',
+                      'API 基址与 JWT 通过集中构建配置注入：WEALTHMATE_API_BASE_URL / WEALTHMATE_API_TOKEN。当前缺少配置时，客户端只运行离线演示，不会伪造同步成功。',
                       style: TextStyle(
                           color: Color(0xFF87958F), fontSize: 10, height: 1.5)),
                 ])));
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    final updateStore = updates;
+    if (updateStore == null) return;
+    await updateStore.check();
+    if (!context.mounted) return;
+    switch (updateStore.status) {
+      case AppUpdateStatus.available:
+        final version = updateStore.remoteVersion;
+        if (version != null) {
+          await showAppUpdateDialog(
+            context,
+            version: version,
+            forceUpdate: updateStore.forceUpdate,
+          );
+        }
+      case AppUpdateStatus.upToDate:
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('已经是最新版本')));
+      case AppUpdateStatus.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(updateStore.error ?? '检查更新失败')));
+      case AppUpdateStatus.idle:
+      case AppUpdateStatus.checking:
+        break;
+    }
   }
 
   Future<void> _confirmRestore(BuildContext context) async {
