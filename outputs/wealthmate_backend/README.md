@@ -36,6 +36,10 @@ flutter run -d <android-device> --dart-define=WEALTHMATE_API_BASE_URL=http://192
 - 备份导出与恢复；AI 日志记录任务、模型、状态、Token 元数据和结果摘要。
 - 规则优先生成草稿；AI 未配置时基础记账继续可用。
 
+## 模块边界
+
+Auth、Ledger、Assets、Budget、QuickEntry、Insights、Sync 和 Backup 的 Router/Service 分别位于对应 `app/` 子目录。`app/api.py`、`app/domain.py`、`app/security.py` 和 `app/schemas.py` 仅保留兼容导出或路由聚合；`app/models.py` 是唯一 SQLAlchemy ORM 模型定义文件。Sync 的 `/sync/push`、`/sync/pull` 字段、依赖排序、提交回滚、幂等、冲突和租户隔离语义保持不变。
+
 ## 重要说明
 
 Frankfurter 只用于低频查询汇率，不在每次记账时猜测或实时刷新。账目保存的是入账当时的折算快照，历史报告不会被新汇率改写。报告没有可用模型时会明确显示 AI 未配置/数据不足，不伪造分析。

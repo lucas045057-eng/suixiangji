@@ -7,7 +7,8 @@ from typing import Any, Callable, Literal, TYPE_CHECKING
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..domain import TransactionRecord, money
+from ..assets.domain import money
+from .domain import TransactionRecord
 from ..services.agent import ModelAdapter, configured_model
 from .domain import monthly_metrics, period_metrics
 

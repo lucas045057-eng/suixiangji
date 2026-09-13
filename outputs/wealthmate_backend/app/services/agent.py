@@ -6,7 +6,7 @@ from typing import Any, Protocol
 import httpx
 
 from ..config import get_settings
-from ..domain import classify_natural_language
+from ..quick_entry.domain import classify_natural_language
 
 
 class ModelAdapter(Protocol):

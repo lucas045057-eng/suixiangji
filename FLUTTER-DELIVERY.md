@@ -10,6 +10,8 @@
 - 自然语言金额/分类/账户解析和 85% 确认门
 - local repository、幂等同步队列、软删除、过期更新冲突记录
 - API client：auth、accounts、categories、transactions、stats、wealth、budgets、agent、sync 资源边界
+- 模块化 Feature Store/Repository：Auth、Ledger、Assets、Budget、QuickEntry、Insights；SyncCoordinator 只编排既有同步行为
+- LocalStateSession 作为 FinanceState、SyncQueue、cursor 和冲突恢复的唯一串行写入口
 - 平台安全 Token 存储、App 重启恢复和 401 自动清除登录状态
 - Android 五 Tab：首页、账本、统计、财富、我的
 - Windows 宽屏左侧导航 + 中间内容 + 右侧详情面板
@@ -24,7 +26,7 @@
 | `flutter pub get` | TESTED | 依赖解析成功，含 `flutter_secure_storage` |
 | `dart format --output=none --set-exit-if-changed .` | NOT_RUN | 本批次未执行格式检查 |
 | `flutter analyze` | TESTED | 无问题 |
-| `flutter test` | TESTED | 47/47 通过 |
+| `flutter test` | TESTED | 241/241 通过 |
 | `flutter build apk --debug` | NOT_RUN | 本批次未重新构建 |
 | `flutter build windows --debug` | NOT_RUN | 本批次未重新构建 |
 | 后端真实联调 | BLOCKED | 尚未执行真实 FastAPI + PostgreSQL + Flutter Client 联调 |

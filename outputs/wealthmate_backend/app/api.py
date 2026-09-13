@@ -1,32 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from uuid import uuid4
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from .assets import service as assets_service
 from .auth.router import router as auth_router
+from .backup.router import router as backup_router
+from .backup import service as backup_service
 from .config import get_settings
 from .core.dependencies import get_current_user as _user
 from .db import get_db
-from .models import Account, Budget, Category, Transaction, User
+from .models import User
 from .quick_entry.router import agent_draft, router as quick_entry_router
 from .quick_entry.schemas import DraftIn
 from .schemas import RestoreIn
-from .budget.service import budget_json as _budget_json
-from .budget.service import save_budget as _save_budget
-from .ledger.service import (
-    _attach_latest_rate,
-    _category_json,
-    _normalise_tx_payload,
-    _save_category,
-    _save_tx,
-    _tx_json,
-)
 from .services.agent import configured_model
-from .assets.service import fetch_frankfurter_rate
 from .insights.router import router as insights_router
 from .insights import service as insights_service
 from .insights.service import json_metrics as _json_metrics
@@ -39,13 +27,10 @@ from .sync.schemas import SyncPushIn
 
 router = APIRouter()
 router.include_router(auth_router)
+router.include_router(backup_router)
 router.include_router(quick_entry_router)
 router.include_router(insights_router)
 router.include_router(sync_router)
-
-
-_account_json = assets_service.account_json
-_save_account = assets_service.save_account
 
 
 @router.get("/health")
@@ -91,26 +76,12 @@ def sync_pull(since_version: int = 0, db: Session = Depends(get_db), user: User 
     """Compatibility façade; the Sync router owns the HTTP route."""
     return sync_service.pull(since_version, db, user)
 
-@router.get("/backup/export")
+
 def backup_export(db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    accounts = db.query(Account).filter(Account.user_id == user.id).all()
-    transactions = db.query(Transaction).filter(Transaction.user_id == user.id).all()
-    return {"schema_version": 1, "exported_at": datetime.now(timezone.utc), "accounts": [_account_json(row) for row in accounts], "transactions": [_tx_json(row) for row in transactions]}
+    """Compatibility façade; the Backup router owns the HTTP route."""
+    return backup_service.export_backup(db, user)
 
 
-@router.post("/backup/restore")
 def backup_restore(payload: RestoreIn, db: Session = Depends(get_db), user: User = Depends(_user)) -> dict:
-    imported_accounts = 0
-    imported_transactions = 0
-    for item in payload.accounts:
-        data = dict(item)
-        data["id"] = data.get("id") or str(uuid4())
-        data.setdefault("name", data["id"])
-        _save_account(db, user, data)
-        imported_accounts += 1
-    for item in payload.transactions:
-        data = _normalise_tx_payload(_attach_latest_rate(db, dict(item)))
-        _save_tx(db, user, data, deleted=bool(item.get("deleted_at")))
-        imported_transactions += 1
-    db.commit()
-    return {"restored": True, "accounts": imported_accounts, "transactions": imported_transactions}
+    """Compatibility façade; the Backup router owns the HTTP route."""
+    return backup_service.restore_backup(payload, db, user)

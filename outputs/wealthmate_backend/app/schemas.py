@@ -1,75 +1,29 @@
-from __future__ import annotations
+"""Compatibility exports for the pre-modular backend schema imports."""
 
-from datetime import date
-from decimal import Decimal
-from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
-
+from .assets.schemas import AccountIn, RateIn
 from .auth.schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
+from .backup.schemas import RestoreIn
 from .budget.schemas import BudgetIn, BudgetPatch
+from .ledger.schemas import CategoryIn, CategoryPatch, TransactionIn
+from .quick_entry.schemas import DraftIn
 from .sync.schemas import SyncOperationIn, SyncPushIn
 
 
-class AccountIn(BaseModel):
-    id: str | None = None
-    name: str = Field(min_length=1, max_length=128)
-    kind: Literal["asset", "liability"] = "asset"
-    account_kind: Literal["cash", "bank_card", "wechat", "alipay", "foreign", "fund_investment", "credit_card", "loan", "other"] = "other"
-    currency: str = Field(default="CNY", min_length=3, max_length=16)
-    opening_balance: Decimal = Decimal("0")
-    opening_cny_amount: Decimal | None = None
-    opening_exchange_rate: Decimal | None = None
-    opening_rate_date: date | None = None
-    opening_rate_source: str | None = None
-    is_liquid: bool = False
-    is_default_payment: bool = False
-
-
-class CategoryIn(BaseModel):
-    id: str | None = None
-    name: str = Field(min_length=1, max_length=128)
-    kind: Literal["income", "expense"] = "expense"
-
-
-class CategoryPatch(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=128)
-    active: bool | None = None
-
-
-class TransactionIn(BaseModel):
-    id: str | None = None
-    client_op_id: str
-    kind: Literal["income", "expense", "transfer"]
-    amount: Decimal = Field(gt=0)
-    currency: str = Field(default="CNY", min_length=3, max_length=16)
-    cny_amount: Decimal | None = None
-    exchange_rate: Decimal | None = None
-    exchange_rate_date: date | None = None
-    exchange_rate_source: str | None = None
-    category_id: str | None = None
-    category_name: str | None = None
-    account_id: str | None = None
-    from_account_id: str | None = None
-    to_account_id: str | None = None
-    occurred_on: date
-    occurred_at: str | None = None
-    note: str | None = None
-
-
-class RestoreIn(BaseModel):
-    model_config = ConfigDict(extra="allow")
-    accounts: list[dict[str, Any]] = Field(default_factory=list)
-    transactions: list[dict[str, Any]] = Field(default_factory=list)
-
-
-class DraftIn(BaseModel):
-    text: str = Field(min_length=1, max_length=1000)
-
-
-class RateIn(BaseModel):
-    base_currency: str
-    quote_currency: str = "CNY"
-    rate: Decimal = Field(gt=0)
-    rate_date: date
-    source: str
+__all__ = [
+    "AccountIn",
+    "BudgetIn",
+    "BudgetPatch",
+    "CategoryIn",
+    "CategoryPatch",
+    "DeleteUserIn",
+    "DraftIn",
+    "LoginIn",
+    "PasswordChange",
+    "ProfilePatch",
+    "RateIn",
+    "RegisterIn",
+    "RestoreIn",
+    "SyncOperationIn",
+    "SyncPushIn",
+    "TransactionIn",
+]

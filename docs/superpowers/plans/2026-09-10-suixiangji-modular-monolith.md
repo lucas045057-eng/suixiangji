@@ -702,11 +702,11 @@ Interfaces:
 - SyncCoordinator.pushPending(FinanceState state) and pullChanges(FinanceState state) preserve current FinanceRepository semantics and error messages.
 - app.sync.ordering.order_operations(operations) is a pure extraction of current stable dependency ordering; app.sync.service.push and pull preserve existing response ordering and transaction boundaries.
 
-- [ ] Step 1: Freeze current Sync behavior with characterization tests.
+- [x] Step 1: Freeze current Sync behavior with characterization tests.
 
 Run all existing Sync tests and add focused assertions for exact client_op_id, server-version handling, strict cursor, tombstone retention, conflict-specific queue removal, dependency ordering, user isolation and failed-batch rollback. Do not change expected values.
 
-- [ ] Step 2: Run the Sync-focused suite before extraction.
+- [x] Step 2: Run the Sync-focused suite before extraction.
 
 ~~~powershell
 Set-Location E:\codex\suixiangji\outputs\wealthmate_flutter
@@ -715,7 +715,7 @@ Set-Location E:\codex\suixiangji\outputs\wealthmate_backend
 python -m unittest discover -s tests -v
 ~~~
 
-- [ ] Step 3: Extract Flutter boundaries without changing algorithm code.
+- [x] Step 3: Extract Flutter boundaries without changing algorithm code.
 
 Move the current queue coordination and push/pull/recovery blocks into SyncCoordinator with behavior-preserving extraction. FinanceRepository becomes a compatibility façade that forwards to the Coordinator. All persistence still goes through LocalStateSession; no second queue, cursor, conflict resolver or operation identity generator is introduced.
 
@@ -735,7 +735,7 @@ class SyncCoordinator {
 }
 ~~~
 
-- [ ] Step 4: Extract Backend Sync Router/Service boundaries.
+- [x] Step 4: Extract Backend Sync Router/Service boundaries.
 
 Move only route definitions, request schemas, _order_sync_operations, conflict helpers and existing push/pull service calls into app/sync. Preserve operation ordering, response ordering, commit/rollback behavior and all existing field names. app/models.py remains untouched.
 
@@ -764,11 +764,11 @@ def order_operations(operations: list) -> list:
     ]
 ~~~
 
-- [ ] Step 5: Verify protocol equivalence by diffing characterization outputs.
+- [x] Step 5: Verify protocol equivalence by diffing characterization outputs.
 
 Run Flutter and Backend Sync suites, compare accepted/conflict/pull payloads for the same fixtures, and inspect that no algorithmic change appears in diff. If any behavior change is discovered, stop Phase 7 and restore the extraction to a pure boundary move.
 
-- [ ] Step 6: Run the complete phase gate, report and commit.
+- [x] Step 6: Run the complete phase gate, report and commit.
 
 ~~~powershell
 git add outputs\wealthmate_flutter outputs\wealthmate_backend
@@ -796,7 +796,7 @@ Interfaces:
 - ApiClient remains only a compatibility façade over ApiTransport and feature DataSources.
 - app/api.py, app/schemas.py, app/domain.py, and app/security.py contain only compatibility exports/aggregation, not duplicate business implementations.
 
-- [ ] Step 1: Add architecture boundary checks.
+- [x] Step 1: Add architecture boundary checks.
 
 The Flutter check parses/import-scans source files and fails if a feature UI imports data/drift_database.dart, data/local_repository.dart, core/network/api_transport.dart, or constructs http.Client; it also fails if a new feature Store calls LocalRepository.save or SyncQueue.enqueue directly. The Backend check fails if a Router calls db.commit() or contains domain calculations, and verifies that app.models is the only ORM model definition module.
 
@@ -810,19 +810,19 @@ model_files = [path for path in backend.rglob('models.py')]
 assert model_files == [backend / 'models.py']
 ~~~
 
-- [ ] Step 2: Remove only duplicated implementation, not compatibility exports.
+- [x] Step 2: Remove only duplicated implementation, not compatibility exports.
 
 Use rg to confirm business logic exists in one module only. Keep old imports working for tests and downstream code, but make the old files delegate or re-export. Do not delete user data, database files, volumes, or unrelated uncommitted files.
 
-- [ ] Step 3: Update architecture documentation with the actual final tree.
+- [x] Step 3: Update architecture documentation with the actual final tree.
 
 Document the final file locations, LocalStateSession write rule, thin compatibility façade policy, unchanged API/Schema, unchanged Sync protocol, and deferred SQLAlchemy model split. Update README commands only where paths changed.
 
-- [ ] Step 4: Run the full final verification.
+- [x] Step 4: Run the full final verification.
 
 Run the shared phase gate, the architecture tests, git diff --check, and a final rg scan for direct page-to-HTTP/database access, duplicate Sync implementations, and module-level SQLAlchemy model files.
 
-- [ ] Step 5: Produce the final local report and commit.
+- [x] Step 5: Produce the final local report and commit.
 
 The report must include current branch, HEAD SHA, dirty status, final directory tree, modules extracted, final FinanceStore and api.py roles, Sync protocol result, database/migration result, every test result, remaining technical debt, and next steps. It must explicitly state:
 

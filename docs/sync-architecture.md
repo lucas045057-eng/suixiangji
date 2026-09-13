@@ -87,3 +87,9 @@ conflict
 ## 6. Authentication gate
 
 启动时先恢复 token 和本地 owner，再以 `/auth/me` 结果决定是否进入业务同步。认证失败不会继续执行 push/pull；401 会清理失效凭据，但保留本地 FinanceState、Queue、owner 和 cursor，以便受保护的离线恢复流程继续工作。
+
+## 7. 模块边界
+
+Flutter 的同步生命周期入口是 `lib/core/sync/sync_coordinator.dart`。它只编排既有 `pushPending`、`pullChanges` 和冲突恢复；`FinanceRepository` 只保留兼容委托。所有聚合与队列持久化仍由 `lib/core/database/local_state_session.dart` 串行完成。
+
+Backend 的 `/sync/push` 与 `/sync/pull` 路由位于 `app/sync/router.py`，业务服务位于 `app/sync/service.py`，排序、冲突、请求 schema 和幂等参考 helper 位于同一模块目录。`app/api.py` 只做旧入口兼容和 Router aggregation，不再保留第二套 Sync 实现。

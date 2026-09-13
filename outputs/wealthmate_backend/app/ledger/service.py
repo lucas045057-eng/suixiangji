@@ -5,7 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..domain import money
+from ..assets.domain import money
 from ..models import Account, Category, ExchangeRate, SyncOperation, Transaction, User
 from .domain import date_value, json_metrics, normalise_transaction_payload
 from .schemas import CategoryIn, CategoryPatch, TransactionIn

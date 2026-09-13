@@ -68,3 +68,7 @@ def json_value(value: Any) -> Any:
     if isinstance(value, list):
         return [json_value(item) for item in value]
     return value
+
+
+def iso_date(value: date | datetime | None) -> str | None:
+    return value.isoformat() if value else None

@@ -4,7 +4,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from ..domain import classify_natural_language
+from ..quick_entry.domain import classify_natural_language
 from .agent import ModelAdapter
 
 

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-from ..domain import calculate_cny
+from ..assets.domain import calculate_cny
 
 
 def date_value(value: str | date | None, fallback: date | None = None) -> date:

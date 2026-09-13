@@ -1,17 +1,39 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
+from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, TYPE_CHECKING
+from typing import Any
 
-if TYPE_CHECKING:
-    from ..domain import TransactionRecord
+from ..assets.domain import money
+
+
+@dataclass(frozen=True)
+class AccountRecord:
+    id: str
+    name: str
+    kind: str
+    balance: Decimal = Decimal("0")
+    currency: str = "CNY"
+
+
+@dataclass(frozen=True)
+class TransactionRecord:
+    id: str
+    kind: str
+    amount: Decimal
+    currency: str
+    cny_amount: Decimal | None
+    category: str | None
+    occurred_on: date
+    account_id: str | None = None
+    deleted: bool = False
+    occurred_at: datetime | str | None = None
+    account_name: str | None = None
 
 
 def monthly_metrics(rows: list[TransactionRecord], month: str) -> dict[str, Any]:
     """Return the legacy monthly aggregates without mutating any source data."""
-    from ..domain import money
-
     income = Decimal("0")
     expense = Decimal("0")
     pending = 0
@@ -57,8 +79,6 @@ def _record_datetime(row: TransactionRecord) -> datetime:
 
 def period_metrics(rows: list[TransactionRecord], period: str, start: date, end: date) -> dict[str, Any]:
     """Build zero-filled, programmatic aggregates for chartable periods."""
-    from ..domain import money
-
     if end < start:
         raise ValueError("统计结束日期不能早于开始日期")
     day_mode = period == "day"
