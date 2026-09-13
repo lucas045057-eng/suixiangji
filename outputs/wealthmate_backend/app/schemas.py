@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .auth.schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
 from .budget.schemas import BudgetIn, BudgetPatch
+from .sync.schemas import SyncOperationIn, SyncPushIn
 
 
 class AccountIn(BaseModel):
@@ -54,19 +55,6 @@ class TransactionIn(BaseModel):
     occurred_on: date
     occurred_at: str | None = None
     note: str | None = None
-
-
-class SyncOperationIn(BaseModel):
-    client_op_id: str
-    entity: Literal["transactions", "accounts", "categories", "budgets"]
-    entity_id: str
-    type: Literal["upsert", "delete"]
-    payload: dict[str, Any] = Field(default_factory=dict)
-    created_at: str | None = None
-
-
-class SyncPushIn(BaseModel):
-    operations: list[SyncOperationIn] = Field(default_factory=list)
 
 
 class RestoreIn(BaseModel):
