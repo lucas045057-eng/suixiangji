@@ -50,7 +50,7 @@
   ```powershell
   git branch --show-current
   git rev-parse HEAD
-  git rev-parse v1.0.0
+  git rev-parse 'v1.0.0^{}'
   git status --short --branch
   ```
 
