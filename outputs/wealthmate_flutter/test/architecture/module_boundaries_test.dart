@@ -74,4 +74,38 @@ void main() {
       expect(source, isNot(contains(endpoint)), reason: endpoint);
     }
   });
+
+  test('production HTTP construction stays inside the platform factory', () {
+    final root = _packageRoot();
+    final productionFiles = _dartFiles(Directory('${root.path}/lib'));
+    final factoryFiles = productionFiles.where(
+      (file) => file.path.contains(
+        '${Platform.pathSeparator}core${Platform.pathSeparator}network${Platform.pathSeparator}http_client_factory',
+      ),
+    );
+
+    for (final file in productionFiles) {
+      final source = file.readAsStringSync();
+      if (!factoryFiles.contains(file)) {
+        expect(source, isNot(contains('http.Client(')), reason: file.path);
+        expect(source, isNot(contains('http.Client.new')), reason: file.path);
+        expect(source, isNot(contains('CronetClient')), reason: file.path);
+        expect(source, isNot(contains('CronetEngine')), reason: file.path);
+        expect(source, isNot(contains('package:cronet_http')), reason: file.path);
+        expect(source, isNot(contains('HttpClient(')), reason: file.path);
+      }
+    }
+
+    for (final fileName in <String>[
+      'http_client_factory_web.dart',
+      'http_client_factory_stub.dart',
+    ]) {
+      final source = File(
+        '${root.path}/lib/core/network/$fileName',
+      ).readAsStringSync();
+      expect(source, isNot(contains('package:cronet_http')),
+          reason: fileName);
+      expect(source, isNot(contains('dart:io')), reason: fileName);
+    }
+  });
 }
