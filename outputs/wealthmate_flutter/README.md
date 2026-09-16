@@ -47,7 +47,7 @@ pwsh -NoProfile -File ../../tools/build-android-release.ps1 -FlutterProjectPath 
 
 ```text
 APK UPDATE SIGNING: VERIFIED
-REAL TWO-DEVICE TEST: PENDING
+REAL TWO-DEVICE TEST: NOT RUN
 ```
 
 在真实设备覆盖安装与数据保留验收完成前，不得声称发布已完成，也不得通过卸载旧 App 规避本地数据问题。
