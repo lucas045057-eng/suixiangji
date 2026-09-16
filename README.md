@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 产品版本：V1.0.2
-- Flutter：`1.0.2+5`
+ 产品版本：V1.0.3
+ Flutter：`1.0.3+6`
 - 最低支持版本：`1.0.0+3`
 - Android 网络层继续使用 V1.0.1 Embedded Cronet，并保留 `cronetHttpNoPlay=true` 构建参数。
 

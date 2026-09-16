@@ -2,12 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wealthmate_flutter/features/app_update/domain/app_version.dart';
 
 Map<String, Object?> releaseJson({
-  int latestBuild = 5,
+  int latestBuild = 6,
   int minimumSupportedBuild = 3,
   String? downloadUrl = 'https://download.invalid/app.apk',
 }) {
   return {
-    'latest_version': '1.0.2',
+    'latest_version': '1.0.3',
     'latest_build': latestBuild,
     'minimum_supported_version': '1.0.0',
     'minimum_supported_build': minimumSupportedBuild,
@@ -18,16 +18,16 @@ Map<String, Object?> releaseJson({
 }
 
 void main() {
-  test('an older build sees formal 1.0.2+5 as an update', () {
+  test('an older build sees formal 1.0.3+6 as an update', () {
     final remote = AppVersion.fromJson(releaseJson());
 
     expect(remote.isUpdateAvailable(2), isTrue);
   });
 
-  test('the current 1.0.2+5 build is not an update', () {
+  test('the current 1.0.3+6 build is not an update', () {
     final remote = AppVersion.fromJson(releaseJson());
 
-    expect(remote.isUpdateAvailable(5), isFalse);
+    expect(remote.isUpdateAvailable(6), isFalse);
   });
 
   test('a higher version name with a lower build is not an update', () {

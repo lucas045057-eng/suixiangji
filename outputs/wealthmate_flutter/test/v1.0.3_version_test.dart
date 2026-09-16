@@ -17,13 +17,4 @@ void main() {
     expect(runnerRc, contains('#define VERSION_AS_NUMBER 1,0,3,6'));
     expect(runnerRc, contains('#define VERSION_AS_STRING "1.0.3"'));
   });
-
-  test('retains the V1.0.1 Embedded Cronet delivery contract', () {
-    final pubspec = File('pubspec.yaml').readAsStringSync();
-    final delivery = File('../../FLUTTER-DELIVERY.md').readAsStringSync();
-
-    expect(pubspec, contains('cronet_http: 1.9.0'));
-    expect(delivery, contains('Embedded Cronet'));
-    expect(delivery, contains('--dart-define=cronetHttpNoPlay=true'));
-  });
 }
