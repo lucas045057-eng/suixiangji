@@ -38,18 +38,19 @@ Android 运行、Android 集成测试和 Release 构建必须统一使用 Embedd
 ```text
 flutter run -d <android-device> --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
 flutter test --dart-define=cronetHttpNoPlay=true
-flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+pwsh -NoProfile -File ../../tools/build-android-release.ps1 -FlutterProjectPath . -OutputPath build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
 ```
 
 目标 Cronet distribution 为 `Embedded`，Google Play Services required 为 `NO`。Android App 内所有请求继续经过 `ApiClient → ApiTransport`。
 
-应用会按 `latest_build > local_build` 判断是否有更新；历史 Beta `1.2.0+2` 会识别正式 `1.0.0+3` 为可更新。更新下载仅打开经过校验的 HTTPS 地址，不执行静默安装。当前仓库没有 Beta APK 或其证书指纹证据，因此：
+应用会按 `latest_build > local_build` 判断是否有更新；更新下载仅打开经过校验的 HTTPS 地址，不执行静默安装。V1.0.1 基线与 V1.0.3 build 6 已证明使用同一签名证书，但真实设备覆盖安装和双设备同步仍需单独验收：
 
 ```text
-APK UPDATE SIGNING: NOT VERIFIED
+APK UPDATE SIGNING: VERIFIED
+REAL TWO-DEVICE TEST: NOT RUN
 ```
 
-在签名连续性得到证明前，不得声称现有用户可以直接覆盖安装，也不得通过卸载旧 App 规避本地数据问题。
+在真实设备覆盖安装与数据保留验收完成前，不得声称发布已完成，也不得通过卸载旧 App 规避本地数据问题。
 
 ## 结构
 

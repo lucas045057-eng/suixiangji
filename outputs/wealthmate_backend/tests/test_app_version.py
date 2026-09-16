@@ -56,8 +56,8 @@ class AppVersionTest(unittest.TestCase):
         self.assertEqual(
             result["body"],
             {
-                "latest_version": "1.0.0",
-                "latest_build": 3,
+                "latest_version": "1.0.3",
+                "latest_build": 6,
                 "minimum_supported_version": "1.0.0",
                 "minimum_supported_build": 3,
                 "force_update": False,

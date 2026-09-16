@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
     scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title=get_settings().app_name, version="1.0.0", lifespan=lifespan)
+app = FastAPI(title=get_settings().app_name, version="1.0.3", lifespan=lifespan)
 origins = [item.strip() for item in get_settings().cors_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,

@@ -95,6 +95,8 @@ def save_transaction(
         category = db.get(Category, category_id)
         if not category or category.user_id != user.id:
             raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
+        if values["kind"] != "transfer" and category.kind != values["kind"]:
+            raise HTTPException(status_code=422, detail="分类类型与账目类型不一致")
     if not row:
         row = Transaction(
             id=values["id"],

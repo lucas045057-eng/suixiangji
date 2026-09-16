@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../features/ledger/state/ledger_store.dart';
 import '../../features/quick_entry/state/quick_entry_store.dart';
 import '../../domain/models.dart';
+import '../../features/ledger/domain/ledger_rules.dart';
 import '../../state/finance_store.dart';
 import 'draft_confirmation_card.dart';
 import 'draft_editor.dart';
@@ -51,9 +52,9 @@ class _TransactionFormState extends State<TransactionForm> {
     noteController = TextEditingController(text: initial?.note ?? '');
     smartController = TextEditingController();
     type = initial?.type.name ?? TransactionType.expense.name;
-    categoryId = initial?.categoryId ??
-        widget.ledger.state.categories.firstOrNull?.id ??
-        '';
+    final transactionType = initial?.type ?? TransactionType.expense;
+    categoryId = LedgerRules.validCategoryIdForType(
+        widget.ledger.state, transactionType, initial?.categoryId);
     accountId = initial?.accountId ??
         widget.ledger.state.defaultAccountId ??
         widget.ledger.state.accounts.firstOrNull?.id ??
@@ -193,8 +194,11 @@ class _TransactionFormState extends State<TransactionForm> {
     final accounts = widget.ledger.state.accounts
         .where((item) => item.deletedAt == null)
         .toList();
-    final categories =
-        widget.ledger.state.categories.where((item) => item.active).toList();
+    final transactionType =
+        type == 'income' ? TransactionType.income : TransactionType.expense;
+    final categories = LedgerRules.categoryCandidates(
+        widget.ledger.state, transactionType,
+        selectedCategoryId: categoryId);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Text('账目类型',
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
@@ -205,7 +209,14 @@ class _TransactionFormState extends State<TransactionForm> {
           ButtonSegment(value: 'income', label: Text('收入'))
         ],
         selected: {type},
-        onSelectionChanged: (value) => setState(() => type = value.first),
+        onSelectionChanged: (value) => setState(() {
+          type = value.first;
+          final nextType = type == 'income'
+              ? TransactionType.income
+              : TransactionType.expense;
+          categoryId = LedgerRules.defaultCategoryIdForType(
+              widget.ledger.state, nextType);
+        }),
       ),
       const SizedBox(height: 14),
       TextFormField(
@@ -226,6 +237,7 @@ class _TransactionFormState extends State<TransactionForm> {
               : null),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
+          key: ValueKey('category-$type-$categoryId'),
           initialValue: categoryId.isEmpty ? null : categoryId,
           decoration: const InputDecoration(labelText: '分类'),
           items: categories

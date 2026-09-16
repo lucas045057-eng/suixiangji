@@ -126,6 +126,27 @@ class AssetStore extends ChangeNotifier {
     _notifyChanged();
   }
 
+  Future<void> calibrateBalance(Account account, double delta) async {
+    final current =
+        _state.accounts.where((item) => item.id == account.id).firstOrNull;
+    if (current == null) return;
+
+    late final Account calibrated;
+    try {
+      calibrated = AssetRules.calibrateBalance(current, delta);
+    } on ArgumentError catch (error) {
+      _message = error.message?.toString() ?? '余额校准金额无效';
+      _notifyMessageChanged();
+      return;
+    }
+    if (!await _apply((baseState) =>
+        repository.saveAccount(calibrated, baseState: baseState))) {
+      return;
+    }
+    _message = '账户余额已校准';
+    _notifyChanged();
+  }
+
   Future<void> setDefaultAccount(String accountId) async {
     final eligible = _state.accounts.any((item) =>
         item.id == accountId &&

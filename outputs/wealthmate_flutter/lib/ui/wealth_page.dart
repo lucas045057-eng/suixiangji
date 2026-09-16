@@ -180,9 +180,7 @@ class WealthPage extends StatelessWidget {
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                             builder: (_) => AccountDetailPage(
-                                store: store,
-                                ledger: ledger,
-                                account: item.account))),
+                                store: store, account: item.account))),
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                         backgroundColor: positive
@@ -200,7 +198,7 @@ class WealthPage extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w700)),
                     subtitle: Text(
-                        '${item.account.currency} · ${item.account.isLiquid ? '流动资产 · 应急金口径' : '点击编辑账户配置'}',
+                        '${item.account.currency} · ${item.account.isLiquid ? '流动资产 · 应急金口径' : '可编辑配置或校准余额'}',
                         style: const TextStyle(fontSize: 10)),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Text(money(item.balance),

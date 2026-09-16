@@ -1,3 +1,7 @@
+import 'dart:math' show max, Random;
+
+import 'package:flutter/foundation.dart' show mapEquals;
+
 import '../../data/api_client.dart';
 import '../../data/sync_queue.dart';
 import '../../domain/models.dart';
@@ -23,9 +27,14 @@ class SyncCoordinator {
 
   Future<FinanceState> sync(FinanceState state,
       {bool Function()? isCurrent}) async {
-    final pushed = await pushPending(state);
+    var pushWatermark = state.syncState.serverVersion;
+    final pushed = await _pushPending(state,
+        onWatermark: (version) => pushWatermark = max(pushWatermark, version),
+        isCurrent: isCurrent);
     if (isCurrent != null && !isCurrent()) return pushed;
-    return pullChanges(pushed);
+    if (pushed.syncState.error != null) return pushed;
+    return _pullChanges(pushed,
+        minimumServerVersion: pushWatermark, isCurrent: isCurrent);
   }
 
   FinanceState mergePulled(
@@ -89,20 +98,29 @@ class SyncCoordinator {
       final index = merged.indexWhere((item) => item.id == remote.id);
       if (index < 0) {
         merged.add(remote);
-      } else {
+      } else if (remote.serverVersion == null ||
+          merged[index].serverVersion == null ||
+          remote.serverVersion! >= merged[index].serverVersion!) {
         merged[index] = remote;
       }
     }
     return localState.copyWith(budgets: merged);
   }
 
-  Future<FinanceState> pushPending(FinanceState state) async {
+  Future<FinanceState> pushPending(FinanceState state,
+          {bool Function()? isCurrent}) =>
+      _pushPending(state, isCurrent: isCurrent);
+
+  Future<FinanceState> _pushPending(FinanceState state,
+      {void Function(int)? onWatermark, bool Function()? isCurrent}) async {
+    if (isCurrent != null && !isCurrent()) return state;
     if (api == null) {
-      return state.copyWith(syncState: const SyncState(error: '离线演示/待配置'));
+      return state.copyWith(
+          syncState: state.syncState.copyWith(error: '离线演示/待配置'));
     }
     if (!isLocalOwnerBound()) {
       return state.copyWith(
-          syncState: const SyncState(error: '当前用户身份尚未确认，暂不上传本地数据'));
+          syncState: state.syncState.copyWith(error: '当前用户身份尚未确认，暂不上传本地数据'));
     }
     if ((await session.pendingOperations()).isEmpty) {
       return state.copyWith(
@@ -115,25 +133,15 @@ class SyncCoordinator {
     try {
       final operations = await session.pendingOperations();
       final result = await api!.push(operations);
+      onWatermark?.call((result['server_version'] as num?)?.toInt() ?? 0);
       final accepted =
           ((result['accepted'] as List<Object?>?) ?? const <Object?>[])
               .map((item) => (item! as Map).cast<String, Object?>())
               .toList();
+      if (isCurrent != null && !isCurrent()) return state;
       final acceptedByOperation = <String, Map<String, Object?>>{
         for (final item in accepted) item['client_op_id']! as String: item,
       };
-      final acceptedClientOpIds = <String>{};
-      for (final operation in operations) {
-        final receipt = acceptedByOperation[operation.clientOpId];
-        if (receipt != null) {
-          acceptedClientOpIds.add(operation.clientOpId);
-        }
-      }
-      await session.mutateQueue((pending) {
-        for (final clientOpId in acceptedClientOpIds) {
-          pending.complete(clientOpId);
-        }
-      });
       final conflictItems =
           ((result['conflicts'] as List<Object?>?) ?? const <Object?>[])
               .map((item) => (item! as Map).cast<String, Object?>())
@@ -152,6 +160,49 @@ class SyncCoordinator {
           final receipt = acceptedByOperation[operation.clientOpId];
           final serverVersion = (receipt?['server_version'] as num?)?.toInt();
           if (serverVersion == null) continue;
+          final pending = queue
+              .pending()
+              .where((item) =>
+                  item.entity == operation.entity &&
+                  item.entityId == operation.entityId)
+              .firstOrNull;
+          if (pending == null) continue;
+          final snapshot = _entitySnapshot(base, operation);
+          if (pending.clientOpId != operation.clientOpId ||
+              pending.type != operation.type ||
+              !mapEquals(pending.payload, operation.payload) ||
+              !_matchesSnapshot(snapshot, operation.payload)) {
+            // The receipt belongs to the preceding snapshot. Keep the edit
+            // queued against that accepted base; never reuse an accepted ID.
+            final nextId = pending.clientOpId == operation.clientOpId
+                ? 'edit-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}'
+                : pending.clientOpId;
+            queue.enqueue(SyncOperation(
+              clientOpId: nextId,
+              entity: pending.entity,
+              entityId: pending.entityId,
+              type: pending.type,
+              payload: {
+                ...pending.payload,
+                if (pending.entity != 'categories')
+                  'server_version': serverVersion,
+                if (pending.entity == 'transactions') 'client_op_id': nextId
+              },
+              createdAt: pending.createdAt,
+            ));
+            if (pending.entity == 'transactions') {
+              final index = nextTransactions
+                  .indexWhere((item) => item.id == pending.entityId);
+              if (index >= 0) {
+                nextTransactions[index] =
+                    nextTransactions[index].copyWith(clientOpId: nextId);
+              }
+            }
+            continue;
+          }
+          // Queue completion and the matching entity version are persisted
+          // together by this serialized LocalStateSession write.
+          queue.complete(operation.clientOpId);
           if (operation.entity == 'transactions') {
             final index = nextTransactions
                 .indexWhere((item) => item.id == operation.entityId);
@@ -202,28 +253,31 @@ class SyncCoordinator {
                 if (!base.conflicts.contains(conflict)) conflict,
             ],
             syncState: SyncState(
-                serverVersion: (result['server_version'] as num?)?.toInt() ??
-                    base.syncState.serverVersion,
-                lastSyncedAt: DateTime.now().toIso8601String()));
+                // A push receipt acknowledges writes, not downloaded records.
+                // Persist the download cursor only after pull completes.
+                serverVersion: base.syncState.serverVersion,
+                lastSyncedAt: base.syncState.lastSyncedAt));
       }, initialState: state);
       return nextState;
     } on ApiFailure catch (failure) {
-      return state.copyWith(
-        syncState: state.syncState.copyWith(
-          isSyncing: false,
-          error: failure.message,
-        ),
-      );
+      return _recordFailure(state, failure.message, isCurrent: isCurrent);
     }
   }
 
-  Future<FinanceState> pullChanges(FinanceState state) async {
+  Future<FinanceState> pullChanges(FinanceState state,
+          {bool Function()? isCurrent}) =>
+      _pullChanges(state, isCurrent: isCurrent);
+
+  Future<FinanceState> _pullChanges(FinanceState state,
+      {int minimumServerVersion = 0, bool Function()? isCurrent}) async {
+    if (isCurrent != null && !isCurrent()) return state;
     if (api == null) {
-      return state.copyWith(syncState: const SyncState(error: '离线演示/待配置'));
+      return state.copyWith(
+          syncState: state.syncState.copyWith(error: '离线演示/待配置'));
     }
     if (!isLocalOwnerBound()) {
       return state.copyWith(
-          syncState: const SyncState(error: '当前用户身份尚未确认，暂不下载本地数据'));
+          syncState: state.syncState.copyWith(error: '当前用户身份尚未确认，暂不下载本地数据'));
     }
     try {
       final conflictOperations = _pendingConflictOperations(state);
@@ -232,12 +286,19 @@ class SyncCoordinator {
           : _minimumConflictBaseVersion(
               conflictOperations, state.syncState.serverVersion);
       final remote = await api!.pullChanges(pullSince);
+      if (isCurrent != null && !isCurrent()) return state;
       if (conflictOperations.isNotEmpty) {
         return await _completeConflictRecovery(
             state, remote, conflictOperations);
       }
       final next = await session.write((current) {
         final base = _mergeCurrentWithRequested(current, state);
+        // Categories have no per-record version in their local JSON. The
+        // response watermark guards the entire batch, including categories.
+        if (remote.serverVersion < base.syncState.serverVersion) return base;
+        bool pending(String entity, String id) => queue
+            .pending()
+            .any((item) => item.entity == entity && item.entityId == id);
         final freshBootstrap = _isFreshBootstrap(base);
         var nextState = freshBootstrap
             ? base.copyWith(
@@ -248,10 +309,22 @@ class SyncCoordinator {
               )
             : mergePulledBudgets(
                 mergePulledCategories(
-                    mergePulledAccounts(mergePulled(base, remote.transactions),
-                        remote.accounts),
-                    remote.categories),
-                remote.budgets);
+                    mergePulledAccounts(
+                        mergePulled(
+                            base,
+                            remote.transactions
+                                .where(
+                                    (item) => !pending('transactions', item.id))
+                                .toList()),
+                        remote.accounts
+                            .where((item) => !pending('accounts', item.id))
+                            .toList()),
+                    remote.categories
+                        .where((item) => !pending('categories', item.id))
+                        .toList()),
+                remote.budgets
+                    .where((item) => !pending('budgets', item.id))
+                    .toList());
         if (freshBootstrap) {
           final activeAccounts = nextState.accounts
               .where((item) => item.deletedAt == null)
@@ -270,15 +343,58 @@ class SyncCoordinator {
         }
         return nextState.copyWith(
             syncState: SyncState(
-          serverVersion: remote.serverVersion,
-          lastSyncedAt: DateTime.now().toIso8601String(),
+          serverVersion: max(minimumServerVersion,
+              max(base.syncState.serverVersion, remote.serverVersion)),
+          lastSyncedAt: queue.pending().isEmpty && nextState.conflicts.isEmpty
+              ? DateTime.now().toIso8601String()
+              : base.syncState.lastSyncedAt,
         ));
       }, initialState: state);
       return next;
     } on ApiFailure catch (failure) {
-      return state.copyWith(
-          syncState: state.syncState.copyWith(error: failure.message));
+      return _recordFailure(state, failure.message, isCurrent: isCurrent);
     }
+  }
+
+  Future<FinanceState> _recordFailure(FinanceState state, String message,
+      {bool Function()? isCurrent}) {
+    if (isCurrent != null && !isCurrent()) return Future.value(state);
+    return session.write((current) {
+      final base = _mergeCurrentWithRequested(current, state);
+      return base.copyWith(
+          syncState: base.syncState.copyWith(isSyncing: false, error: message));
+    }, initialState: state);
+  }
+
+  Map<String, Object?>? _entitySnapshot(FinanceState state, SyncOperation op) {
+    return switch (op.entity) {
+      'transactions' => state.transactions
+          .where((item) => item.id == op.entityId)
+          .firstOrNull
+          ?.toJson(),
+      'accounts' => state.accounts
+          .where((item) => item.id == op.entityId)
+          .firstOrNull
+          ?.toJson(),
+      'categories' => state.categories
+          .where((item) => item.id == op.entityId)
+          .firstOrNull
+          ?.toJson(),
+      'budgets' => state.budgets
+          .where((item) => item.id == op.entityId)
+          .firstOrNull
+          ?.toJson(),
+      _ => null,
+    };
+  }
+
+  bool _matchesSnapshot(
+      Map<String, Object?>? current, Map<String, Object?> sent) {
+    // Legacy queues may omit optional fields. Compare every sent field except
+    // the server base, which may have been rebased by a preceding receipt.
+    return current != null &&
+        sent.entries.every((entry) =>
+            entry.key == 'server_version' || current[entry.key] == entry.value);
   }
 
   List<SyncOperation> _pendingConflictOperations(FinanceState state) {
@@ -312,6 +428,28 @@ class SyncCoordinator {
 
   Future<FinanceState> _completeConflictRecovery(FinanceState state,
       PullResult remote, List<SyncOperation> conflictOperations) async {
+    // A local edit may replace the conflicted queue item while the recovery
+    // pull is in flight. Only an operation with the same id, type and payload
+    // is still the operation whose conflict can be resolved by this response.
+    final pendingAtRecovery = queue.pending();
+    bool isSameOperation(SyncOperation expected, SyncOperation actual) =>
+        expected.clientOpId == actual.clientOpId &&
+        expected.entity == actual.entity &&
+        expected.entityId == actual.entityId &&
+        expected.type == actual.type &&
+        mapEquals(expected.payload, actual.payload);
+    final activeConflictOperations = conflictOperations
+        .where((operation) =>
+            pendingAtRecovery.any((item) => isSameOperation(operation, item)))
+        .toList(growable: false);
+    final protectedEntityKeys = pendingAtRecovery
+        .where((pending) => !activeConflictOperations
+            .any((operation) => isSameOperation(operation, pending)))
+        .map((operation) => '${operation.entity}:${operation.entityId}')
+        .toSet();
+    bool isProtected(String entity, String id) =>
+        protectedEntityKeys.contains('$entity:$id');
+
     bool hasAuthoritativeEntity(SyncOperation operation) {
       switch (operation.entity) {
         case 'transactions':
@@ -328,7 +466,7 @@ class SyncCoordinator {
       }
     }
 
-    if (conflictOperations
+    if (activeConflictOperations
         .any((operation) => !hasAuthoritativeEntity(operation))) {
       final current = await session.load() ?? state;
       return current.copyWith(
@@ -338,19 +476,31 @@ class SyncCoordinator {
     final resolvedEntityIds = <String>{
       for (final operation in conflictOperations) operation.entityId,
     };
-    await session.mutateQueue((pending) {
+    final nextState = await session.write((current) {
+      for (final operation in activeConflictOperations) {
+        queue.complete(operation.clientOpId);
+      }
       for (final operation in conflictOperations) {
-        pending.complete(operation.clientOpId);
         _pendingConflictClientOpIds.remove(operation.clientOpId);
       }
-    });
-    final nextState = await session.write((current) {
       final merged = mergePulledBudgets(
           mergePulledCategories(
               mergePulledAccounts(
-                  mergePulled(current, remote.transactions), remote.accounts),
-              remote.categories),
-          remote.budgets);
+                  mergePulled(
+                      current,
+                      remote.transactions
+                          .where(
+                              (item) => !isProtected('transactions', item.id))
+                          .toList()),
+                  remote.accounts
+                      .where((item) => !isProtected('accounts', item.id))
+                      .toList()),
+              remote.categories
+                  .where((item) => !isProtected('categories', item.id))
+                  .toList()),
+          remote.budgets
+              .where((item) => !isProtected('budgets', item.id))
+              .toList());
       final remainingConflicts = current.conflicts.where((conflict) {
         if (conflict.startsWith('sync:')) {
           return !resolvedEntityIds
@@ -365,11 +515,14 @@ class SyncCoordinator {
       final nextVersion = current.syncState.serverVersion > remote.serverVersion
           ? current.syncState.serverVersion
           : remote.serverVersion;
+      final hasPending = queue.pending().isNotEmpty;
       return merged.copyWith(
           conflicts: remainingConflicts,
           syncState: SyncState(
             serverVersion: nextVersion,
-            lastSyncedAt: DateTime.now().toIso8601String(),
+            lastSyncedAt: hasPending || remainingConflicts.isNotEmpty
+                ? current.syncState.lastSyncedAt
+                : DateTime.now().toIso8601String(),
           ));
     }, initialState: state);
     return nextState;
@@ -396,10 +549,10 @@ class SyncCoordinator {
       currentMonth: current.currentMonth.isEmpty
           ? requested.currentMonth
           : current.currentMonth,
-      accounts: _appendMissingById(current.accounts, requested.accounts,
-          (item) => item.id),
-      categories: _appendMissingById(current.categories, requested.categories,
-          (item) => item.id),
+      accounts: _appendMissingById(
+          current.accounts, requested.accounts, (item) => item.id),
+      categories: _appendMissingById(
+          current.categories, requested.categories, (item) => item.id),
       transactions: _appendMissingById(
           current.transactions, requested.transactions, (item) => item.id),
       budgets: _appendMissingById(
@@ -408,7 +561,8 @@ class SyncCoordinator {
           current.exchangeRates,
           requested.exchangeRates,
           (item) => '${item.baseCurrency}:${item.quoteCurrency}'),
-      goals: _appendMissingById(current.goals, requested.goals, (item) => item.id),
+      goals:
+          _appendMissingById(current.goals, requested.goals, (item) => item.id),
       reports: _appendMissingById(
           current.reports, requested.reports, (item) => item.id),
       conflicts: [

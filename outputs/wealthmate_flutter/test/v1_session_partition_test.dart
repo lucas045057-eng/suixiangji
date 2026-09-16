@@ -27,6 +27,26 @@ class DelayedStorage extends fixtures.MemoryKeyValueStore {
   }
 }
 
+class DelayedUserPartitionRead extends fixtures.MemoryKeyValueStore {
+  DelayedUserPartitionRead(this.userId);
+
+  final String userId;
+  final started = Completer<void>();
+  final release = Completer<void>();
+  bool armed = true;
+
+  @override
+  Future<String?> read(String key) async {
+    final value = await super.read(key);
+    if (armed && key == '${LocalRepository.storageKey}:user:$userId') {
+      armed = false;
+      started.complete();
+      await release.future;
+    }
+    return value;
+  }
+}
+
 class Harness {
   Harness({fixtures.MemoryKeyValueStore? storage, http.Client? client}) {
     localStorage = storage ?? fixtures.MemoryKeyValueStore();
@@ -76,6 +96,33 @@ class Harness {
 }
 
 void main() {
+  test('load waits for an in-flight owner partition rebind', () async {
+    final storage = DelayedUserPartitionRead('B');
+    final repository = FinanceRepository(
+      local: LocalRepository(storage),
+      queue: SyncQueue(),
+    );
+    await repository.loadForUser('A');
+    await repository.save(fixtures.ownerAState());
+
+    final binding = repository.ensureLocalOwner('B');
+    await storage.started.future;
+    var loadCompleted = false;
+    final pendingLoad = repository.load().then((state) {
+      loadCompleted = true;
+      return state;
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    expect(loadCompleted, isFalse);
+    storage.release.complete();
+    await binding;
+    final loaded = await pendingLoad;
+
+    expect(loaded?.transactions, isEmpty);
+    expect(repository.localOwnerUserId, 'B');
+  });
+
   test('late A partition purge keeps active B owner and B data', () async {
     final storage = DelayedStorage();
     final h = Harness(storage: storage);

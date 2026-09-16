@@ -1,7 +1,7 @@
 name: wealthmate_flutter
 description: 随想记 local-first accounting and wealth planning client.
 publish_to: "none"
-version: 1.0.1+4
+version: 1.0.3+6
 
 environment:
   sdk: ">=3.5.0 <4.0.0"

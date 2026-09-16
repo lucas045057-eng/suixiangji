@@ -4,6 +4,11 @@ outputs/wealthmate_backend/.env
 outputs/wealthmate_backend/*.db
 outputs/wealthmate_backend/data/
 
+# Android signing material (must remain local)
+**/key.properties
+**/*.jks
+**/*.keystore
+
 # Flutter and platform-generated files
 **/.dart_tool/
 **/build/

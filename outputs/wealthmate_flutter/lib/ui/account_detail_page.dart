@@ -2,18 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../features/assets/state/asset_store.dart';
-import '../features/ledger/state/ledger_store.dart';
 import 'widgets/ui_helpers.dart';
 
 class AccountDetailPage extends StatefulWidget {
   const AccountDetailPage(
-      {required this.store,
-      required this.ledger,
-      required this.account,
-      super.key});
+      {required this.store, required this.account, super.key});
 
   final AssetStore store;
-  final LedgerStore ledger;
   final Account account;
 
   @override
@@ -24,6 +19,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   late final TextEditingController nameController;
   late final TextEditingController currencyController;
   late final TextEditingController openingController;
+  late Account _account;
   late AccountType type;
   late AccountKind accountKind;
   late bool isLiquid;
@@ -33,6 +29,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   void initState() {
     super.initState();
     final account = widget.account;
+    _account = account;
     nameController = TextEditingController(text: account.name);
     currencyController = TextEditingController(text: account.currency);
     openingController =
@@ -83,7 +80,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                               fontSize: 30,
                               fontWeight: FontWeight.w800)),
                       const SizedBox(height: 5),
-                      const Text('余额由初始余额和已确认账目计算，不直接覆盖。',
+                      const Text('余额由初始余额和已确认账目计算，可通过校准修正。',
                           style: TextStyle(
                               color: Color(0xFFA9E3CB), fontSize: 10)),
                     ],
@@ -142,9 +139,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               FilledButton(onPressed: _save, child: const Text('保存账户配置')),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                  onPressed: () => _adjustBalance(context, balance),
+                  onPressed: () => _calibrateBalance(context, balance),
                   icon: const Icon(Icons.tune),
-                  label: const Text('余额调整')),
+                  label: const Text('余额校准')),
               const SizedBox(height: 8),
               TextButton.icon(
                   onPressed: _archive,
@@ -167,18 +164,20 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       _showMessage('请填写有效的账户名称、币种和初始余额');
       return;
     }
-    await widget.store.updateAccount(widget.account.copyWith(
+    final updated = _account.copyWith(
         name: name,
         type: type,
         accountKind: accountKind,
         currency: currency,
         openingBalance: opening,
         isLiquid: isLiquid,
-        isDefaultPayment: isDefaultPayment));
+        isDefaultPayment: isDefaultPayment);
+    await widget.store.updateAccount(updated);
     if (widget.store.message == '账户名称不能重复') {
       _showMessage(widget.store.message!);
       return;
     }
+    _account = updated;
     if (mounted) Navigator.pop(context);
   }
 
@@ -190,48 +189,53 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
 
   Future<void> _archive() async {
     await widget.store.updateAccount(
-        widget.account.copyWith(deletedAt: DateTime.now().toIso8601String()));
+        _account.copyWith(deletedAt: DateTime.now().toIso8601String()));
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _adjustBalance(
+  Future<void> _calibrateBalance(
       BuildContext context, double currentBalance) async {
-    final controller = TextEditingController();
-    final delta = await showDialog<double>(
+    var input = '';
+    final targetBalance = await showDialog<double>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-                title: const Text('余额调整'),
+                title: const Text('余额校准'),
                 content: TextField(
-                    controller: controller,
                     autofocus: true,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true, signed: true),
+                    onChanged: (value) => input = value,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                        labelText: '调整金额', hintText: '增加填正数，减少填负数')),
+                        labelText: '校准后余额', hintText: '请输入当前实际余额')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialogContext),
                       child: const Text('取消')),
                   FilledButton(
-                      onPressed: () => Navigator.pop(dialogContext,
-                          double.tryParse(controller.text.trim())),
-                      child: const Text('生成账目'))
+                      onPressed: () => Navigator.pop(
+                          dialogContext, double.tryParse(input.trim())),
+                      child: const Text('保存校准'))
                 ]));
-    controller.dispose();
-    if (delta == null || delta == 0) return;
-    final isIncrease = delta > 0;
-    final transactionType = widget.account.type == AccountType.asset
-        ? (isIncrease ? TransactionType.income : TransactionType.expense)
-        : (isIncrease ? TransactionType.expense : TransactionType.income);
-    final transaction = FinanceTransaction(
-        id: 'tx-adjust-${DateTime.now().microsecondsSinceEpoch}',
-        date: _dateKey(DateTime.now()),
-        occurredAt: DateTime.now().toIso8601String(),
-        type: transactionType,
-        amount: delta.abs(),
-        accountId: widget.account.id,
-        note: '余额调整（调整前 ${money(currentBalance)}）');
-    await widget.ledger.addTransaction(transaction);
+    if (targetBalance == null || !targetBalance.isFinite) {
+      if (mounted) _showMessage('请输入有效的校准后余额');
+      return;
+    }
+    final currentAccount = widget.store.accounts
+        .where((item) => item.id == widget.account.id)
+        .firstOrNull;
+    if (currentAccount == null) return;
+    await widget.store
+        .calibrateBalance(currentAccount, targetBalance - currentBalance);
+    final calibrated = widget.store.accounts
+        .where((item) => item.id == widget.account.id)
+        .firstOrNull;
+    if (calibrated != null) {
+      _account = calibrated;
+      openingController.text = calibrated.openingBalance.toString();
+    }
+    if (mounted && widget.store.message != '账户余额已校准') {
+      _showMessage(widget.store.message ?? '余额校准失败');
+    }
   }
 
   static String _accountKindLabel(AccountKind value) => const {
@@ -245,7 +249,4 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         AccountKind.loan: '借款',
         AccountKind.other: '其他'
       }[value]!;
-
-  static String _dateKey(DateTime value) =>
-      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 }

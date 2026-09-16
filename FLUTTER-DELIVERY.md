@@ -34,9 +34,9 @@
 
 源码级检查已做：所有测试引用的模型、规则、仓库、状态和页面文件均已建立；未把缺少工具链的项目写成 PASS。
 
-## V1.0.1 Android Network Contract
+## V1.0.3 Android Network Contract
 
-V1.0.1 目标版本为 `1.0.1+4`，Android `versionCode=4`。Android 请求使用 `cronet_http: 1.9.0` 的 Embedded Cronet；Google Play Services required 为 `NO`。Web 和非 Android 平台继续使用现有 `package:http` transport。
+V1.0.3 目标版本为 `1.0.3+6`，Android `versionCode=6`。本版本保留 V1.0.1 的 `cronet_http: 1.9.0` Embedded Cronet 方案；Google Play Services required 为 `NO`。Web 和非 Android 平台继续使用现有 `package:http` transport。
 
 所有 Android 相关 Flutter 命令必须带：
 
@@ -47,5 +47,5 @@ V1.0.1 目标版本为 `1.0.1+4`，Android `versionCode=4`。Android 请求使�
 Release candidate 使用：
 
 ```text
-flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
 ```

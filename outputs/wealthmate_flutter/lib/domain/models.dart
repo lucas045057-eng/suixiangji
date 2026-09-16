@@ -618,7 +618,11 @@ class FinanceState {
         'conflicts': conflicts,
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
         'default_account_id': defaultAccountId,
-        'sync_state': {'server_version': syncState.serverVersion},
+        'sync_state': {
+          'server_version': syncState.serverVersion,
+          if (syncState.lastSyncedAt != null)
+            'last_synced_at': syncState.lastSyncedAt,
+        },
       };
 
   static int _serverVersionFromJson(Object? value) {
@@ -663,14 +667,17 @@ class FinanceState {
             .toList(),
         conflicts: ((json['conflicts'] as List<Object?>?) ?? const <Object?>[])
             .cast<String>(),
-        quickMemories:
-            ((json['quick_memories'] as List<Object?>?) ?? const <Object?>[])
-                .map((item) => QuickMemory.fromJson(
-                    (item! as Map).cast<String, Object?>()))
-                .toList(),
+        quickMemories: ((json['quick_memories'] as List<Object?>?) ??
+                const <Object?>[])
+            .map((item) =>
+                QuickMemory.fromJson((item! as Map).cast<String, Object?>()))
+            .toList(),
         defaultAccountId: json['default_account_id'] as String?,
         syncState: SyncState(
-            serverVersion: _serverVersionFromJson(json['sync_state'])),
+            serverVersion: _serverVersionFromJson(json['sync_state']),
+            lastSyncedAt: json['sync_state'] is Map
+                ? (json['sync_state'] as Map)['last_synced_at'] as String?
+                : null),
       );
 }
 
@@ -755,11 +762,11 @@ class UserProfile {
         username: json['username']! as String,
         displayName:
             json['display_name'] as String? ?? json['username']! as String,
-        quickMemories:
-            ((json['quick_memories'] as List<Object?>?) ?? const <Object?>[])
-                .map((item) => QuickMemory.fromJson(
-                    (item! as Map).cast<String, Object?>()))
-                .toList(),
+        quickMemories: ((json['quick_memories'] as List<Object?>?) ??
+                const <Object?>[])
+            .map((item) =>
+                QuickMemory.fromJson((item! as Map).cast<String, Object?>()))
+            .toList(),
       );
 }
 
