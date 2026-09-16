@@ -43,6 +43,7 @@ V1.0.4 解决两个生产可见问题：
 
 - `syncDirty`：收到同步请求即置为 `true`；不记录可丢失的单次 future。
 - `_syncingSession`：表示当前唯一实际 sync pipeline，防止并发 push/pull。
+- `_drainFuture`：当前 serialized drain 的共享 Future；active drain 收到的新请求必须复用它，不能返回一个表示“请求已登记”但实际同步仍未结束的假完成 Future。
 - 可取消的 debounce timer：连续本地修改在安静窗口内合并为一次 pipeline。
 - 当前和最近一次安全诊断 reason，仅用于 debug 日志，不进入业务数据。
 
@@ -58,13 +59,13 @@ drain:
       dirty = false
       执行一轮完整 push + pull
       若本轮成功且期间又有 mutation，继续下一轮
-      若本轮失败，不忙等；保留 dirty，按 debounce/retry 调度下一轮
+      若本轮失败，立即结束本次 drain；保留 queue/cursor 语义，不在本 while 内 retry
   退出
 ```
 
-新的 mutation 可以发生在 push、pull 或 state merge 的任意 await 边界；回调只设置 dirty，不启动第二个 pipeline。循环不使用“最多补一次”的上限，直到当前 session 没有新的同步请求。冲突、离线或失败造成的 queue 保留不会触发无休止空转；后续 timer、resume、登录或手动同步仍可重试。
+新的 mutation 可以发生在 push、pull 或 state merge 的任意 await 边界；回调只设置 dirty，不启动第二个 pipeline。循环不使用“最多补一次”的上限，直到当前 session 没有新的同步请求。成功 drain 会排空这段时间内登记的 dirty rounds；一次完整 push/pull 因网络、HTTP、数据库或其他可恢复错误失败时，当前 drain 立即停止，不在 while loop 内反复 retry，也不产生 busy loop。可以保留 dirty/pending 状态，但下一次 retry 只能由 foreground timer、App resume、新 local mutation、登录/启动或用户手动同步重新唤醒。
 
-手动 `sync()` 保持公开入口和立即执行语义；如果已有 pipeline，则只设置 dirty 并返回，不并发启动第二条 pipeline。session 切换、退出登录和 dispose 会取消 debounce/retry，旧 session 的结果不得发布到新用户。
+`requestSync(reason, {immediate})` 和手动 `sync()` 都返回当前请求对应的 serialized drain Future。没有 active drain 时，调用会创建新的 drain Future（必要时先等待 debounce）；已有 active drain 时，调用只设置 dirty 并返回同一个 `_drainFuture`，该 Future 只有在当前 pipeline 及其期间登记的所有成功后续 rounds 真正结束时才完成。若本轮失败，Future 在本次 drain 停止、错误已持久化后完成；保留的 dirty/queue 由下一次外部唤醒重新创建/执行 drain。这样 `await store.sync()` 不会在 active pipeline 尚未结束时假完成，也不会因失败在内部无限重试。session 切换、退出登录和 dispose 会取消 debounce/retry，旧 session 的结果不得发布到新用户。
 
 ### 3.3 生命周期与前台同步
 
@@ -105,7 +106,7 @@ SELECT ... FROM users WHERE id = :user_id FOR UPDATE
 
 这样同一个 user 的并发 push 会在 User 行锁上串行，不同 user 锁定不同的行而不互相阻塞；同一 batch 的 accepted versions 严格递增且唯一。已存在 receipt 的重试直接返回原版本，不递增。任何异常走 rollback，不能留下 entity、receipt 或 watermark 的部分提交。
 
-实现不依赖 Python process lock。所有依赖本次 allocator 的查询必须使用锁后最新状态，避免并发 entity edit 在锁等待期间使用过期对象。现有表结构和 migration 不变。
+实现不依赖 Python process lock。认证依赖注入得到的 `current_user` 可能已经存在于 SQLAlchemy Session identity map；加锁后必须显式通过 `populate_existing`、`Session.refresh()` 或等价且有测试证明的方式，确保 locked User 的 `sync_version` 来自加锁完成后的数据库最新值。禁止在锁等待前读取的缓存对象上直接递增。所有依赖本次 allocator 的 entity/receipt 查询也必须使用锁后最新状态，避免并发 entity edit 在锁等待期间使用过期对象。现有表结构和 migration 不变。
 
 ### 4.2 PostgreSQL 并发回归
 
@@ -115,8 +116,25 @@ SELECT ... FROM users WHERE id = :user_id FOR UPDATE
 - 先用失败复现测试证明旧的 `user.sync_version += 1` 在并发 barrier 下可能产生重复版本或 cursor 遗漏；若数据库调度未稳定复现，测试仍检查旧实现的并发不变量并记录未复现原因，不能把串行 SQLite 结果当作通过。
 - 修复后验证两笔 operation 都保存、版本唯一且严格递增、`User.sync_version` 等于最大版本、旧 cursor pull 同时得到两笔变化。
 - 额外验证重复 `client_op_id` 不增加版本，以及异常 rollback 不返回虚假 watermark。
+- 并发测试先把同一 User 预加载到各 SQLAlchemy session 的 identity map，再执行 locked select，验证分配使用锁后数据库最新 `sync_version`，而不是锁等待前的缓存值。
 
-## 5. 同步诊断日志
+## 5. local mutation 与 remote merge 的边界
+
+`onLocalMutation()` 只能由用户发起、并已通过 `LocalStateSession.write()` 同时持久化 state 和 `SyncQueue` 的本地 mutation 调用。它不能挂在泛化的 `onStateChanged` 或 `adoptState` 上，因为这些入口也会被同步 merge、server version 更新、cursor 保存、queue completion、owner/session 初始化和数据库恢复调用。
+
+pull 后的 remote entity merge、server version 更新、cursor 持久化、`SyncOperation` completion、本地 owner/session 初始化、从数据库恢复 state 都只能更新现有 store state，不得发出 local mutation notification，也不得因 merge 自动再次 `requestSync()`。测试必须覆盖：
+
+```text
+B push
+  -> A pull
+  -> A merge remote changes
+  -> A 不产生新的 local SyncOperation
+  -> A 不因 merge 自己 requestSync
+```
+
+本地 store 的 mutation callback 与 FinanceStore 的 remote state adoption 使用不同代码路径；远端 merge 只调用 `adoptState`/notify，不调用 mutation callback。
+
+## 6. 同步诊断日志
 
 后端使用模块 logger 输出结构化/可检索字段：
 
@@ -126,7 +144,7 @@ SELECT ... FROM users WHERE id = :user_id FOR UPDATE
 
 客户端 debug 日志输出本地 cursor、pending queue 数量、push watermark、pull since、pull 返回版本和最终保存 cursor。日志只记录诊断元数据，不记录 secrets 或完整认证头。
 
-## 6. Android App 内更新设计
+## 7. Android App 内更新设计
 
 ### 6.1 下载层
 
@@ -162,7 +180,7 @@ SELECT ... FROM users WHERE id = :user_id FOR UPDATE
 
 普通更新允许“稍后”；强制更新继续禁止跳过。设置页仍保留“检查更新”。更新 URL 继续来自 `/app/version`，测试和发布配置使用直接 APK HTTPS 地址，不使用 GitHub Release HTML 页面。
 
-## 7. 版本、构建与安全边界
+## 8. 版本、构建与安全边界
 
 - 若仓库没有更高 build number，`pubspec.yaml`、产品常量和 Android metadata 升级为 `1.0.4+7`；若存在更高整数，使用其上的下一个整数，不倒退。
 - 后端默认 `app_latest_version/app_latest_build`、Compose 默认值、版本测试和 release 文档对齐。
@@ -170,16 +188,17 @@ SELECT ... FROM users WHERE id = :user_id FOR UPDATE
 - release APK 输出到仓库外的受控目录，独立检查 package、version、versionCode、SHA-256 和 signing certificate SHA-256，并与 V1.0.3 artifact 对照。
 - 不修改正式 PostgreSQL、不清库、不卸载或清除真实 App 数据、不删除历史 APK、不切换生产 `/app/version`、不创建正式 GitHub Release。
 
-## 8. 测试与验收范围
+## 9. 测试与验收范围
 
 先复现，再写失败测试，再修复，再回归：
 
 1. 后端 PostgreSQL 并发失败复现测试，然后锁行修复和真实 PostgreSQL 回归。
-2. Flutter 自动同步失败测试：普通账目、账户、分类、预算、快捷记均触发 request；同步期间连续 mutation 触发多轮 drain，且无并发 pipeline。
+2. Flutter 自动同步失败测试：普通账目、账户、分类、预算、快捷记均触发 request；同步期间连续 mutation 触发持续多轮 drain，且无并发 pipeline；active drain 的多个 caller 收到同一 drain Future，失败后 drain 停止且不在内部 retry。
 3. 双设备双向新增、修改、删除、依赖实体、离线 queue、push 成功/pull 失败 cursor、重启保留 queue/cursor。
-4. 生命周期：登录/冷启动/resume/timer/后台停止。
-5. 更新检查、下载进度、失败重试、取消、无 Chrome 主流程、未知来源权限返回、普通/强制更新。
-6. 全量 backend pytest、Flutter `flutter analyze`、Flutter `flutter test`、Android release build；可用时执行真实 V1.0.3 → V1.0.4 覆盖升级。无真实条件必须标记 `NOT VERIFIED`，不伪造 PASS。
+4. remote merge 边界：B push 后 A pull/merge 不产生新的 local SyncOperation、不触发 requestSync。
+5. PostgreSQL locked User identity-map freshness：预加载旧 User 后并发锁行，版本仍从锁后的最新数据库状态分配。
+6. 生命周期：登录/冷启动/resume/timer/后台停止。
+7. 更新检查、下载进度、失败重试、取消、无 Chrome 主流程、未知来源权限返回、普通/强制更新。
+8. 全量 backend pytest、Flutter `flutter analyze`、Flutter `flutter test`、Android release build；可用时执行真实 V1.0.3 → V1.0.4 覆盖升级。无真实条件必须标记 `NOT VERIFIED`，不伪造 PASS。
 
 交付报告必须包含根因、修改文件、sync drain 语义、A/B 结果、PostgreSQL 并发结果、更新架构、版本号、测试结果、APK 路径/大小/SHA-256、签名一致性、真机覆盖升级状态、分支、最终 commit 和 git status。
-
