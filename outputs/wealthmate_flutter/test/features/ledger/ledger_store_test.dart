@@ -138,6 +138,43 @@ void main() {
     expect(operation.clientOpId, isNot('create-op'));
   });
 
+  test(
+      'LedgerStore rejects non-transfer transactions using the opposite category type',
+      () async {
+    final memory = _LedgerMemory();
+    final queue = SyncQueue();
+    final session = LocalStateSession(
+      local: LocalRepository(memory),
+      queue: queue,
+    );
+    final store = LedgerStore(
+      repository: LedgerRepository(session: session),
+      initialState: const FinanceState(
+        currentMonth: '2026-09',
+        accounts: [
+          Account(id: 'wallet', name: '钱包', type: AccountType.asset),
+        ],
+        categories: [
+          Category(id: 'salary', name: '工资', type: TransactionType.income),
+        ],
+      ),
+    );
+
+    await expectLater(
+      store.addTransaction(const FinanceTransaction(
+        id: 'tx-opposite-category',
+        date: '2026-09-10',
+        type: TransactionType.expense,
+        amount: 12,
+        categoryId: 'salary',
+        accountId: 'wallet',
+      )),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(store.transactions, isEmpty);
+    expect(store.repository.queue.pending(), isEmpty);
+  });
+
   test('FinanceRepository delegates Ledger mutation compatibility methods',
       () async {
     final memory = _LedgerMemory();

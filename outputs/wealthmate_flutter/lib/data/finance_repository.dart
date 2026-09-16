@@ -53,6 +53,8 @@ class FinanceRepository {
   String? _localOwnerUserId;
   int? _boundApiGeneration;
   int _ownerGeneration = 0;
+  int _ownerBindingGeneration = 0;
+  Future<void> _ownerBindingTail = Future<void>.value();
   (int, int) get sessionIdentity =>
       (_ownerGeneration, api?.sessionGeneration ?? 0);
 
@@ -64,7 +66,24 @@ class FinanceRepository {
 
   bool get isLocalOwnerBound =>
       _localOwnerUserId != null &&
+      session.local.userId == _localOwnerUserId &&
       (api == null || _boundApiGeneration == api!.sessionGeneration);
+
+  Future<T> _queueOwnerBinding<T>(Future<T> Function() action) {
+    final next = _ownerBindingTail.then<T>((_) => action());
+    _ownerBindingTail = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
+
+  /// A newly verified identity supersedes any stale recovery that may be
+  /// waiting on storage or the network. LocalStateSession still serializes
+  /// the actual partition switch, while the generation checks prevent the
+  /// superseded operation from publishing state afterward.
+  Future<T> _supersedeOwnerBinding<T>(Future<T> Function() action) {
+    final next = action();
+    _ownerBindingTail = next.then<void>((_) {}, onError: (Object _) {});
+    return next;
+  }
 
   Future<FinanceState?> loadForUser(String userId) async {
     final generation = api?.sessionGeneration;
@@ -78,33 +97,51 @@ class FinanceRepository {
     if (normalizedUserId.isEmpty) {
       throw ArgumentError.value(userId, 'userId', '用户身份不能为空');
     }
+    await _supersedeOwnerBinding(() => _ensureLocalOwnerNow(normalizedUserId));
+  }
+
+  Future<void> _ensureLocalOwnerNow(String normalizedUserId) async {
+    final bindingGeneration = ++_ownerBindingGeneration;
     final generation = api?.sessionGeneration;
     await _local.migrateLegacy();
-    if (generation != api?.sessionGeneration) return;
+    if (bindingGeneration != _ownerBindingGeneration ||
+        generation != api?.sessionGeneration) return;
     final needsRebind = session.local.userId != normalizedUserId;
     if (_localOwnerUserId != normalizedUserId) {
       _ownerGeneration++;
       _syncCoordinator.clearConflictState();
     }
+    if (needsRebind) {
+      _localOwnerUserId = null;
+      _boundApiGeneration = null;
+      await session.rebind(_local.forUser(normalizedUserId));
+    }
+    if (bindingGeneration != _ownerBindingGeneration ||
+        generation != api?.sessionGeneration) return;
     _localOwnerUserId = normalizedUserId;
     _boundApiGeneration = generation;
     await _local.saveOwnerUserId(normalizedUserId);
-    if (needsRebind) await session.rebind(_local.forUser(normalizedUserId));
   }
 
   void unbindLocalOwner() {
+    _ownerBindingGeneration++;
     _ownerGeneration++;
     _localOwnerUserId = null;
     _boundApiGeneration = null;
   }
 
-  Future<bool> restoreLocalOwnerForVerifiedSession() async {
+  Future<bool> restoreLocalOwnerForVerifiedSession() =>
+      _queueOwnerBinding(_restoreLocalOwnerForVerifiedSessionNow);
+
+  Future<bool> _restoreLocalOwnerForVerifiedSessionNow() async {
+    final bindingGeneration = ++_ownerBindingGeneration;
     final generation = api?.sessionGeneration;
     if (api == null || api!.token == null || api!.token!.trim().isEmpty) {
       return false;
     }
     final verifiedUserId = api!.lastVerifiedUserId?.trim();
     if (verifiedUserId == null || verifiedUserId.isEmpty) return false;
+    if (isLocalOwnerBound && _localOwnerUserId == verifiedUserId) return true;
     final storedOwner = await _local.loadOwnerUserId();
     if (storedOwner != verifiedUserId &&
         await _local
@@ -113,16 +150,31 @@ class FinanceRepository {
             null) {
       return false;
     }
-    if (generation != api?.sessionGeneration) return false;
+    if (bindingGeneration != _ownerBindingGeneration ||
+        generation != api?.sessionGeneration) return false;
     await _local.migrateLegacy();
-    if (generation != api?.sessionGeneration) return false;
+    if (bindingGeneration != _ownerBindingGeneration ||
+        generation != api?.sessionGeneration) return false;
+    if (_localOwnerUserId != verifiedUserId) {
+      _ownerGeneration++;
+      _syncCoordinator.clearConflictState();
+    }
+    final needsRebind = session.local.userId != verifiedUserId;
+    if (needsRebind) {
+      _localOwnerUserId = null;
+      _boundApiGeneration = null;
+      await session.rebind(_local.forUser(verifiedUserId));
+    }
+    if (bindingGeneration != _ownerBindingGeneration ||
+        generation != api?.sessionGeneration) return false;
     _localOwnerUserId = verifiedUserId;
     _boundApiGeneration = generation;
-    await session.rebind(_local.forUser(verifiedUserId));
+    await _local.saveOwnerUserId(verifiedUserId);
     return true;
   }
 
   Future<FinanceState?> load() async {
+    await _ownerBindingTail;
     final started = sessionIdentity;
     if (api != null && !isLocalOwnerBound) {
       final restored = await restoreLocalOwnerForVerifiedSession();
@@ -137,12 +189,20 @@ class FinanceRepository {
     return session.load();
   }
 
-  Future<void> save(FinanceState state) => session.replaceState(state);
+  Future<void> save(FinanceState state) async {
+    await _ownerBindingTail;
+    await session.replaceState(state);
+  }
 
-  Future<void> persistQueue() => session.mutateQueue((_) {});
+  Future<void> persistQueue() async {
+    await _ownerBindingTail;
+    await session.mutateQueue((_) {});
+  }
 
-  Future<void> clearPendingOperations() =>
-      session.mutateQueue((pending) => pending.replace(const []));
+  Future<void> clearPendingOperations() async {
+    await _ownerBindingTail;
+    await session.mutateQueue((pending) => pending.replace(const []));
+  }
 
   Future<FinanceState> applyLocal(
       FinanceState state, FinanceTransaction transaction) async {
@@ -150,8 +210,10 @@ class FinanceRepository {
   }
 
   Future<FinanceState> applyLocalTransaction(
-          FinanceState state, FinanceTransaction transaction) =>
-      _ledgerRepository.saveTransaction(transaction, baseState: state);
+      FinanceState state, FinanceTransaction transaction) async {
+    await _ownerBindingTail;
+    return _ledgerRepository.saveTransaction(transaction, baseState: state);
+  }
 
   /*
    * The remaining aggregate and sync methods stay below this boundary. They
@@ -161,31 +223,52 @@ class FinanceRepository {
 
   Future<FinanceState> applyLocalBudget(
       FinanceState state, Budget budget) async {
+    await _ownerBindingTail;
     return _budgetRepository.saveBudget(budget, baseState: state);
   }
 
-  Future<FinanceState> applyLocalAccount(FinanceState state, Account account) =>
-      _assetsRepository.saveAccount(account, baseState: state);
+  Future<FinanceState> applyLocalAccount(
+      FinanceState state, Account account) async {
+    await _ownerBindingTail;
+    return _assetsRepository.saveAccount(account, baseState: state);
+  }
 
   Future<FinanceState> applyLocalCategory(
-          FinanceState state, Category category) =>
-      _ledgerRepository.saveCategory(category, baseState: state);
+      FinanceState state, Category category) async {
+    await _ownerBindingTail;
+    return _ledgerRepository.saveCategory(category, baseState: state);
+  }
 
-  Future<FinanceState> softDelete(FinanceState state, String transactionId) =>
-      _ledgerRepository.deleteTransaction(transactionId, baseState: state);
+  Future<FinanceState> softDelete(
+      FinanceState state, String transactionId) async {
+    await _ownerBindingTail;
+    return _ledgerRepository.deleteTransaction(transactionId, baseState: state);
+  }
 
   Future<FinanceState> sync(FinanceState state,
-          {bool Function()? isCurrent}) =>
-      _syncCoordinator.sync(state, isCurrent: isCurrent);
+      {bool Function()? isCurrent}) async {
+    await _ownerBindingTail;
+    final started = sessionIdentity;
+    return _syncCoordinator.sync(state,
+        isCurrent: isCurrent ?? () => sessionIdentity == started);
+  }
 
-  Future<FinanceState> pushPending(FinanceState state) =>
-      _syncCoordinator.pushPending(state);
+  Future<FinanceState> pushPending(FinanceState state) async {
+    await _ownerBindingTail;
+    final started = sessionIdentity;
+    return _syncCoordinator.pushPending(state,
+        isCurrent: () => sessionIdentity == started);
+  }
 
-  Future<FinanceState> pullChanges(FinanceState state) =>
-      _syncCoordinator.pullChanges(state);
+  Future<FinanceState> pullChanges(FinanceState state) async {
+    await _ownerBindingTail;
+    final started = sessionIdentity;
+    return _syncCoordinator.pullChanges(state,
+        isCurrent: () => sessionIdentity == started);
+  }
 
-  FinanceState mergePulled(
-          FinanceState localState, List<FinanceTransaction> remoteTransactions) =>
+  FinanceState mergePulled(FinanceState localState,
+          List<FinanceTransaction> remoteTransactions) =>
       _syncCoordinator.mergePulled(localState, remoteTransactions);
 
   FinanceState mergePulledAccounts(

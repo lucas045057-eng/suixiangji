@@ -26,6 +26,7 @@ class DashboardPage extends StatelessWidget {
     required this.isDemoMode,
     this.message,
     this.onSync,
+    this.onViewAllTransactions,
     this.onUpdateDraft,
     this.onConfirmDraft,
     required this.openComposer,
@@ -45,10 +46,29 @@ class DashboardPage extends StatelessWidget {
   final bool isDemoMode;
   final String? message;
   final Future<void> Function()? onSync;
+  final VoidCallback? onViewAllTransactions;
   final ValueChanged<AgentDraft>? onUpdateDraft;
   final Future<bool> Function(AgentDraft)? onConfirmDraft;
   final OpenDashboardComposer openComposer;
   final VoidCallback openBudgets;
+
+  String _syncStatus(FinanceState state) {
+    final sync = state.syncState;
+    if (sync.isSyncing) return '同步中…';
+    if (sync.error != null && sync.error != '离线演示/待配置') return '同步失败';
+    if (state.conflicts.isNotEmpty) return '有冲突待处理';
+    final pending = ledger.repository.queue.pending().length;
+    if (pending > 0) return '有 $pending 条待同步数据';
+    final last = sync.lastSyncedAt;
+    if (last != null) {
+      final date = DateTime.tryParse(last)?.toLocal();
+      final time = date == null
+          ? last
+          : '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      return '已同步 · $time';
+    }
+    return '离线演示/待配置';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,11 +112,15 @@ class DashboardPage extends StatelessWidget {
                             fontWeight: FontWeight.w800,
                             letterSpacing: -.7))),
                 IconButton(
-                    onPressed: onSync,
+                    onPressed: state.syncState.isSyncing ? null : onSync,
                     tooltip: '同步',
                     icon: const Icon(Icons.sync_rounded)),
               ]),
               Text('${state.currentMonth} · 这是你的财务节奏',
+                  style:
+                      const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+              const SizedBox(height: 6),
+              Text(_syncStatus(state),
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 20),
@@ -204,8 +228,9 @@ class DashboardPage extends StatelessWidget {
               ],
               _sectionCard(
                 title: '最近账目',
-                trailing:
-                    TextButton(onPressed: () {}, child: const Text('查看全部')),
+                trailing: TextButton(
+                    onPressed: onViewAllTransactions,
+                    child: const Text('查看全部')),
                 child: recent.isEmpty
                     ? const Text('还没有账目，记下第一笔吧。',
                         style:

@@ -81,8 +81,7 @@ class LocalRepository {
     return _serializedWrite(key, () => store.write(key, value));
   }
 
-  Future<void> _serializedWrite(
-      String key, Future<void> Function() action) {
+  Future<void> _serializedWrite(String key, Future<void> Function() action) {
     final pending = _writes[store] ??= {};
     final previous = pending[key] ?? Future<void>.value();
     final next = previous.then((_) => action());
@@ -251,6 +250,23 @@ class LocalRepository {
       return null;
     } on TypeError {
       return null;
+    }
+  }
+
+  /// Reports whether this partition has a persisted aggregate snapshot.
+  ///
+  /// A newly bound user partition loads as an empty state for the repository
+  /// API, but must remain distinguishable from a deliberately persisted empty
+  /// state while the first feature mutation is being applied.
+  Future<bool> hasPersistedFinanceState() async {
+    final raw = await readMetadata(storageKey);
+    if (raw == null || raw.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(raw) as Map;
+      FinanceState.fromJson(decoded.cast<String, Object?>());
+      return true;
+    } on Object {
+      return false;
     }
   }
 

@@ -201,6 +201,68 @@ void main() {
     expect(FinanceRules.canPostDraft(draft), isTrue);
   });
 
+  test('natural language parses Chinese amount units equivalently', () {
+    final examples = <String, double>{
+      '今天中午外卖 16块86，支付宝': 16.86,
+      '今天中午外卖 16元8角6分，支付宝': 16.86,
+      '今天中午外卖 16元8毛6，支付宝': 16.86,
+      '今天中午外卖 两元，支付宝': 2.00,
+      '今天中午外卖 两块，支付宝': 2.00,
+      '今天中午外卖 两块五，支付宝': 2.50,
+      '今天中午外卖 2块5，支付宝': 2.50,
+      '今天中午外卖 16.86元，支付宝': 16.86,
+      '今天中午外卖 32元，支付宝': 32.00,
+    };
+
+    for (final entry in examples.entries) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        entry.key,
+        now: DateTime(2026, 9, 1, 10),
+      );
+
+      expect(draft.amount, closeTo(entry.value, 0.001), reason: entry.key);
+      expect(draft.confidence, greaterThanOrEqualTo(.85), reason: entry.key);
+      expect(FinanceRules.canPostDraft(draft), isTrue, reason: entry.key);
+    }
+  });
+
+  test('natural language does not invent unparseable amounts', () {
+    final examples = [
+      '今天中午外卖好多钱，支付宝',
+      '今天中午外卖 十百元，支付宝',
+      '今天中午外卖 16.860元，支付宝',
+      '今天中午外卖 16元5厘，支付宝',
+      '今天中午外卖 16元8角6厘，支付宝',
+      '今天中午外卖 0元，支付宝',
+    ];
+
+    for (final text in examples) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        text,
+        now: DateTime(2026, 9, 1, 10),
+      );
+
+      expect(draft.amount, 0, reason: text);
+      expect(draft.missingFacts, contains('请输入金额'), reason: text);
+      expect(FinanceRules.canPostDraft(draft), isFalse, reason: text);
+    }
+  });
+
+  test('natural language parses Chinese ten-thousand shorthand', () {
+    const examples = <String, double>{
+      '今天中午外卖 一万二元，支付宝': 12000,
+      '今天中午外卖 二万三元，支付宝': 23000,
+    };
+
+    for (final entry in examples.entries) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        entry.key,
+        now: DateTime(2026, 9, 1, 10),
+      );
+      expect(draft.amount, closeTo(entry.value, 0.001), reason: entry.key);
+    }
+  });
+
   test('missing account and low confidence drafts cannot post', () {
     final noAccount = FinanceRules.parseNaturalLanguage(
       '今天中午外卖 32 元',

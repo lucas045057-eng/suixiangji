@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     frankfurter_base_url: str = "https://api.frankfurter.dev/v2"
     cors_origins: str = "*"
-    app_latest_version: str = "1.0.0"
-    app_latest_build: int = Field(default=3, ge=1)
+    app_latest_version: str = "1.0.2"
+    app_latest_build: int = Field(default=5, ge=1)
     app_minimum_supported_version: str = "1.0.0"
     app_minimum_supported_build: int = Field(default=3, ge=1)
     app_force_update: bool = False

@@ -1,4 +1,4 @@
-# 随想记 V1 交付验收状态
+# 随想记 V1 交付验收状态（初始验收：2026-09-04；V1.0.2 最后验收：2026-09-16）
 
 日期：2026-09-04
 
@@ -53,3 +53,24 @@
 ## 不声称通过的项目
 
 未把自动化测试、后端 TestClient 或 Flutter analyze 写成真实设备通过。Android/Windows 设备同步尚未由用户执行；Windows 安装包因 ATL 组件缺失未构建。
+
+## V1.0.2 正式 Git 集成与发布前验收附录（2026-09-16）
+
+- Remote baseline：`69c42c99c9d2d26844a58db3c2cb68f198f96478`
+- Local snapshot baseline：`a8b385e2429b2aea3a21e8e2c6a6576c9f7fda47`
+- origin/main before integration：`69c42c99c9d2d26844a58db3c2cb68f198f96478`
+- Formal branch：`release/v1.0.2`
+- Formal baseline：`69c42c99c9d2d26844a58db3c2cb68f198f96478`
+- Local snapshot final HEAD：`5aed524872a2e77d92500f1359bbfbf2e7719c82`
+- Formal final commit：以最终交接 `git rev-parse HEAD` 输出为准
+- Flutter version：`1.0.2+5`；runtime `1.0.2/5`；minimum supported 仍为 `1.0.0/3`
+- Git migration：无冲突；正式分支父提交直接来自真实 `origin/main`，未合并本地快照历史
+- Flutter full test：PASS，`318` 项；Flutter analyze：PASS；Node tests：PASS，`7/7`
+- Flutter P0/sync focused：PASS，`88` 项
+- Backend focused tests：PASS（金额/域 `10`、分类 `4`、版本/健康 `4`，合计 `18`；1 warning）；backend full suite：PASS（`138 passed, 2 warnings`）
+- Android release build：NOT VERIFIED（verbose 已定位为 sqlite3 native asset 下载 GitHub 资源超时，Gradle 最终失败；未上传 APK）
+- Android smoke test：NOT RUN；`REAL TWO-DEVICE TEST: NOT RUN`
+- Release readiness：BLOCKED，等待 Android 构建与设备验收
+- 本轮未 push、未创建新 tag/release、未部署、未修改生产数据库。
+
+完整 root cause、文件、命令和边界记录见 [V1.0.2 实施报告](docs/V1.0.2-IMPLEMENTATION-REPORT.md)。

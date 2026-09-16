@@ -2,6 +2,13 @@
 
 随想记是一款个人记账与极简资产管理应用，支持 Android、Windows 和 Web/PWA。
 
+## 当前版本
+
+- 产品版本：V1.0.2
+- Flutter：`1.0.2+5`
+- 最低支持版本：`1.0.0+3`
+- Android 网络层继续使用 V1.0.1 Embedded Cronet，并保留 `cronetHttpNoPlay=true` 构建参数。
+
 ## V1.0.0 能力
 
 - 自然语言快捷记：输入“今天吃饭吃了 30 元”，系统按分类、账户、默认设置和已确认记忆自动补齐。
@@ -43,7 +50,7 @@ flutter build windows --release --dart-define=WEALTHMATE_ENVIRONMENT=development
 正式环境必须注入最终的 HTTPS API 地址；本仓库当前没有猜测或固化正式域名：
 
 ```powershell
-flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=<final-https-api-url>
+flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=<final-https-api-url> --dart-define=cronetHttpNoPlay=true
 ```
 
 PRODUCTION DOMAIN：NOT CONFIGURED

@@ -9,6 +9,7 @@ import 'package:wealthmate_flutter/data/local_repository.dart';
 import 'package:wealthmate_flutter/data/sync_queue.dart';
 import 'package:wealthmate_flutter/data/token_store.dart';
 import 'package:wealthmate_flutter/domain/models.dart';
+import 'package:wealthmate_flutter/main.dart';
 import 'package:wealthmate_flutter/state/finance_store.dart';
 import 'package:wealthmate_flutter/ui/app_shell.dart';
 
@@ -63,6 +64,7 @@ class _UnauthorizedClient extends http.BaseClient {
 
 class _AuthenticatedClient extends http.BaseClient {
   final List<String> paths = [];
+  final List<int> pullCursors = [];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
@@ -80,6 +82,7 @@ class _AuthenticatedClient extends http.BaseClient {
       );
     }
     if (request.url.path == '/sync/pull') {
+      pullCursors.add(int.parse(request.url.queryParameters['since_version']!));
       return _jsonResponse(
         200,
         {
@@ -260,5 +263,46 @@ void main() {
 
     expect(store.syncCalls, 1);
     expect(client.paths, ['/auth/me', '/sync/pull']);
+  });
+
+  testWidgets(
+      'persisted session restores its owner cursor through the auth gate',
+      (tester) async {
+    final localStore = _MemoryKeyValueStore();
+    final persisted = FinanceRepository(
+      local: LocalRepository(localStore),
+      queue: SyncQueue(),
+    );
+    await persisted.ensureLocalOwner('user-b');
+    await persisted.save(_stateAtVersionSeven());
+
+    final tokenStore = _MemoryTokenStore()
+      ..value = 'restored-token'
+      ..lastVerifiedUserId = 'user-b';
+    final client = _AuthenticatedClient();
+    final api = ApiClient(
+      baseUrl: 'http://dc01-auth-control-flow.test',
+      tokenStore: tokenStore,
+      client: client,
+    );
+    expect(await api.restoreToken(), isTrue);
+    final repository = FinanceRepository(
+      local: LocalRepository(localStore),
+      queue: SyncQueue(),
+      api: api,
+    );
+    final store = FinanceStore(repository: repository);
+
+    await tester.pumpWidget(WealthMateApp(
+      store: store,
+      api: api,
+      auth: store.authStore,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(repository.localOwnerUserId, 'user-b');
+    expect(store.state.syncState.serverVersion, 7);
+    expect(client.paths, ['/auth/me', '/sync/pull']);
+    expect(client.pullCursors, [7]);
   });
 }

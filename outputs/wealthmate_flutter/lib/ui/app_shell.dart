@@ -83,6 +83,7 @@ class _AppShellState extends State<AppShell> {
             isDemoMode: widget.store.isDemoMode,
             message: widget.store.message,
             onSync: widget.store.sync,
+            onViewAllTransactions: () => _selectPage(1),
             openComposer: _openComposer,
             openBudgets: _openBudgets,
           ),
@@ -172,15 +173,18 @@ class _AppShellState extends State<AppShell> {
                     _desktopNav(Icons.account_balance_wallet_rounded, '财富', 3),
                     _desktopNav(Icons.person_outline_rounded, '我的', 4),
                     const SizedBox(height: 18),
-                    ListTile(
-                      onTap: _openBudgets,
-                      leading: const Icon(Icons.track_changes,
-                          color: Color(0xFF9DB8AC)),
-                      title: const Text('预算',
-                          style: TextStyle(
-                              color: Color(0xFFB7C8BF), fontSize: 13)),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12),
+                    Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        onTap: _openBudgets,
+                        leading: const Icon(Icons.track_changes,
+                            color: Color(0xFF9DB8AC)),
+                        title: const Text('预算',
+                            style: TextStyle(
+                                color: Color(0xFFB7C8BF), fontSize: 13)),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                      ),
                     ),
                   ],
                 ),
@@ -222,21 +226,26 @@ class _AppShellState extends State<AppShell> {
     final active = selectedIndex == index;
     return Padding(
       padding: const EdgeInsets.only(bottom: 5),
-      child: ListTile(
-        selected: active,
-        onTap: () => _selectPage(index),
-        leading: Icon(icon,
-            color: active ? const Color(0xFF12201D) : const Color(0xFFA9BBB4),
-            size: 20),
-        title: Text(label,
-            style: TextStyle(
-                color:
-                    active ? const Color(0xFF12201D) : const Color(0xFFA9BBB4),
-                fontSize: 13,
-                fontWeight: FontWeight.w700)),
-        selectedTileColor: const Color(0xFFBDEBDC),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          selected: active,
+          onTap: () => _selectPage(index),
+          leading: Icon(icon,
+              color: active ? const Color(0xFF12201D) : const Color(0xFFA9BBB4),
+              size: 20),
+          title: Text(label,
+              style: TextStyle(
+                  color: active
+                      ? const Color(0xFF12201D)
+                      : const Color(0xFFA9BBB4),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700)),
+          selectedTileColor: const Color(0xFFBDEBDC),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        ),
       ),
     );
   }

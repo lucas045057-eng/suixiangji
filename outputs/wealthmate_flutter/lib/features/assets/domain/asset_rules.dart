@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../../../domain/models.dart';
 
 /// Pure account, exchange-rate, and net-worth decisions for Assets.
@@ -24,6 +26,30 @@ class AssetRules {
       return next.copyWith(defaultAccountId: account.id);
     }
     return next;
+  }
+
+  static Account calibrateBalance(Account account, double delta) {
+    if (!delta.isFinite) {
+      throw ArgumentError.value(delta, 'delta', '必须是有限数');
+    }
+    final change = _round(delta);
+    if (change == 0) {
+      throw ArgumentError.value(delta, 'delta', '不能为零变化');
+    }
+
+    final isCny = account.currency.toUpperCase() == 'CNY';
+    final current =
+        isCny ? account.openingBalance : account.openingCnyAmount ?? 0;
+    if (!current.isFinite) {
+      throw ArgumentError.value(account, 'account', '当前余额必须是有限数');
+    }
+    final nextOpening = _round(current + change);
+    if (!nextOpening.isFinite) {
+      throw ArgumentError.value(delta, 'delta', '校准后余额必须是有限数');
+    }
+    return isCny
+        ? account.copyWith(openingBalance: nextOpening)
+        : account.copyWith(openingCnyAmount: nextOpening);
   }
 
   static FinanceState setDefaultAccount(FinanceState state, String accountId) {
@@ -100,6 +126,9 @@ class AssetRules {
     return transaction.cnyAmount;
   }
 
-  static double _round(double value, [int decimals = 2]) =>
-      double.parse(value.toStringAsFixed(decimals));
+  static double _round(double value, [int decimals = 2]) {
+    final scale = math.pow(10, decimals).toDouble();
+    final epsilon = value.isNegative ? -1e-9 : 1e-9;
+    return ((value * scale) + epsilon).roundToDouble() / scale;
+  }
 }

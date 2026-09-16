@@ -1,7 +1,7 @@
 enum AppEnvironment { development, test, production }
 
-const kProductVersion = '1.0.1';
-const kProductBuild = 4;
+const kProductVersion = '1.0.2';
+const kProductBuild = 5;
 
 class AppConfig {
   const AppConfig._({

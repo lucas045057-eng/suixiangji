@@ -34,9 +34,9 @@
 
 源码级检查已做：所有测试引用的模型、规则、仓库、状态和页面文件均已建立；未把缺少工具链的项目写成 PASS。
 
-## V1.0.1 Android Network Contract
+## V1.0.2 Android Network Contract
 
-V1.0.1 目标版本为 `1.0.1+4`，Android `versionCode=4`。Android 请求使用 `cronet_http: 1.9.0` 的 Embedded Cronet；Google Play Services required 为 `NO`。Web 和非 Android 平台继续使用现有 `package:http` transport。
+V1.0.2 目标版本为 `1.0.2+5`，Android `versionCode=5`。本版本保留 V1.0.1 的 `cronet_http: 1.9.0` Embedded Cronet 方案；Google Play Services required 为 `NO`。Web 和非 Android 平台继续使用现有 `package:http` transport。
 
 所有 Android 相关 Flutter 命令必须带：
 

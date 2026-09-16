@@ -80,4 +80,47 @@ void main() {
 
     expect(result.syncState.error, '离线演示/待配置');
   });
+
+  test('offline guard preserves the successful cursor and timestamp', () async {
+    final local = LocalRepository(_MemoryStore());
+    final session = LocalStateSession(local: local, queue: SyncQueue());
+    final coordinator = SyncCoordinator(
+      session: session,
+      api: null,
+      isLocalOwnerBound: () => true,
+    );
+
+    final result = await coordinator.sync(const FinanceState(
+      syncState: SyncState(
+        serverVersion: 17,
+        lastSyncedAt: '2026-09-16T09:00:00Z',
+      ),
+    ));
+
+    expect(result.syncState.serverVersion, 17);
+    expect(result.syncState.lastSyncedAt, '2026-09-16T09:00:00Z');
+    expect(result.syncState.error, '离线演示/待配置');
+  });
+
+  test('unbound-owner guard preserves the successful cursor and timestamp',
+      () async {
+    final local = LocalRepository(_MemoryStore());
+    final session = LocalStateSession(local: local, queue: SyncQueue());
+    final coordinator = SyncCoordinator(
+      session: session,
+      api: _FakeSyncApi(),
+      isLocalOwnerBound: () => false,
+    );
+
+    final result = await coordinator.sync(const FinanceState(
+      syncState: SyncState(
+        serverVersion: 17,
+        lastSyncedAt: '2026-09-16T09:00:00Z',
+      ),
+    ));
+
+    expect(result.syncState.serverVersion, 17);
+    expect(result.syncState.lastSyncedAt, '2026-09-16T09:00:00Z');
+    expect(result.syncState.error, '当前用户身份尚未确认，暂不上传本地数据');
+  });
 }

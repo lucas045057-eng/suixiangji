@@ -297,7 +297,7 @@ void main() {
         contains(_clientOpId));
   });
 
-  test('successful push persists updated server version without manual save',
+  test('successful push persists entity version without advancing pull cursor',
       () async {
     final directory =
         await Directory.systemTemp.createTemp('suixiangji-startup-cursor-');
@@ -316,7 +316,8 @@ void main() {
 
       final afterPush = await firstRepository.pushPending(_initialState);
 
-      expect(afterPush.syncState.serverVersion, 8);
+      expect(afterPush.syncState.serverVersion, 7);
+      expect(afterPush.transactions.single.serverVersion, 8);
       expect(firstRepository.queue.pending(), isEmpty);
       expect(client.pushRequestCount, 1);
 
@@ -328,7 +329,8 @@ void main() {
           restartedDatabase, StartupCursorClient(remoteServerVersion: 8));
       final restored = await restartedRepository.loadForUser(_userId);
 
-      expect(restored?.syncState.serverVersion, 8);
+      expect(restored?.syncState.serverVersion, 7);
+      expect(restored?.transactions.single.serverVersion, 8);
     } finally {
       await firstDatabase?.close();
       await restartedDatabase?.close();

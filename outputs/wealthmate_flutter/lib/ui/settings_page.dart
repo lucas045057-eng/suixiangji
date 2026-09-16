@@ -127,7 +127,7 @@ class SettingsPage extends StatelessWidget {
                     const ListTile(
                         leading: Icon(Icons.account_balance_outlined),
                         title: Text('账户名称与账户配置'),
-                        subtitle: Text('点击账户即可修改名称、币种、余额和用途')),
+                        subtitle: Text('点击账户即可修改配置或校准余额')),
                     ...assetStore.activeAccounts
                         .map((account) => Column(children: [
                               const Divider(height: 1),
@@ -142,7 +142,6 @@ class SettingsPage extends StatelessWidget {
                                       MaterialPageRoute<void>(
                                           builder: (_) => AccountDetailPage(
                                               store: store.assets,
-                                              ledger: store.ledger,
                                               account: account))))
                             ])),
                   ])),

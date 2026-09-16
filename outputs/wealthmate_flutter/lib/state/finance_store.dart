@@ -102,6 +102,8 @@ class FinanceStore extends ChangeNotifier {
       );
     }
     ledger.onStateChanged = (next) {
+      next = _withSyncActivity(next);
+      ledger.adoptState(next);
       _state = next;
       quickEntry.adoptState(next);
       assets.adoptState(next);
@@ -112,6 +114,8 @@ class FinanceStore extends ChangeNotifier {
       notifyListeners();
     };
     assets.onStateChanged = (next) {
+      next = _withSyncActivity(next);
+      assets.adoptState(next);
       _state = next;
       ledger.adoptState(next);
       budget.adoptState(next);
@@ -126,6 +130,8 @@ class FinanceStore extends ChangeNotifier {
       notifyListeners();
     };
     budget.onStateChanged = (next) {
+      next = _withSyncActivity(next);
+      budget.adoptState(next);
       _state = next;
       assets.adoptState(next);
       ledger.adoptState(next);
@@ -133,6 +139,8 @@ class FinanceStore extends ChangeNotifier {
       notifyListeners();
     };
     quickEntry.onStateChanged = (next) {
+      next = _withSyncActivity(next);
+      quickEntry.adoptState(next);
       _state = next;
       assets.adoptState(next);
       ledger.adoptState(next);
@@ -154,6 +162,14 @@ class FinanceStore extends ChangeNotifier {
   final Set<String> _pendingDeletionCleanupUserIds = <String>{};
   bool _pendingDeletionCleanupStateUnknown = false;
   int _sessionGeneration = 0;
+  (int, int)? _syncingSession;
+
+  FinanceState _withSyncActivity(FinanceState next) {
+    if (_syncingSession != _session) return next;
+    return next.copyWith(
+        syncState: next.syncState
+            .copyWith(isSyncing: true, error: next.syncState.error));
+  }
 
   FinanceState get state => _state;
   AgentDraft? get draft => quickEntry.draft;
@@ -550,18 +566,40 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<void> sync() async {
+    if (_syncingSession == _session) return;
     final started = _session;
-    final synced = await repository.sync(
-      _state,
-      isCurrent: () => _session == started,
-    );
-    if (_session != started) return;
-    _state = synced;
+    _syncingSession = started;
+    _state = _withSyncActivity(
+        _state.copyWith(syncState: _state.syncState.copyWith(error: null)));
     _adoptFeatureState();
-    if (_session != started) return;
-    _message = _state.syncState.error ??
-        (_state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步');
+    ledger.notifyListeners();
     notifyListeners();
+    try {
+      final synced = await repository.sync(
+        _state,
+        isCurrent: () => _session == started,
+      );
+      if (_session != started) return;
+      _state = synced;
+      _message = _state.syncState.error ??
+          (_state.conflicts.isNotEmpty
+              ? '有冲突待处理'
+              : repository.queue.pending().isNotEmpty
+                  ? '有 ${repository.queue.pending().length} 条待同步数据'
+                  : _state.syncState.lastSyncedAt == null
+                      ? '离线演示/待配置'
+                      : '已完成同步');
+    } finally {
+      if (_syncingSession == started) _syncingSession = null;
+      if (_session == started) {
+        _state = _state.copyWith(
+            syncState: _state.syncState
+                .copyWith(isSyncing: false, error: _state.syncState.error));
+        _adoptFeatureState();
+        ledger.notifyListeners();
+        notifyListeners();
+      }
+    }
   }
 
   void clearAuthenticatedSession() {

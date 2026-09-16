@@ -17,7 +17,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 ## 客户端配置
 
-开发/测试时，Windows 客户端可以连接本机 `http://127.0.0.1:18000`；手机不能使用 `127.0.0.1`，局域网联调可以使用局域网地址。正式环境必须由发布环境注入 HTTPS API 域名。本项目当前没有提供最终正式域名，不得把局域网地址、IP 或占位域名用于正式 V1.0.0。
+开发/测试时，Windows 客户端可以连接本机 `http://127.0.0.1:18000`；手机不能使用 `127.0.0.1`，局域网联调可以使用局域网地址。正式环境必须由发布环境注入 HTTPS API 域名。本项目当前没有提供最终正式域名，不得把局域网地址、IP 或占位域名用于正式 V1.0.2。
 
 Flutter 参数示例：
 
@@ -31,9 +31,9 @@ flutter run -d <android-device> --dart-define=WEALTHMATE_ENVIRONMENT=development
 当前发布状态：
 
 ```text
-产品版本：1.0.0
-Flutter Version：1.0.0+3
-Android versionCode：3
+产品版本：1.0.2
+Flutter Version：1.0.2+5
+Android versionCode：5
 PRODUCTION DOMAIN：NOT CONFIGURED
 APK UPDATE SIGNING：NOT VERIFIED
 ```
