@@ -47,13 +47,13 @@ flutter pub get
 flutter build windows --release --dart-define=WEALTHMATE_ENVIRONMENT=development --dart-define=WEALTHMATE_API_BASE_URL=http://127.0.0.1:18000
 ```
 
-正式环境必须注入最终的 HTTPS API 地址；本仓库当前没有猜测或固化正式域名：
+正式环境必须通过构建守卫注入固定的 HTTPS API 地址 `https://api.suixiangji.icu`：
 
 ```powershell
 pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
 ```
 
-PRODUCTION DOMAIN：NOT CONFIGURED
+PRODUCTION DOMAIN：api.suixiangji.icu
 
 版本冻结与 Git 收口记录见 [V1.0.0 项目状态](docs/PROJECT_STATE.md) 和 [Git 清理报告](docs/V1.0.0-GIT-CLEANUP-REPORT.md)。
 
