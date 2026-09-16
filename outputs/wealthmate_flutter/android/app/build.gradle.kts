@@ -1,7 +1,42 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+val signingPropertiesPath = System.getenv("WEALTHMATE_SIGNING_PROPERTIES_PATH")
+val signingPropertiesFile = if (signingPropertiesPath.isNullOrBlank()) {
+    rootProject.file("key.properties")
+} else {
+    file(signingPropertiesPath)
+}
+val signingProperties = Properties()
+if (!signingPropertiesFile.isFile) {
+    throw GradleException("Android release signing properties file is missing")
+}
+signingPropertiesFile.inputStream().use { signingProperties.load(it) }
+
+val requiredSigningProperties = listOf(
+    "storeFile",
+    "storePassword",
+    "keyAlias",
+    "keyPassword",
+)
+requiredSigningProperties.forEach { propertyName ->
+    require(!signingProperties.getProperty(propertyName).isNullOrBlank()) {
+        "Android release signing property is missing: $propertyName"
+    }
+}
+
+val storeFileValue = signingProperties.getProperty("storeFile").trim()
+val signingStoreFile = File(storeFileValue).let { candidate ->
+    if (candidate.isAbsolute) candidate else File(signingPropertiesFile.parentFile, storeFileValue)
+}
+if (!signingStoreFile.isFile) {
+    throw GradleException("Android release keystore file is missing")
 }
 
 android {
@@ -29,11 +64,19 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = signingStoreFile
+            storePassword = signingProperties.getProperty("storePassword")
+            keyAlias = signingProperties.getProperty("keyAlias")
+            keyPassword = signingProperties.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Release signing is loaded from the controlled properties file.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

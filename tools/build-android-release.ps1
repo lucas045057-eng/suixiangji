@@ -13,7 +13,6 @@ param(
     [string]$SigningPropertiesPath,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet('production')]
     [string]$Environment,
 
     [Parameter(Mandatory = $true)]
