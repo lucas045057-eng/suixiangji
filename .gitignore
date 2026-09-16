@@ -31,3 +31,6 @@ outputs/wealthmate_backend/data/
 outputs/*.apk
 outputs/*.zip
 work/
+
+# Local linked worktrees
+.worktrees/
