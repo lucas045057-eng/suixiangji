@@ -62,15 +62,17 @@
 - Formal branch：`release/v1.0.2`
 - Formal baseline：`69c42c99c9d2d26844a58db3c2cb68f198f96478`
 - Local snapshot final HEAD：`5aed524872a2e77d92500f1359bbfbf2e7719c82`
-- Formal final commit：以最终交接 `git rev-parse HEAD` 输出为准
+- Formal V1.0.2 implementation commit：`8111ca580c9137b71eafb13f32067bdb220b0d86`
+- Post-integration verification/config commit：本次文档验收提交的 SHA 见最终交接输出；文档不自写该 commit 的 SHA
 - Flutter version：`1.0.2+5`；runtime `1.0.2/5`；minimum supported 仍为 `1.0.0/3`
 - Git migration：无冲突；正式分支父提交直接来自真实 `origin/main`，未合并本地快照历史
 - Flutter full test：PASS，`318` 项；Flutter analyze：PASS；Node tests：PASS，`7/7`
 - Flutter P0/sync focused：PASS，`88` 项
 - Backend focused tests：PASS（金额/域 `10`、分类 `4`、版本/健康 `4`，合计 `18`；1 warning）；backend full suite：PASS（`138 passed, 2 warnings`）
-- Android release build：NOT VERIFIED（verbose 已定位为 sqlite3 native asset 下载 GitHub 资源超时，Gradle 最终失败；未上传 APK）
-- Android smoke test：NOT RUN；`REAL TWO-DEVICE TEST: NOT RUN`
-- Release readiness：BLOCKED，等待 Android 构建与设备验收
+- Android release build：PASS；`app-release.apk`，`79,225,474` bytes，SHA-256 `7e71b0fef91f9c734b5fb99a0abab8f783c2a28adb8eeda7a26a82eeea29058a`，`versionName=1.0.2`、`versionCode=5`
+- `ANDROID SMOKE TEST: NOT RUN`；当前无 Android 真机或模拟器，未安装 APK
+- `REAL TWO-DEVICE TEST: NOT RUN`；当前无两台独立 Android 设备
+- Release readiness：BLOCKED，仅等待真实 Android smoke 与双设备验收；自动化回归和 APK 构建已通过
 - 本轮未 push、未创建新 tag/release、未部署、未修改生产数据库。
 
 完整 root cause、文件、命令和边界记录见 [V1.0.2 实施报告](docs/V1.0.2-IMPLEMENTATION-REPORT.md)。
