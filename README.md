@@ -50,7 +50,7 @@ flutter build windows --release --dart-define=WEALTHMATE_ENVIRONMENT=development
 正式环境必须注入最终的 HTTPS API 地址；本仓库当前没有猜测或固化正式域名：
 
 ```powershell
-flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=<final-https-api-url> --dart-define=cronetHttpNoPlay=true
+pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
 ```
 
 PRODUCTION DOMAIN：NOT CONFIGURED

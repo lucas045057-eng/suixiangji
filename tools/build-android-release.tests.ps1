@@ -64,7 +64,7 @@ try {
     $flutterProject = Join-Path $testRoot 'flutter'
     $fakeBin = Join-Path $testRoot 'fake-bin'
     $fakeSdk = Join-Path $testRoot 'fake-sdk'
-    $signingProperties = Join-Path $testRoot 'signing.properties'
+    $signingProperties = Join-Path $flutterProject 'android\signing.properties'
     $outputPath = Join-Path $testRoot 'outputs\suixiangji-v1.0.3-build6.apk'
     $fakeFlutterLog = Join-Path $testRoot 'fake-flutter-args.txt'
 
@@ -74,6 +74,9 @@ version: 1.0.3+6
 '@ -Encoding utf8
     Set-Content -LiteralPath (Join-Path $flutterProject 'android\app\build.gradle.kts') -Value @'
 android {
+    defaultConfig {
+        applicationId = "com.example.wealthmate_flutter"
+    }
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")

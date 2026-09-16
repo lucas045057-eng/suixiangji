@@ -47,5 +47,5 @@ V1.0.2 目标版本为 `1.0.2+5`，Android `versionCode=5`。本版本保留 V1.
 Release candidate 使用：
 
 ```text
-flutter build apk --release --dart-define=WEALTHMATE_ENVIRONMENT=production --dart-define=WEALTHMATE_API_BASE_URL=https://api.suixiangji.icu --dart-define=cronetHttpNoPlay=true
+pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
 ```
