@@ -35,8 +35,8 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $expectedApiBaseUrl = 'https://api.suixiangji.icu'
-$expectedVersionName = '1.0.3'
-$expectedVersionCode = 6
+$expectedVersionName = '1.0.4'
+$expectedVersionCode = 7
 $expectedApplicationId = 'com.example.wealthmate_flutter'
 $expectedSigningCertificateSha256 = 'CADEB8CA7786B755305E07A086B407D8DA7D6751D54566D9A0787D457DF32458'
 $forbiddenV1_0_2ApkSha256 = '7E71B0FEF91F9C734B5FB99A0ABAB8F783C2A28ADB8EEDA7A26A82EEEA29058A'
@@ -277,7 +277,7 @@ try {
         Stop-BuildGuard "APK versionCode was $actualVersionCode, expected $expectedVersionCode"
     }
     if ($actualSigningCertificate -ne $expectedSigningCertificateSha256) {
-        Stop-BuildGuard 'APK signing certificate does not match the V1.0.1 signing identity'
+        Stop-BuildGuard 'APK signing certificate does not match the approved V1.0.3 signing identity'
     }
     if ($apkSha256 -eq $forbiddenV1_0_2ApkSha256) {
         Stop-BuildGuard 'APK hash matches the incorrect V1.0.2 artifact'

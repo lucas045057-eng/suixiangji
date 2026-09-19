@@ -32,6 +32,27 @@ function Invoke-AndroidTool {
     return ($output | Out-String).Trim()
 }
 
+function Resolve-JavaHome {
+    $candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:JAVA_HOME)) {
+        $candidates += $env:JAVA_HOME
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        $candidates += (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr')
+    }
+    if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) {
+        $candidates += (Join-Path ${env:ProgramFiles(x86)} 'Android\Android Studio\jbr')
+    }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath (Join-Path $candidate 'bin\java.exe') -PathType Leaf) {
+            return (Resolve-Path -LiteralPath $candidate).Path
+        }
+    }
+
+    Stop-Inspection 'Java runtime not found for Android SDK inspection'
+}
+
 if (-not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
     Stop-Inspection "APK not found: $ApkPath"
 }
@@ -59,12 +80,17 @@ if (-not $apksignerPath) {
 }
 
 try {
+    $javaHome = Resolve-JavaHome
+    $previousJavaHome = $env:JAVA_HOME
+    $env:JAVA_HOME = $javaHome
     $packageName = Invoke-AndroidTool -ToolPath $apkanalyzerPath -Arguments @('manifest', 'application-id', $resolvedApkPath)
     $versionName = Invoke-AndroidTool -ToolPath $apkanalyzerPath -Arguments @('manifest', 'version-name', $resolvedApkPath)
     $versionCode = Invoke-AndroidTool -ToolPath $apkanalyzerPath -Arguments @('manifest', 'version-code', $resolvedApkPath)
     $signerOutput = Invoke-AndroidTool -ToolPath $apksignerPath -Arguments @('verify', '--print-certs', $resolvedApkPath)
 } catch {
     Stop-Inspection $_.Exception.Message
+} finally {
+    $env:JAVA_HOME = $previousJavaHome
 }
 
 $certificateMatch = [regex]::Match($signerOutput, '(?im)^Signer #1 certificate SHA-256 digest:\s*(?<digest>[0-9A-F:]+)\s*$')
