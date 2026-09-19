@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..assets.service import account_json as _account_json
@@ -20,111 +21,151 @@ from .ordering import order_operations
 from .schemas import SyncPushIn
 
 
+def _lock_current_user(db: Session, user_id: str) -> User:
+    """Lock and refresh the authoritative User row for one push batch."""
+    locked = db.execute(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one()
+    # The authentication dependency may already have populated this identity
+    # in the Session before the row lock was acquired. Refresh explicitly so
+    # version allocation starts from the value observed after lock wait.
+    db.refresh(locked)
+    return locked
+
+
+def _current_entity(db: Session, entity: str, entity_id: str, user_id: str):
+    model = {
+        "transactions": Transaction,
+        "accounts": Account,
+        "categories": Category,
+        "budgets": Budget,
+    }[entity]
+    return db.execute(
+        select(model)
+        .where(model.id == entity_id, model.user_id == user_id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+
+
 def push(payload: SyncPushIn, db: Session, user: User) -> dict:
     accepted = []
     conflicts = []
     ordered_operations = order_operations(payload.operations)
-    for operation in ordered_operations:
-        previous = (
-            db.query(SyncOperation)
-            .filter(
-                SyncOperation.user_id == user.id,
-                SyncOperation.client_op_id == operation.client_op_id,
+    transaction_started = db.in_transaction()
+    if not transaction_started:
+        db.begin()
+    try:
+        locked_user = _lock_current_user(db, user.id)
+        for operation in ordered_operations:
+            # The lookup happens after the User lock, so a retry that waited
+            # behind another push observes its committed receipt/version.
+            previous = db.execute(
+                select(SyncOperation)
+                .where(
+                    SyncOperation.user_id == locked_user.id,
+                    SyncOperation.client_op_id == operation.client_op_id,
+                )
+                .execution_options(populate_existing=True)
+            ).scalar_one_or_none()
+            if previous:
+                accepted.append(
+                    {
+                        "client_op_id": operation.client_op_id,
+                        "entity_id": previous.entity_id,
+                        "server_version": previous.server_version,
+                        "created": False,
+                    }
+                )
+                continue
+            raw_version = operation.payload.get("server_version")
+            existing = _current_entity(
+                db, operation.entity, operation.entity_id, locked_user.id
             )
-            .first()
-        )
-        if previous:
+            if has_newer_server_version(existing, locked_user, raw_version):
+                conflicts.append(
+                    {
+                        "client_op_id": operation.client_op_id,
+                        "entity_id": operation.entity_id,
+                        "reason": "server has a newer version",
+                    }
+                )
+                continue
+
+            locked_user.sync_version += 1
+            server_version = locked_user.sync_version
+            db.flush()
+            if operation.entity == "transactions":
+                _save_tx(
+                    db,
+                    locked_user,
+                    _normalise_tx_payload(
+                        _attach_latest_rate(db, operation.payload),
+                        client_op_id=operation.client_op_id,
+                        entity_id=operation.entity_id,
+                    ),
+                    deleted=operation.type == "delete",
+                    server_version=server_version,
+                )
+            elif operation.entity == "accounts":
+                data = dict(operation.payload)
+                data["id"] = operation.entity_id
+                data.setdefault("name", operation.entity_id)
+                _save_account(
+                    db,
+                    locked_user,
+                    data,
+                    deleted=operation.type == "delete",
+                    server_version=server_version,
+                )
+            elif operation.entity == "categories":
+                data = dict(operation.payload)
+                data["id"] = operation.entity_id
+                _save_category(
+                    db,
+                    locked_user,
+                    data,
+                    server_version=server_version,
+                    active=operation.type != "delete",
+                )
+            else:
+                data = dict(operation.payload)
+                data["id"] = operation.entity_id
+                data.setdefault("month", datetime.now(timezone.utc).strftime("%Y-%m"))
+                data.setdefault("category_id", "other")
+                data.setdefault("limit", 0.01)
+                _save_budget(
+                    db,
+                    locked_user,
+                    data,
+                    server_version=server_version,
+                )
+            db.add(
+                SyncOperation(
+                    user_id=locked_user.id,
+                    client_op_id=operation.client_op_id,
+                    entity=operation.entity,
+                    entity_id=operation.entity_id,
+                    server_version=server_version,
+                )
+            )
+            # Make the receipt visible to a later operation in this same
+            # ordered batch and surface receipt failures before commit.
+            db.flush()
             accepted.append(
                 {
                     "client_op_id": operation.client_op_id,
-                    "entity_id": previous.entity_id,
-                    "server_version": previous.server_version,
-                    "created": False,
-                }
-            )
-            continue
-        raw_version = operation.payload.get("server_version")
-        existing = {
-            "transactions": db.get(Transaction, operation.entity_id),
-            "accounts": db.get(Account, operation.entity_id),
-            "categories": db.get(Category, operation.entity_id),
-            "budgets": db.get(Budget, operation.entity_id),
-        }[operation.entity]
-        if has_newer_server_version(existing, user, raw_version):
-            conflicts.append(
-                {
-                    "client_op_id": operation.client_op_id,
                     "entity_id": operation.entity_id,
-                    "reason": "server has a newer version",
+                    "server_version": server_version,
+                    "created": True,
                 }
             )
-            continue
-        user.sync_version += 1
-        if operation.entity == "transactions":
-            row = _save_tx(
-                db,
-                user,
-                _normalise_tx_payload(
-                    _attach_latest_rate(db, operation.payload),
-                    client_op_id=operation.client_op_id,
-                    entity_id=operation.entity_id,
-                ),
-                deleted=operation.type == "delete",
-                server_version=user.sync_version,
-            )
-        elif operation.entity == "accounts":
-            data = dict(operation.payload)
-            data["id"] = operation.entity_id
-            data.setdefault("name", operation.entity_id)
-            row = _save_account(
-                db,
-                user,
-                data,
-                deleted=operation.type == "delete",
-                server_version=user.sync_version,
-            )
-        elif operation.entity == "categories":
-            data = dict(operation.payload)
-            data["id"] = operation.entity_id
-            row = _save_category(
-                db,
-                user,
-                data,
-                server_version=user.sync_version,
-                active=operation.type != "delete",
-            )
-        else:
-            data = dict(operation.payload)
-            data["id"] = operation.entity_id
-            data.setdefault("month", datetime.now(timezone.utc).strftime("%Y-%m"))
-            data.setdefault("category_id", "other")
-            data.setdefault("limit", 0.01)
-            row = _save_budget(
-                db,
-                user,
-                data,
-                server_version=user.sync_version,
-            )
-        db.add(
-            SyncOperation(
-                user_id=user.id,
-                client_op_id=operation.client_op_id,
-                entity=operation.entity,
-                entity_id=operation.entity_id,
-                server_version=user.sync_version,
-            )
-        )
-        accepted.append(
-            {
-                "client_op_id": operation.client_op_id,
-                "entity_id": operation.entity_id,
-                "server_version": user.sync_version,
-                "created": True,
-            }
-        )
-        if operation.entity in {"accounts", "categories"} and operation.type == "upsert":
-            db.flush()
-    db.commit()
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
     accepted_by_operation = {item["client_op_id"]: item for item in accepted}
     conflicts_by_operation = {item["client_op_id"]: item for item in conflicts}
     return {
@@ -138,7 +179,7 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
             for operation in payload.operations
             if operation.client_op_id in conflicts_by_operation
         ],
-        "server_version": user.sync_version,
+        "server_version": locked_user.sync_version,
     }
 
 
