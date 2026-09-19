@@ -157,7 +157,15 @@ void main() {
       expect(await _completesWithin(thirdPush.entered.future), isTrue,
           reason: 'The drain must not stop after one follow-up round.');
 
+      thirdPush.release.complete();
+      expect(
+          await _completesWithin(draining, const Duration(seconds: 1)), isTrue,
+          reason: 'The shared Future must complete after the final pull.');
+      await Future.wait(callers);
+
       expect(server.pushCalls, 3);
+      expect(server.pullCalls, 3,
+          reason: 'The third push must be followed by its final pull.');
       expect(
           _payload(
               server.pushedOperationBatches[1], 'continuous-drain')['note'],
@@ -174,10 +182,11 @@ void main() {
             '/sync/push',
             '/sync/pull',
             '/sync/push',
+            '/sync/pull',
           ],
           reason: 'Each logical push+pull round must remain serialized.');
-      expect(drainCompleted, isFalse,
-          reason: 'The shared Future must remain pending through the drain.');
+      expect(drainCompleted, isTrue,
+          reason: 'The shared Future must complete after all three rounds.');
       expect(server.maxActiveSyncRequests, 1,
           reason: 'Push/pull pipelines must remain strictly serialized.');
     } finally {

@@ -274,7 +274,7 @@ Future<FinanceStore> syncDevice(MemorySyncServer server,
 }
 
 void installLocalMutationCallback(
-    FinanceStore store, void Function() callback) {
+    FinanceStore store, void Function(String reason) callback) {
   try {
     (store as dynamic).onLocalMutation = callback;
   } on NoSuchMethodError {
@@ -319,12 +319,17 @@ void main() {
 
   test('remote pull merge stays silent at the local-mutation boundary',
       () async {
-    var localMutationCallbacks = 0;
-    installLocalMutationCallback(a, () => localMutationCallbacks++);
+    final requestSyncTrace = <String>[];
+    // The production wiring will pass this local-mutation reason to requestSync.
+    // Recording the seam directly distinguishes no request from a coalesced HTTP call.
+    installLocalMutationCallback(a, (reason) {
+      requestSyncTrace.add('requestSync:$reason');
+    });
     await b.addTransaction(syncTransaction('remote-only'));
     await b.sync();
     final pushesBeforePull = server.pushCalls;
     final pullsBeforePull = server.pullCalls;
+    final requestTraceBeforePull = List<String>.from(requestSyncTrace);
 
     await a.sync();
 
@@ -335,8 +340,8 @@ void main() {
         reason: 'A remote merge must not enqueue a local SyncOperation.');
     expect(server.pushCalls, pushesBeforePull,
         reason: 'A pull merge must not feed back into an extra push.');
-    expect(localMutationCallbacks, 0,
-        reason: 'Remote adoption is not a local user mutation.');
+    expect(requestSyncTrace, requestTraceBeforePull,
+        reason: 'Remote adoption must not invoke the requestSync seam.');
     await Future<void>.delayed(const Duration(milliseconds: 350));
     expect(server.pullCalls, pullsBeforePull + 1,
         reason: 'Remote merge must not trigger a follow-up requestSync.');

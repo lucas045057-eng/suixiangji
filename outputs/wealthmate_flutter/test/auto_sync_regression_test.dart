@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wealthmate_flutter/data/local_repository.dart';
+import 'package:wealthmate_flutter/data/sync_queue.dart';
 import 'package:wealthmate_flutter/domain/models.dart';
 import 'package:wealthmate_flutter/state/finance_store.dart';
 import 'package:wealthmate_flutter/ui/app_shell.dart';
@@ -18,26 +19,43 @@ import 'core/two_device_sync_test.dart'
 
 typedef _Mutation = Future<void> Function(FinanceStore store);
 
-class _BlockingQueueMemory extends SyncMemory {
-  Completer<void>? _entered;
-  Completer<void>? _release;
+class _BlockingPersistenceMemory extends SyncMemory {
+  Completer<void>? _queueEntered;
+  Completer<void>? _queueRelease;
+  Completer<void>? _stateEntered;
+  Completer<void>? _stateRelease;
 
   void blockNextQueueWrite() {
-    _entered = Completer<void>();
-    _release = Completer<void>();
+    _queueEntered = Completer<void>();
+    _queueRelease = Completer<void>();
   }
 
-  Future<void> get queueWriteEntered => _entered!.future;
+  Future<void> get queueWriteEntered => _queueEntered!.future;
 
-  void releaseQueueWrite() => _release!.complete();
+  void releaseQueueWrite() => _queueRelease!.complete();
+
+  void blockNextStateWrite() {
+    _stateEntered = Completer<void>();
+    _stateRelease = Completer<void>();
+  }
+
+  Future<void> get stateWriteEntered => _stateEntered!.future;
+
+  void releaseStateWrite() => _stateRelease!.complete();
 
   @override
   Future<void> write(String key, String value) async {
-    if (_entered != null &&
-        !_entered!.isCompleted &&
+    if (_stateEntered != null &&
+        !_stateEntered!.isCompleted &&
+        key.startsWith(LocalRepository.storageKey)) {
+      _stateEntered!.complete();
+      await _stateRelease!.future;
+    }
+    if (_queueEntered != null &&
+        !_queueEntered!.isCompleted &&
         key.startsWith(LocalRepository.queueStorageKey)) {
-      _entered!.complete();
-      await _release!.future;
+      _queueEntered!.complete();
+      await _queueRelease!.future;
     }
     await super.write(key, value);
   }
@@ -88,14 +106,16 @@ void main() {
     FinanceState initial,
     String entity,
     _Mutation mutate,
-    bool queueMayDrain,
+    void Function(FinanceState state) assertDurableState,
   })>[
     (
       name: 'transaction add',
       initial: syncSeed,
       entity: 'transactions',
       mutate: (store) => store.addTransaction(syncTransaction('auto-add')),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.transactions.any((transaction) => transaction.id == 'auto-add'),
+          isTrue),
     ),
     (
       name: 'transaction update',
@@ -103,14 +123,20 @@ void main() {
       entity: 'transactions',
       mutate: (store) => store.updateTransaction(
           store.state.transactions.single.copyWith(note: 'updated')),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.transactions.any((transaction) =>
+              transaction.id == 'auto-update' && transaction.note == 'updated'),
+          isTrue),
     ),
     (
       name: 'transaction delete',
       initial: _transactionSeed('auto-delete'),
       entity: 'transactions',
       mutate: (store) => store.deleteTransaction('auto-delete'),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.transactions
+              .any((transaction) => transaction.id == 'auto-delete'),
+          isFalse),
     ),
     (
       name: 'account add',
@@ -118,7 +144,9 @@ void main() {
       entity: 'accounts',
       mutate: (store) =>
           store.addAccount(name: 'Auto account', type: AccountType.asset),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.accounts.any((account) => account.name == 'Auto account'),
+          isTrue),
     ),
     (
       name: 'account update',
@@ -126,7 +154,9 @@ void main() {
       entity: 'accounts',
       mutate: (store) => store.updateAccount(
           store.state.accounts.single.copyWith(name: 'Updated account')),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.accounts.any((account) => account.name == 'Updated account'),
+          isTrue),
     ),
     (
       name: 'category add',
@@ -134,7 +164,9 @@ void main() {
       entity: 'categories',
       mutate: (store) => store.addCategory(
           name: 'Auto category', type: TransactionType.expense),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.categories.any((category) => category.name == 'Auto category'),
+          isTrue),
     ),
     (
       name: 'category update',
@@ -142,14 +174,20 @@ void main() {
       entity: 'categories',
       mutate: (store) => store.updateCategory('category',
           name: 'Updated category', active: true),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.categories.any((category) =>
+              category.id == 'category' && category.name == 'Updated category'),
+          isTrue),
     ),
     (
       name: 'category archive',
       initial: syncSeed,
       entity: 'categories',
       mutate: (store) => store.archiveCategory('category'),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.categories
+              .any((category) => category.id == 'category' && !category.active),
+          isTrue),
     ),
     (
       name: 'budget upsert',
@@ -160,7 +198,8 @@ void main() {
           month: '2026-09',
           categoryId: 'category',
           limit: 500),
-      queueMayDrain: false,
+      assertDurableState: (state) => expect(
+          state.budgets.any((budget) => budget.id == 'auto-budget'), isTrue),
     ),
     (
       name: 'QuickEntry confirmation',
@@ -169,7 +208,10 @@ void main() {
       mutate: (store) async {
         expect(await store.confirmDraft(_confirmedDraft()), isTrue);
       },
-      queueMayDrain: true,
+      assertDurableState: (state) => expect(
+          state.transactions
+              .any((transaction) => transaction.note == 'quick confirmation'),
+          isTrue),
     ),
   ];
 
@@ -181,23 +223,30 @@ void main() {
       final store =
           await syncDevice(server, memory: memory, initial: testCase.initial);
       var callbackCount = 0;
-      installLocalMutationCallback(store, () => callbackCount++);
+      Future<FinanceState?>? stateAtCallback;
+      Future<List<SyncOperation>>? queueAtCallback;
+      installLocalMutationCallback(store, (_) {
+        callbackCount++;
+        stateAtCallback = store.repository.local.load();
+        queueAtCallback = store.repository.local.loadQueue();
+      });
 
       await testCase.mutate(store);
 
-      final persisted = await store.repository.local.load();
-      expect(persisted, isNotNull);
-      final persistedQueue = await store.repository.local.loadQueue();
-      if (testCase.queueMayDrain) {
-        expect(
-            server.pushedOperationBatches
-                .expand((batch) => batch)
-                .map((operation) => operation['entity']),
-            contains(testCase.entity));
-      } else {
-        expect(persistedQueue.map((operation) => operation.entity),
-            contains(testCase.entity));
-      }
+      expect(stateAtCallback, isNotNull,
+          reason:
+              '${testCase.name} must capture durable state in its callback.');
+      expect(queueAtCallback, isNotNull,
+          reason:
+              '${testCase.name} must capture durable queue in its callback.');
+      final persistedAtCallback = await stateAtCallback!;
+      final durableQueueAtCallback = await queueAtCallback!;
+      expect(persistedAtCallback, isNotNull);
+      testCase.assertDurableState(persistedAtCallback!);
+      expect(durableQueueAtCallback.map((operation) => operation.entity),
+          contains(testCase.entity),
+          reason:
+              '${testCase.name} callback must observe its durable queue entry.');
       expect(callbackCount, 1,
           reason: '${testCase.name} must request automatic sync exactly once.');
     });
@@ -205,10 +254,10 @@ void main() {
 
   test('callback waits for updated aggregate and queue persistence', () async {
     final server = MemorySyncServer();
-    final memory = _BlockingQueueMemory();
+    final memory = _BlockingPersistenceMemory();
     final store = await syncDevice(server, memory: memory);
     var callbackCount = 0;
-    installLocalMutationCallback(store, () => callbackCount++);
+    installLocalMutationCallback(store, (_) => callbackCount++);
     memory.blockNextQueueWrite();
 
     final mutation =
@@ -225,8 +274,27 @@ void main() {
     await mutation;
 
     expect(callbackCount, 1);
+    expect((await store.repository.local.load())!.transactions.single.id,
+        'persistence-boundary');
     expect((await store.repository.local.loadQueue()).single.entityId,
         'persistence-boundary');
+
+    final stateMemory = _BlockingPersistenceMemory();
+    final stateStore =
+        await syncDevice(MemorySyncServer(), memory: stateMemory);
+    var stateCallbackCount = 0;
+    installLocalMutationCallback(stateStore, (_) => stateCallbackCount++);
+    stateMemory.blockNextStateWrite();
+
+    final stateMutation =
+        stateStore.addTransaction(syncTransaction('state-boundary'));
+    await stateMemory.stateWriteEntered;
+    expect(stateCallbackCount, 0,
+        reason:
+            'The callback must not race ahead of durable aggregate storage.');
+    stateMemory.releaseStateWrite();
+    await stateMutation;
+    expect(stateCallbackCount, 1);
   });
 
   test('failed aggregate or queue persistence never publishes a mutation',
@@ -235,7 +303,7 @@ void main() {
     final stateStore =
         await syncDevice(MemorySyncServer(), memory: stateMemory);
     var stateCallbackCount = 0;
-    installLocalMutationCallback(stateStore, () => stateCallbackCount++);
+    installLocalMutationCallback(stateStore, (_) => stateCallbackCount++);
     stateMemory.failStateWrite = true;
 
     await expectLater(
@@ -249,7 +317,7 @@ void main() {
     final queueServer = MemorySyncServer();
     final queueStore = await syncDevice(queueServer, memory: queueMemory);
     var queueCallbackCount = 0;
-    installLocalMutationCallback(queueStore, () => queueCallbackCount++);
+    installLocalMutationCallback(queueStore, (_) => queueCallbackCount++);
     queueMemory.failQueueWrite = true;
 
     await expectLater(
