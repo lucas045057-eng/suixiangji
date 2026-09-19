@@ -8,6 +8,7 @@ import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/finance_repository.dart';
 import 'package:wealthmate_flutter/data/local_repository.dart';
 import 'package:wealthmate_flutter/data/sync_queue.dart';
+import 'package:wealthmate_flutter/data/token_store.dart';
 import 'package:wealthmate_flutter/domain/models.dart';
 import 'package:wealthmate_flutter/state/finance_store.dart';
 
@@ -17,6 +18,30 @@ class SyncMemory implements KeyValueStore {
   Future<String?> read(String key) async => values[key];
   @override
   Future<void> write(String key, String value) async => values[key] = value;
+}
+
+class SyncTokenStore implements TokenStore {
+  String? token;
+  String? lastVerifiedUserId;
+
+  @override
+  Future<String?> read() async => token;
+
+  @override
+  Future<void> write(String value) async => token = value;
+
+  @override
+  Future<void> clear() async => token = null;
+
+  @override
+  Future<String?> readLastVerifiedUserId() async => lastVerifiedUserId;
+
+  @override
+  Future<void> writeLastVerifiedUserId(String value) async =>
+      lastVerifiedUserId = value;
+
+  @override
+  Future<void> clearLastVerifiedUserId() async => lastVerifiedUserId = null;
 }
 
 /// A response barrier captures a real request/response boundary, without timers.
@@ -52,116 +77,149 @@ class MemorySyncServer extends http.BaseClient {
   };
   final receipts = <String, Map<String, Object?>>{};
   final cursors = <int>[];
+  final pushedOperationBatches = <List<Map<String, Object?>>>[];
   int pushCalls = 0;
+  int pullCalls = 0;
+  int activeSyncRequests = 0;
+  int maxActiveSyncRequests = 0;
   bool failPush = false;
   bool losePushResponse = false;
   bool failPull = false;
   final Set<String> forceConflictEntities = <String>{};
   SyncBarrier? pushBarrier;
   SyncBarrier? pullBarrier;
+  final pushBarriers = <SyncBarrier>[];
+  final pullBarriers = <SyncBarrier>[];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    if (request.headers['Authorization'] != 'Bearer test-owner-token') {
-      return response(request, {'detail': 'Unauthenticated'}, status: 401);
-    }
-    if (request.url.path == '/sync/push') {
-      pushCalls++;
-      if (failPush) {
-        failPush = false;
-        throw const SocketException('injected push failure');
+    final isSyncRequest =
+        request.url.path == '/sync/push' || request.url.path == '/sync/pull';
+    if (isSyncRequest) {
+      activeSyncRequests++;
+      if (activeSyncRequests > maxActiveSyncRequests) {
+        maxActiveSyncRequests = activeSyncRequests;
       }
-      final body = jsonDecode(await request.finalize().bytesToString()) as Map;
-      final accepted = <Map<String, Object?>>[];
-      final conflicts = <Map<String, Object?>>[];
-      final operations = (body['operations'] as List).cast<Map>();
-      // Server applies dependency order; all fixtures have valid references.
-      const order = ['accounts', 'categories', 'transactions', 'budgets'];
-      operations.sort((a, b) => order
-          .indexOf(a['entity'] as String)
-          .compareTo(order.indexOf(b['entity'] as String)));
-      for (final op in operations) {
-        final id = op['client_op_id'] as String;
-        final previous = receipts[id];
-        if (previous != null) {
-          accepted.add({...previous, 'created': false});
-          continue;
+    }
+    try {
+      if (request.headers['Authorization'] != 'Bearer test-owner-token') {
+        return response(request, {'detail': 'Unauthenticated'}, status: 401);
+      }
+      if (request.url.path == '/auth/me') {
+        return response(request, {
+          'id': 'same-owner',
+          'username': 'same-owner',
+          'display_name': 'Same Owner',
+          'quick_memories': const <Object?>[],
+        });
+      }
+      if (request.url.path == '/sync/push') {
+        pushCalls++;
+        if (failPush) {
+          failPush = false;
+          throw const SocketException('injected push failure');
         }
-        final entity = op['entity'] as String;
-        final entityId = op['entity_id'] as String;
-        final payload = (op['payload'] as Map).cast<String, Object?>();
-        final current = records[entity]![entityId];
-        final base = payload['server_version'] as num?;
-        if (forceConflictEntities.remove(entity) ||
-            (current != null &&
-                base != null &&
-                (current['server_version'] as int) > base)) {
-          conflicts.add({
+        final body =
+            jsonDecode(await request.finalize().bytesToString()) as Map;
+        final accepted = <Map<String, Object?>>[];
+        final conflicts = <Map<String, Object?>>[];
+        final operations = (body['operations'] as List).cast<Map>();
+        pushedOperationBatches.add(operations
+            .map((operation) => Map<String, Object?>.from(operation))
+            .toList(growable: false));
+        // Server applies dependency order; all fixtures have valid references.
+        const order = ['accounts', 'categories', 'transactions', 'budgets'];
+        operations.sort((a, b) => order
+            .indexOf(a['entity'] as String)
+            .compareTo(order.indexOf(b['entity'] as String)));
+        for (final op in operations) {
+          final id = op['client_op_id'] as String;
+          final previous = receipts[id];
+          if (previous != null) {
+            accepted.add({...previous, 'created': false});
+            continue;
+          }
+          final entity = op['entity'] as String;
+          final entityId = op['entity_id'] as String;
+          final payload = (op['payload'] as Map).cast<String, Object?>();
+          final current = records[entity]![entityId];
+          final base = payload['server_version'] as num?;
+          if (forceConflictEntities.remove(entity) ||
+              (current != null &&
+                  base != null &&
+                  (current['server_version'] as int) > base)) {
+            conflicts.add({
+              'client_op_id': id,
+              'entity_id': entityId,
+              'reason': 'server has a newer version'
+            });
+            continue;
+          }
+          version++;
+          records[entity]![entityId] = {
+            ...payload,
+            'id': entityId,
+            'server_version': version,
+            if (entity == 'transactions') 'client_op_id': id,
+            if (op['type'] == 'delete') 'deleted_at': '2026-09-15T12:00:00Z',
+          };
+          final receipt = {
             'client_op_id': id,
             'entity_id': entityId,
-            'reason': 'server has a newer version'
-          });
-          continue;
+            'server_version': version,
+            'created': true
+          };
+          receipts[id] = receipt;
+          accepted.add(receipt);
         }
-        version++;
-        records[entity]![entityId] = {
-          ...payload,
-          'id': entityId,
-          'server_version': version,
-          if (entity == 'transactions') 'client_op_id': id,
-          if (op['type'] == 'delete') 'deleted_at': '2026-09-15T12:00:00Z',
+        final result = {
+          'accepted': accepted,
+          'conflicts': conflicts,
+          'server_version': version
         };
-        final receipt = {
-          'client_op_id': id,
-          'entity_id': entityId,
-          'server_version': version,
-          'created': true
+        final barrier =
+            pushBarriers.isNotEmpty ? pushBarriers.removeAt(0) : pushBarrier;
+        pushBarrier = null;
+        if (barrier != null) await barrier.wait();
+        if (losePushResponse) {
+          losePushResponse = false;
+          throw const SocketException('accepted response lost');
+        }
+        return response(request, result);
+      }
+      if (request.url.path == '/sync/pull') {
+        pullCalls++;
+        final since = int.parse(request.url.queryParameters['since_version']!);
+        cursors.add(since);
+        if (failPull) {
+          failPull = false;
+          throw const SocketException('injected pull failure');
+        }
+        List<Map<String, Object?>> newer(String entity) => records[entity]!
+            .values
+            .where((row) => (row['server_version'] as int) > since)
+            .map((row) => Map<String, Object?>.from(row))
+            .toList()
+          ..sort((a, b) => (a['server_version'] as int)
+              .compareTo(b['server_version'] as int));
+        final result = {
+          'items': newer('transactions'),
+          'transactions': newer('transactions'),
+          'accounts': newer('accounts'),
+          'categories': newer('categories'),
+          'budgets': newer('budgets'),
+          'server_version': version
         };
-        receipts[id] = receipt;
-        accepted.add(receipt);
+        final barrier =
+            pullBarriers.isNotEmpty ? pullBarriers.removeAt(0) : pullBarrier;
+        pullBarrier = null;
+        if (barrier != null) await barrier.wait();
+        return response(request, result);
       }
-      final result = {
-        'accepted': accepted,
-        'conflicts': conflicts,
-        'server_version': version
-      };
-      final barrier = pushBarrier;
-      pushBarrier = null;
-      if (barrier != null) await barrier.wait();
-      if (losePushResponse) {
-        losePushResponse = false;
-        throw const SocketException('accepted response lost');
-      }
-      return response(request, result);
+      return response(request, {'detail': 'unexpected path'}, status: 404);
+    } finally {
+      if (isSyncRequest) activeSyncRequests--;
     }
-    if (request.url.path == '/sync/pull') {
-      final since = int.parse(request.url.queryParameters['since_version']!);
-      cursors.add(since);
-      if (failPull) {
-        failPull = false;
-        throw const SocketException('injected pull failure');
-      }
-      List<Map<String, Object?>> newer(String entity) => records[entity]!
-          .values
-          .where((row) => (row['server_version'] as int) > since)
-          .map((row) => Map<String, Object?>.from(row))
-          .toList()
-        ..sort((a, b) =>
-            (a['server_version'] as int).compareTo(b['server_version'] as int));
-      final result = {
-        'items': newer('transactions'),
-        'transactions': newer('transactions'),
-        'accounts': newer('accounts'),
-        'categories': newer('categories'),
-        'budgets': newer('budgets'),
-        'server_version': version
-      };
-      final barrier = pullBarrier;
-      pullBarrier = null;
-      if (barrier != null) await barrier.wait();
-      return response(request, result);
-    }
-    return response(request, {'detail': 'unexpected path'}, status: 404);
   }
 
   http.StreamedResponse response(
@@ -202,11 +260,25 @@ Future<FinanceStore> syncDevice(MemorySyncServer server,
       api: ApiClient(
           baseUrl: 'http://memory-sync.test',
           token: 'test-owner-token',
-          client: server));
+          client: server,
+          tokenStore: SyncTokenStore()));
   await repository.ensureLocalOwner('same-owner');
   final state = fresh ? initial ?? syncSeed : (await repository.load())!;
   await repository.save(state);
   return FinanceStore(repository: repository, initialState: state);
+}
+
+void installLocalMutationCallback(
+    FinanceStore store, void Function() callback) {
+  try {
+    (store as dynamic).onLocalMutation = callback;
+  } on NoSuchMethodError {
+    throw TestFailure(
+      'FinanceStore does not expose the required onLocalMutation callback. '
+      'V1.0.4 must publish local mutation completion only after state and '
+      'SyncQueue persistence succeeds.',
+    );
+  }
 }
 
 void main() {
@@ -238,6 +310,25 @@ void main() {
     await a.sync();
     expect(a.state.transactions.single.note, 'B edit');
     expect(a.state.transactions.single.serverVersion, 4);
+  });
+
+  test('remote pull merge stays silent at the local-mutation boundary',
+      () async {
+    var localMutationCallbacks = 0;
+    installLocalMutationCallback(a, () => localMutationCallbacks++);
+    await b.addTransaction(syncTransaction('remote-only'));
+    await b.sync();
+    final pushesBeforePull = server.pushCalls;
+
+    await a.sync();
+
+    expect(a.state.transactions.single.id, 'remote-only');
+    expect(a.repository.queue.pending(), isEmpty,
+        reason: 'A remote merge must not enqueue a local SyncOperation.');
+    expect(server.pushCalls, pushesBeforePull,
+        reason: 'A pull merge must not feed back into an extra push.');
+    expect(localMutationCallbacks, 0,
+        reason: 'Remote adoption is not a local user mutation.');
   });
 
   test('A/B different additions are both downloaded during push then pull',
