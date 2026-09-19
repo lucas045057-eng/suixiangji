@@ -138,6 +138,7 @@ class _WealthMateAppState extends State<WealthMateApp> {
       context,
       version: version,
       forceUpdate: updates.forceUpdate,
+      updates: updates,
     );
   }
 

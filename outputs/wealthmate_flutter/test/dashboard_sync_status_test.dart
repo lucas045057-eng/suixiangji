@@ -105,7 +105,7 @@ void main() {
     expect(store.state.syncState.lastSyncedAt, prior);
   });
 
-  test('editing during sync keeps activity visible and prevents duplicate sync',
+  test('editing during sync shares the active drain Future with every caller',
       () async {
     final server = MemorySyncServer();
     final store = await syncDevice(server);
@@ -114,17 +114,25 @@ void main() {
     server.pushBarrier = barrier;
     final syncing = store.sync();
     await barrier.entered.future;
+    final duplicate = store.sync();
+    var duplicateCompleted = false;
+    duplicate.whenComplete(() => duplicateCompleted = true);
     try {
       expect(store.state.syncState.isSyncing, isTrue);
       await store.updateTransaction(
           store.state.transactions.single.copyWith(note: 'edited'));
       expect(store.state.syncState.isSyncing, isTrue);
       expect(store.ledger.state.syncState.isSyncing, isTrue);
-      await store.sync();
+      await Future<void>.delayed(Duration.zero);
+      expect(identical(syncing, duplicate), isTrue,
+          reason: 'Every active caller must receive the same drain Future.');
+      expect(duplicateCompleted, isFalse,
+          reason: 'The shared Future must not complete before the drain.');
       expect(server.pushCalls, 1);
     } finally {
       barrier.release.complete();
       await syncing;
+      await duplicate;
     }
     expect(store.state.syncState.isSyncing, isFalse);
   });

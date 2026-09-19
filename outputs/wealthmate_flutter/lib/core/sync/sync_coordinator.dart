@@ -515,6 +515,24 @@ class SyncCoordinator {
       final nextVersion = current.syncState.serverVersion > remote.serverVersion
           ? current.syncState.serverVersion
           : remote.serverVersion;
+      // A newer local edit made while the conflict pull was blocked is still
+      // protected from the remote merge. Rebase its optimistic base to the
+      // authoritative watermark so the serialized drain can submit it in the
+      // next round instead of treating it as the same stale conflict again.
+      for (final pending in pendingAtRecovery) {
+        if (!isProtected(pending.entity, pending.entityId) ||
+            pending.entity == 'categories') {
+          continue;
+        }
+        queue.enqueue(SyncOperation(
+          clientOpId: pending.clientOpId,
+          entity: pending.entity,
+          entityId: pending.entityId,
+          type: pending.type,
+          payload: {...pending.payload, 'server_version': nextVersion},
+          createdAt: pending.createdAt,
+        ));
+      }
       final hasPending = queue.pending().isNotEmpty;
       return merged.copyWith(
           conflicts: remainingConflicts,

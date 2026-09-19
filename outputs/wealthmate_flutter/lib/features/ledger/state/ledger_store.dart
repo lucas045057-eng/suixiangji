@@ -20,6 +20,7 @@ class LedgerStore extends ChangeNotifier {
 
   /// Called when a Ledger mutation also needs to update a compatibility store.
   void Function(FinanceState state)? onStateChanged;
+  void Function(String reason)? onLocalMutation;
 
   FinanceState get state => _state;
   List<FinanceTransaction> get transactions =>
@@ -64,6 +65,7 @@ class LedgerStore extends ChangeNotifier {
     );
     if (!applied) return;
     _message = '已保存到本地';
+    onLocalMutation?.call('ledger.transaction.add');
   }
 
   Future<void> updateTransaction(FinanceTransaction transaction) async {
@@ -83,6 +85,7 @@ class LedgerStore extends ChangeNotifier {
     );
     if (!applied) return;
     _message = '账目已更新';
+    onLocalMutation?.call('ledger.transaction.update');
   }
 
   Future<void> deleteTransaction(String transactionId) async {
@@ -100,6 +103,7 @@ class LedgerStore extends ChangeNotifier {
     );
     if (!applied) return;
     _message = '账目已移入待同步删除队列';
+    onLocalMutation?.call('ledger.transaction.delete');
   }
 
   Future<void> addCategory(
@@ -114,6 +118,7 @@ class LedgerStore extends ChangeNotifier {
     );
     if (!applied) return;
     _message = '分类已保存';
+    onLocalMutation?.call('ledger.category.add');
   }
 
   Future<void> updateCategory(String categoryId,
@@ -132,6 +137,7 @@ class LedgerStore extends ChangeNotifier {
     );
     if (!applied) return;
     _message = active ? '分类已更新' : '分类已归档';
+    onLocalMutation?.call('ledger.category.update');
   }
 
   Future<void> archiveCategory(String categoryId) async {

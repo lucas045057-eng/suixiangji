@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 import os
 from pathlib import Path
+import re
 import secrets
 import subprocess
 import sys
@@ -19,9 +20,23 @@ from sqlalchemy.engine import make_url
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import get_settings
-from app.db import SessionLocal
+from app.db import Base, SessionLocal
 from app.models import Account, AgentLog, Budget, Category, ExchangeRate, InviteCode, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
 from app.security import hash_password
+
+
+def isolated_postgres_engine(database_url: str, *, create_tables: bool = False):
+    """Build an engine only for an explicitly test-named PostgreSQL database."""
+    url = make_url(database_url)
+    if url.get_backend_name() != "postgresql":
+        raise ValueError("isolated PostgreSQL tests require a PostgreSQL URL")
+    database_name = (url.database or "").casefold()
+    if not re.search(r"(?:^|[_-])(test|testing|ci|integration|sandbox)(?:[_-]|$)", database_name):
+        raise ValueError("refusing production-looking PostgreSQL database URL")
+    engine = create_engine(url, pool_pre_ping=True, hide_parameters=True)
+    if create_tables:
+        Base.metadata.create_all(bind=engine)
+    return engine
 
 
 def check(response, expected):

@@ -65,12 +65,12 @@ try {
     $fakeBin = Join-Path $testRoot 'fake-bin'
     $fakeSdk = Join-Path $testRoot 'fake-sdk'
     $signingProperties = Join-Path $flutterProject 'android\signing.properties'
-    $outputPath = Join-Path $testRoot 'outputs\suixiangji-v1.0.3-build6.apk'
+    $outputPath = Join-Path $testRoot 'outputs\suixiangji-v1.0.4-build7.apk'
     $fakeFlutterLog = Join-Path $testRoot 'fake-flutter-args.txt'
 
     Set-Content -LiteralPath (Join-Path $flutterProject 'pubspec.yaml') -Value @'
 name: wealthmate_flutter
-version: 1.0.3+6
+version: 1.0.4+7
 '@ -Encoding utf8
     Set-Content -LiteralPath (Join-Path $flutterProject 'android\app\build.gradle.kts') -Value @'
 android {
@@ -107,8 +107,8 @@ exit /b 0
     Set-Content -LiteralPath (Join-Path $fakeSdk 'cmdline-tools\latest\bin\apkanalyzer.bat') -Value @'
 @echo off
 if "%2"=="application-id" echo com.example.wealthmate_flutter
-if "%2"=="version-name" echo 1.0.3
-if "%2"=="version-code" echo 6
+if "%2"=="version-name" echo 1.0.4
+if "%2"=="version-code" echo 7
 exit /b 0
 '@ -Encoding ascii
     Set-Content -LiteralPath (Join-Path $fakeSdk 'build-tools\36.0.0\apksigner.bat') -Value @'
@@ -130,8 +130,8 @@ exit /b 0
         SigningPropertiesPath = $signingProperties
         Environment = 'production'
         ApiBaseUrl = 'https://api.suixiangji.icu'
-        VersionName = '1.0.3'
-        VersionCode = 6
+        VersionName = '1.0.4'
+        VersionCode = 7
         CronetHttpNoPlay = $true
     }
 
@@ -152,12 +152,12 @@ exit /b 0
     Assert-GuardRejects -Name 'rejects disabled embedded Cronet' -Arguments $case -ExpectedMessage 'Cronet'
 
     $case = $baseArguments.Clone()
-    $case.VersionName = '1.0.2'
-    Assert-GuardRejects -Name 'rejects wrong version name' -Arguments $case -ExpectedMessage '1.0.3'
+    $case.VersionName = '1.0.3'
+    Assert-GuardRejects -Name 'rejects wrong version name' -Arguments $case -ExpectedMessage '1.0.4'
 
     $case = $baseArguments.Clone()
-    $case.VersionCode = 5
-    Assert-GuardRejects -Name 'rejects wrong version code' -Arguments $case -ExpectedMessage '6'
+    $case.VersionCode = 6
+    Assert-GuardRejects -Name 'rejects wrong version code' -Arguments $case -ExpectedMessage '7'
 
     $case = $baseArguments.Clone()
     $case.SigningPropertiesPath = Join-Path $testRoot 'missing-signing.properties'

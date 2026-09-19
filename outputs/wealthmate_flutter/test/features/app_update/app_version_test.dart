@@ -7,7 +7,7 @@ Map<String, Object?> releaseJson({
   String? downloadUrl = 'https://download.invalid/app.apk',
 }) {
   return {
-    'latest_version': '1.0.3',
+    'latest_version': '1.0.4',
     'latest_build': latestBuild,
     'minimum_supported_version': '1.0.0',
     'minimum_supported_build': minimumSupportedBuild,
@@ -18,13 +18,13 @@ Map<String, Object?> releaseJson({
 }
 
 void main() {
-  test('an older build sees formal 1.0.3+6 as an update', () {
+  test('an older build sees formal 1.0.4+7 as an update', () {
     final remote = AppVersion.fromJson(releaseJson());
 
     expect(remote.isUpdateAvailable(2), isTrue);
   });
 
-  test('the current 1.0.3+6 build is not an update', () {
+  test('the current 1.0.4+7 build is not an update', () {
     final remote = AppVersion.fromJson(releaseJson());
 
     expect(remote.isUpdateAvailable(6), isFalse);

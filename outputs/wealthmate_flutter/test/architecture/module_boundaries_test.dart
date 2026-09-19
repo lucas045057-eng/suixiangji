@@ -90,10 +90,18 @@ void main() {
         '${Platform.pathSeparator}core${Platform.pathSeparator}network${Platform.pathSeparator}http_client_factory',
       ),
     );
+    // The approved App Update design has a separate HTTPS APK downloader
+    // boundary. It owns a Dart HttpClient for streamed .part-file downloads;
+    // the shared factory rule applies to API transport construction.
+    final appUpdateDownloader = File(
+      '${root.path}/lib/features/app_update/data/app_update_downloader.dart',
+    );
 
     for (final file in productionFiles) {
       final source = file.readAsStringSync();
-      if (!factoryFiles.contains(file)) {
+      if (!factoryFiles.contains(file) &&
+          file.path.replaceAll('\\', '/') !=
+              appUpdateDownloader.path.replaceAll('\\', '/')) {
         expect(source, isNot(contains('http.Client(')), reason: file.path);
         expect(source, isNot(contains('http.Client.new')), reason: file.path);
         expect(source, isNot(contains('CronetClient')), reason: file.path);

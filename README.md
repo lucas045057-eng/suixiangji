@@ -4,8 +4,8 @@
 
 ## 当前版本
 
- 产品版本：V1.0.3
- Flutter：`1.0.3+6`
+ 产品版本：V1.0.4
+ Flutter：`1.0.4+7`
 - 最低支持版本：`1.0.0+3`
 - Android 网络层继续使用 V1.0.1 Embedded Cronet，并保留 `cronetHttpNoPlay=true` 构建参数。
 
@@ -50,7 +50,7 @@ flutter build windows --release --dart-define=WEALTHMATE_ENVIRONMENT=development
 正式环境必须通过构建守卫注入固定的 HTTPS API 地址 `https://api.suixiangji.icu`：
 
 ```powershell
-pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.3 -VersionCode 6 -CronetHttpNoPlay
+pwsh -NoProfile -File tools/build-android-release.ps1 -FlutterProjectPath outputs/wealthmate_flutter -OutputPath outputs/wealthmate_flutter/build/app/outputs/flutter-apk/app-release.apk -SigningPropertiesPath <controlled-signing-properties-path> -Environment production -ApiBaseUrl https://api.suixiangji.icu -VersionName 1.0.4 -VersionCode 7 -CronetHttpNoPlay
 ```
 
 PRODUCTION DOMAIN：api.suixiangji.icu

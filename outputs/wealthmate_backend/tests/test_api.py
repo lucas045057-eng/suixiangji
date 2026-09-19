@@ -19,6 +19,20 @@ class ApiContractTest(SyncAcceptanceMixin, unittest.TestCase):
         from app.config import get_settings
 
         get_settings.cache_clear()
+        # Other test modules may have imported app.db before this class sets
+        # its isolated SQLite URL. Rebind the existing module objects so
+        # already-imported dependency functions and model metadata remain
+        # valid, while all requests use this class's database.
+        import app.db as db_module
+        from sqlalchemy.orm import sessionmaker
+
+        db_module.engine.dispose()
+        db_module.engine = db_module._engine()
+        db_module.SessionLocal = sessionmaker(
+            bind=db_module.engine,
+            autoflush=False,
+            expire_on_commit=False,
+        )
         from fastapi.testclient import TestClient
         from app.main import app
         from app.db import Base, engine

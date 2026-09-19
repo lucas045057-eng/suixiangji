@@ -15,6 +15,7 @@ class BudgetStore extends ChangeNotifier {
   List<BudgetAlert> _alerts = const [];
 
   void Function(FinanceState state)? onStateChanged;
+  void Function(String reason)? onLocalMutation;
 
   FinanceState get state => _state;
   List<Budget> get budgets => List.unmodifiable(_state.budgets);
@@ -57,6 +58,7 @@ class BudgetStore extends ChangeNotifier {
     _state = next;
     onStateChanged?.call(next);
     notifyListeners();
+    onLocalMutation?.call('budget.upsert');
   }
 
   Future<List<BudgetAlert>> checkBudgetAlerts() async {

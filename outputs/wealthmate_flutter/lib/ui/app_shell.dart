@@ -39,13 +39,22 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   int selectedIndex = 0;
   late final List<Widget?> _pageCache;
+  Timer? _foregroundTimer;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycle = WidgetsBinding.instance.lifecycleState;
+    _foreground = lifecycle == null ||
+        (lifecycle != AppLifecycleState.paused &&
+            lifecycle != AppLifecycleState.inactive &&
+            lifecycle != AppLifecycleState.detached);
+    _armForegroundTimer();
     _pageCache = List<Widget?>.filled(5, null);
     _pageCache[0] = _buildPage(0);
     if (!widget.store.isDemoMode) {
@@ -63,6 +72,44 @@ class _AppShellState extends State<AppShell> {
         }));
       }
     }
+  }
+
+  void _armForegroundTimer() {
+    _foregroundTimer?.cancel();
+    _foregroundTimer = null;
+    if (!_foreground || widget.store.repository.api == null) return;
+    _foregroundTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_foreground) return;
+      unawaited(widget.store.sync());
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _foreground = true;
+        _armForegroundTimer();
+        unawaited(widget.store.sync());
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        _foreground = false;
+        _foregroundTimer?.cancel();
+        _foregroundTimer = null;
+      case AppLifecycleState.hidden:
+        _foreground = false;
+        _foregroundTimer?.cancel();
+        _foregroundTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _foregroundTimer?.cancel();
+    _foregroundTimer = null;
+    super.dispose();
   }
 
   List<Widget> get pages => List<Widget>.generate(
