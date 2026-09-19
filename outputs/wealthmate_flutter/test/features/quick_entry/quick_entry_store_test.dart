@@ -333,9 +333,11 @@ void main() {
       }),
       throwsStateError,
     );
-    expect(await store.confirmDraft(draft, '今天吃饭吃了30元', (_) async {
-      postCount++;
-    }), isFalse);
+    expect(
+        await store.confirmDraft(draft, '今天吃饭吃了30元', (_) async {
+          postCount++;
+        }),
+        isFalse);
     expect(postCount, 1);
   });
 
@@ -380,12 +382,16 @@ void main() {
     );
     var postCount = 0;
 
-    await expectLater(store.confirmDraft(draft, null, (_) async {
-      postCount++;
-    }), throwsStateError);
-    expect(await store.confirmDraft(draft, null, (_) async {
-      postCount++;
-    }), isFalse);
+    await expectLater(
+        store.confirmDraft(draft, null, (_) async {
+          postCount++;
+        }),
+        throwsStateError);
+    expect(
+        await store.confirmDraft(draft, null, (_) async {
+          postCount++;
+        }),
+        isFalse);
     expect(postCount, 1);
   });
 
@@ -412,6 +418,7 @@ void main() {
     );
 
     expect(await store.confirmDraft(draft), isTrue);
+    await store.requestSync('quick-entry-test', immediate: true);
     expect(store.ledger.transactions, hasLength(1));
     expect(api.pushCount, 1);
     expect(api.pullCount, 1);

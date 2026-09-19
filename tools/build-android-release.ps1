@@ -144,12 +144,18 @@ function Get-InspectionValue {
         [Parameter(Mandatory = $true)][string]$Name
     )
 
-    $pattern = '(?im)^' + [regex]::Escape($Name) + '\s*:\s*(?<value>.+?)\s*$'
+    if ($Name -eq 'SigningCertificateSha256') {
+        # Format-List wraps long certificate digests at the host console width.
+        # Match exactly 64 hex characters across optional whitespace/newlines.
+        $pattern = '(?im)^' + [regex]::Escape($Name) + '\s*:\s*(?<value>(?:[0-9A-Fa-f]\s*){64})'
+    } else {
+        $pattern = '(?im)^' + [regex]::Escape($Name) + '\s*:\s*(?<value>.+?)\s*$'
+    }
     $match = [regex]::Match($Text, $pattern)
     if (-not $match.Success) {
         Stop-BuildGuard "APK inspection did not report $Name"
     }
-    return $match.Groups['value'].Value.Trim()
+    return ($match.Groups['value'].Value -replace '\s', '').Trim()
 }
 
 try {

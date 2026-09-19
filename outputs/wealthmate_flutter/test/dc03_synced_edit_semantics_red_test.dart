@@ -25,6 +25,7 @@ class Dc03SyncedEditMemory implements KeyValueStore {
 class Dc03EditSyncClient extends http.BaseClient {
   int serverVersion = 9;
   bool failNextPush = false;
+  int pushFailuresRemaining = 0;
   final List<List<Map<String, Object?>>> pushes = [];
 
   @override
@@ -37,8 +38,9 @@ class Dc03EditSyncClient extends http.BaseClient {
           .map((item) => (item as Map).cast<String, Object?>())
           .toList();
       pushes.add(operations);
-      if (failNextPush) {
+      if (failNextPush || pushFailuresRemaining > 0) {
         failNextPush = false;
+        if (pushFailuresRemaining > 0) pushFailuresRemaining--;
         return _response(request, 503, {'detail': 'temporary outage'});
       }
       final accepted = operations.map((operation) {
@@ -206,22 +208,25 @@ void main() {
     );
     await store.repository.ensureLocalOwner('dc03-user');
 
+    // The local mutation callback schedules the debounced automatic drain.
+    // Make that first automatic round fail so this test can inspect retry
+    // persistence instead of racing a successful background push.
+    client.pushFailuresRemaining = 2;
     await submitSyncedEdit(tester, store);
     final operationId = store.repository.queue.pending().single.clientOpId;
-    client.failNextPush = true;
     await store.sync();
     expect(store.repository.queue.pending(), hasLength(1));
 
     final persisted = jsonDecode((await LocalRepository(memory)
-            .forUser('dc03-user')
-            .readMetadata(LocalRepository.queueStorageKey))!)
-        as List<dynamic>;
+        .forUser('dc03-user')
+        .readMetadata(LocalRepository.queueStorageKey))!) as List<dynamic>;
     expect((persisted.single as Map)['client_op_id'], operationId);
 
     await store.sync();
-    expect(client.pushes, hasLength(2));
-    expect(client.pushes[0].single['client_op_id'], operationId);
-    expect(client.pushes[1].single['client_op_id'], operationId);
+    expect(client.pushes.length, greaterThanOrEqualTo(3));
+    for (final push in client.pushes) {
+      expect(push.single['client_op_id'], operationId);
+    }
   });
 
   testWidgets(
@@ -241,6 +246,9 @@ void main() {
     await store.sync();
     final firstOperationId = store.state.transactions.single.clientOpId;
 
+    // Preserve the second edit in the queue so the test verifies operation
+    // identity independently from automatic-drain timing.
+    client.failNextPush = true;
     await submitSyncedEdit(tester, store, amount: '24.04', note: 'second-edit');
     final secondOperation = store.repository.queue.pending().single;
 

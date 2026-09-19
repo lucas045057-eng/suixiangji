@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/network/api_transport.dart';
 import '../data/app_update_downloader.dart';
 import '../data/app_update_installer.dart';
 import '../data/app_update_remote_data_source.dart';
@@ -72,7 +71,9 @@ class AppUpdateStore extends ChangeNotifier {
     } on Exception catch (failure) {
       _remoteVersion = null;
       _status = AppUpdateStatus.failed;
-      _error = failure is ApiFailure ? failure.message : failure.toString();
+      // ApiFailure preserves its user-facing message in toString(), keeping
+      // the feature state layer independent from the transport internals.
+      _error = failure.toString();
     } catch (_) {
       _remoteVersion = null;
       _status = AppUpdateStatus.failed;
