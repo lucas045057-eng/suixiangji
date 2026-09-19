@@ -233,6 +233,19 @@ class SettingsPage extends StatelessWidget {
             context,
             version: version,
             forceUpdate: updateStore.forceUpdate,
+            updates: updateStore,
+          );
+        }
+      case AppUpdateStatus.downloading:
+      case AppUpdateStatus.downloaded:
+      case AppUpdateStatus.installing:
+      case AppUpdateStatus.waitingForPermission:
+        if (updateStore.remoteVersion != null) {
+          await showAppUpdateDialog(
+            context,
+            version: updateStore.remoteVersion!,
+            forceUpdate: updateStore.forceUpdate,
+            updates: updateStore,
           );
         }
       case AppUpdateStatus.upToDate:

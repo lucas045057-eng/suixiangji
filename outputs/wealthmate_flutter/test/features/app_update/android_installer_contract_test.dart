@@ -1,37 +1,11 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wealthmate_flutter/features/app_update/data/app_update_installer.dart';
 
-const appUpdateChannelName = 'com.example.wealthmate_flutter/app_update';
-const apkMimeType = 'application/vnd.android.package-archive';
-
-enum InstallerOutcomeContract {
-  started,
-  waitingForPermission,
-  unsupported,
-  failed,
-}
-
-abstract interface class AppUpdateInstallerContract {
-  Future<InstallerOutcomeContract> install(String apkPath);
-}
-
-typedef AppUpdateInstallerBuilder = AppUpdateInstallerContract Function({
-  MethodChannel channel,
-});
-
-/// Test-only declaration of the Task 7 installer seam.
-///
-/// It deliberately has no MethodChannel implementation: the RED failure must
-/// identify the missing production installer rather than make a test adapter
-/// look like the feature exists.
-AppUpdateInstallerContract _productionInstaller({
+AppUpdateInstaller _productionInstaller({
   MethodChannel channel = const MethodChannel(appUpdateChannelName),
-}) {
-  throw TestFailure(
-    'The MethodChannel-backed AppUpdateInstaller is not implemented. '
-    'V1.0.4 must bind install(String apkPath) to installApk.',
-  );
-}
+}) =>
+    MethodChannelAppUpdateInstaller(channel: channel);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,7 +34,7 @@ void main() {
 
     final outcome = await installer.install('/app/cache/update.apk');
 
-    expect(outcome, InstallerOutcomeContract.started);
+    expect(outcome, InstallOutcome.started);
     expect(calls, hasLength(1));
     expect(calls.single.method, 'installApk');
     expect(
@@ -78,7 +52,7 @@ void main() {
 
     final outcome = await installer.install('/app/cache/update.apk');
 
-    expect(outcome, InstallerOutcomeContract.waitingForPermission);
+    expect(outcome, InstallOutcome.waitingForPermission);
     expect(calls.single.method, 'installApk');
     expect(
       (calls.single.arguments as Map<Object?, Object?>)['path'],
@@ -94,6 +68,6 @@ void main() {
 
     final outcome = await installer.install('/app/cache/update.apk');
 
-    expect(outcome, InstallerOutcomeContract.unsupported);
+    expect(outcome, InstallOutcome.unsupported);
   });
 }

@@ -2,35 +2,17 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wealthmate_flutter/features/app_update/data/app_update_downloader.dart';
 
 typedef DownloadProgress = void Function(int receivedBytes, int? totalBytes);
-typedef AppUpdateDownloaderBuilder = AppUpdateDownloaderContract Function({
+AppUpdateDownloader _productionDownloader({
   required HttpClient client,
   required Future<Directory> Function() destinationDirectory,
-});
-
-/// Compile-time contract for the production downloader introduced by V1.0.4.
-///
-/// This declaration intentionally has no implementation. Task 7 binds these
-/// tests to the production downloader after the RED contract is established.
-abstract interface class AppUpdateDownloaderContract {
-  Future<String> download(
-    Uri uri, {
-    required DownloadProgress onProgress,
-  });
-
-  Future<void> cancel();
-}
-
-AppUpdateDownloaderContract _productionDownloader({
-  required HttpClient client,
-  required Future<Directory> Function() destinationDirectory,
-}) {
-  throw TestFailure(
-    'AppUpdateDownloader is not implemented. V1.0.4 must bind the injected '
-    'HttpClient and app-specific destination to the production downloader.',
-  );
-}
+}) =>
+    AppUpdateDownloader(
+      client: client,
+      destinationDirectory: destinationDirectory,
+    );
 
 class FakeHttpClient implements HttpClient {
   FakeHttpClient(this.response);
@@ -169,7 +151,10 @@ void main() {
     );
 
     expect(client.openedUrls.single.scheme, 'https');
-    expect(path, startsWith(appCache.path));
+    expect(
+      await File(path).parent.resolveSymbolicLinks(),
+      await appCache.resolveSymbolicLinks(),
+    );
     expect(path, endsWith('.apk'));
     expect(await File(path).readAsBytes(), <int>[1, 2, 3, 4]);
     expect(progress, <double>[0.5, 1.0]);
@@ -236,7 +221,16 @@ void main() {
       onProgress: (_, __) {},
     );
     body.add(<int>[1, 2]);
-    await Future<void>.delayed(Duration.zero);
+    var filesDuringTransfer = <String>[];
+    for (var attempt = 0; attempt < 20; attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      filesDuringTransfer = await _filesUnder(appCache);
+      if (filesDuringTransfer.any((path) => path.endsWith('.apk.part'))) {
+        break;
+      }
+    }
+    expect(filesDuringTransfer, contains(endsWith('.apk.part')));
+    expect(filesDuringTransfer, isNot(contains(endsWith('.apk'))));
     await downloader.cancel();
     await body.close();
 
