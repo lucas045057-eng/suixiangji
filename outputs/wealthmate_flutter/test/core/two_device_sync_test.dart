@@ -78,6 +78,7 @@ class MemorySyncServer extends http.BaseClient {
   final receipts = <String, Map<String, Object?>>{};
   final cursors = <int>[];
   final pushedOperationBatches = <List<Map<String, Object?>>>[];
+  final syncRequestTrace = <String>[];
   int pushCalls = 0;
   int pullCalls = 0;
   int activeSyncRequests = 0;
@@ -96,12 +97,16 @@ class MemorySyncServer extends http.BaseClient {
     final isSyncRequest =
         request.url.path == '/sync/push' || request.url.path == '/sync/pull';
     if (isSyncRequest) {
+      syncRequestTrace.add(request.url.path);
       activeSyncRequests++;
       if (activeSyncRequests > maxActiveSyncRequests) {
         maxActiveSyncRequests = activeSyncRequests;
       }
     }
     try {
+      if (request.url.path == '/auth/login') {
+        return response(request, {'access_token': 'test-owner-token'});
+      }
       if (request.headers['Authorization'] != 'Bearer test-owner-token') {
         return response(request, {'detail': 'Unauthenticated'}, status: 401);
       }
@@ -319,16 +324,24 @@ void main() {
     await b.addTransaction(syncTransaction('remote-only'));
     await b.sync();
     final pushesBeforePull = server.pushCalls;
+    final pullsBeforePull = server.pullCalls;
 
     await a.sync();
 
     expect(a.state.transactions.single.id, 'remote-only');
+    expect(server.pullCalls, pullsBeforePull + 1,
+        reason: 'A merge should use exactly one pull request.');
     expect(a.repository.queue.pending(), isEmpty,
         reason: 'A remote merge must not enqueue a local SyncOperation.');
     expect(server.pushCalls, pushesBeforePull,
         reason: 'A pull merge must not feed back into an extra push.');
     expect(localMutationCallbacks, 0,
         reason: 'Remote adoption is not a local user mutation.');
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(server.pullCalls, pullsBeforePull + 1,
+        reason: 'Remote merge must not trigger a follow-up requestSync.');
+    expect(server.pushCalls, pushesBeforePull,
+        reason: 'Remote merge must not trigger a follow-up push.');
   });
 
   test('A/B different additions are both downloaded during push then pull',

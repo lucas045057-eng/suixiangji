@@ -7,6 +7,11 @@ import 'core/two_device_sync_test.dart'
 
 typedef SyncPipeline = Future<bool> Function();
 typedef SyncEligibility = bool Function();
+typedef SyncSchedulerBuilder = SyncScheduler Function({
+  required SyncPipeline runPipeline,
+  required SyncEligibility canRun,
+  Duration debounce,
+});
 
 /// Compile-time contract for the production scheduler introduced by V1.0.4.
 ///
@@ -23,6 +28,31 @@ abstract class SyncScheduler {
   Future<void> request({String reason = 'unknown', bool immediate = false});
   bool get isActive;
   void dispose();
+}
+
+/// Compiler-only probe: the behavioral tests below deliberately use the real
+/// FinanceStore pipeline, while this implementation keeps every member of the
+/// scheduler contract type-checked instead of leaving the declaration unused.
+class _SyncSchedulerContractProbe implements SyncScheduler {
+  _SyncSchedulerContractProbe({
+    required this.runPipeline,
+    required this.canRun,
+    this.debounce = const Duration(milliseconds: 250),
+  });
+
+  final SyncPipeline runPipeline;
+  final SyncEligibility canRun;
+  final Duration debounce;
+
+  @override
+  Future<void> request({String reason = 'unknown', bool immediate = false}) =>
+      throw UnimplementedError('contract probe is never used as a scheduler');
+
+  @override
+  bool get isActive => false;
+
+  @override
+  void dispose() {}
 }
 
 Future<bool> _completesWithin(Future<void> future,
@@ -43,6 +73,22 @@ Map<String, Object?> _payload(
         .cast<String, Object?>();
 
 void main() {
+  test('scheduler seam is compile-time checked without masking real behavior',
+      () async {
+    final SyncSchedulerBuilder builder = _SyncSchedulerContractProbe.new;
+    final SyncScheduler scheduler = builder(
+      runPipeline: () async => true,
+      canRun: () => true,
+    );
+
+    expect(scheduler, isA<SyncScheduler>());
+    final probe = scheduler as _SyncSchedulerContractProbe;
+    expect(probe.canRun(), isTrue);
+    expect(await probe.runPipeline(), isTrue);
+    expect(probe.debounce, const Duration(milliseconds: 250));
+    scheduler.dispose();
+  });
+
   test('active sync callers receive one shared Future until the drain ends',
       () async {
     final server = MemorySyncServer();
@@ -83,18 +129,28 @@ void main() {
     server.pushBarriers.addAll([firstPush, secondPush, thirdPush]);
 
     final draining = store.sync();
+    final callers = <Future<void>>[draining];
     var drainCompleted = false;
     draining.whenComplete(() => drainCompleted = true);
-    await firstPush.entered.future;
-    await store.updateTransaction(store.state.transactions.single
-        .copyWith(note: 'superseded during round one'));
-    await store.updateTransaction(store.state.transactions.single
-        .copyWith(note: 'latest during round one'));
-    firstPush.release.complete();
 
     try {
+      await firstPush.entered.future;
+      final secondCaller = store.sync();
+      callers.add(secondCaller);
+      expect(identical(draining, secondCaller), isTrue,
+          reason: 'Every caller must join the active serialized drain.');
+      await store.updateTransaction(store.state.transactions.single
+          .copyWith(note: 'superseded during round one'));
+      await store.updateTransaction(store.state.transactions.single
+          .copyWith(note: 'latest during round one'));
+      firstPush.release.complete();
+
       expect(await _completesWithin(secondPush.entered.future), isTrue,
           reason: 'A successful dirty first round must start round two.');
+      final thirdCaller = store.sync();
+      callers.add(thirdCaller);
+      expect(identical(draining, thirdCaller), isTrue,
+          reason: 'The shared Future must survive every dirty round.');
       await store.updateTransaction(store.state.transactions.single
           .copyWith(note: 'written during round two'));
       secondPush.release.complete();
@@ -110,14 +166,25 @@ void main() {
           _payload(
               server.pushedOperationBatches[2], 'continuous-drain')['note'],
           'written during round two');
+      expect(
+          server.syncRequestTrace,
+          [
+            '/sync/push',
+            '/sync/pull',
+            '/sync/push',
+            '/sync/pull',
+            '/sync/push',
+          ],
+          reason: 'Each logical push+pull round must remain serialized.');
       expect(drainCompleted, isFalse,
           reason: 'The shared Future must remain pending through the drain.');
       expect(server.maxActiveSyncRequests, 1,
           reason: 'Push/pull pipelines must remain strictly serialized.');
     } finally {
+      if (!firstPush.release.isCompleted) firstPush.release.complete();
       if (!secondPush.release.isCompleted) secondPush.release.complete();
       if (!thirdPush.release.isCompleted) thirdPush.release.complete();
-      await draining;
+      await Future.wait(callers);
     }
   });
 
@@ -147,7 +214,7 @@ void main() {
     expect(store.state.syncState.serverVersion, 2);
     expect(store.state.syncState.lastSyncedAt, priorSuccess);
     expect(store.state.syncState.error, isNotNull);
-    await Future<void>.delayed(const Duration(milliseconds: 350));
+    await Future<void>.delayed(const Duration(milliseconds: 600));
     expect(server.pushCalls, 1,
         reason: 'A failed drain must not schedule an internal retry.');
 

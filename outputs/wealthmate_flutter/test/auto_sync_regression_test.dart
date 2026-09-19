@@ -43,6 +43,24 @@ class _BlockingQueueMemory extends SyncMemory {
   }
 }
 
+class _FailingPersistenceMemory extends SyncMemory {
+  bool failStateWrite = false;
+  bool failQueueWrite = false;
+
+  @override
+  Future<void> write(String key, String value) async {
+    if (failStateWrite && key.startsWith(LocalRepository.storageKey)) {
+      failStateWrite = false;
+      throw StateError('injected aggregate persistence failure');
+    }
+    if (failQueueWrite && key.startsWith(LocalRepository.queueStorageKey)) {
+      failQueueWrite = false;
+      throw StateError('injected queue persistence failure');
+    }
+    await super.write(key, value);
+  }
+}
+
 FinanceState _transactionSeed(String id) => syncSeed.copyWith(transactions: [
       syncTransaction(id).copyWith(serverVersion: 3),
     ]);
@@ -185,8 +203,7 @@ void main() {
     });
   }
 
-  test('callback is silent until aggregate and SyncQueue persistence completes',
-      () async {
+  test('callback waits for updated aggregate and queue persistence', () async {
     final server = MemorySyncServer();
     final memory = _BlockingQueueMemory();
     final store = await syncDevice(server, memory: memory);
@@ -197,6 +214,11 @@ void main() {
     final mutation =
         store.addTransaction(syncTransaction('persistence-boundary'));
     await memory.queueWriteEntered;
+    final persistedDuringQueueBlock = await store.repository.local.load();
+    expect(persistedDuringQueueBlock!.transactions.single.note, 'original',
+        reason: 'The aggregate must be persisted before the queue boundary.');
+    expect(persistedDuringQueueBlock.transactions.single.id,
+        'persistence-boundary');
     expect(callbackCount, 0,
         reason: 'The callback must not race ahead of durable queue storage.');
     memory.releaseQueueWrite();
@@ -205,6 +227,39 @@ void main() {
     expect(callbackCount, 1);
     expect((await store.repository.local.loadQueue()).single.entityId,
         'persistence-boundary');
+  });
+
+  test('failed aggregate or queue persistence never publishes a mutation',
+      () async {
+    final stateMemory = _FailingPersistenceMemory();
+    final stateStore =
+        await syncDevice(MemorySyncServer(), memory: stateMemory);
+    var stateCallbackCount = 0;
+    installLocalMutationCallback(stateStore, () => stateCallbackCount++);
+    stateMemory.failStateWrite = true;
+
+    await expectLater(
+        stateStore.addTransaction(syncTransaction('state-failure')),
+        throwsA(isA<StateError>()));
+    expect(stateCallbackCount, 0);
+    expect((await stateStore.repository.local.load())!.transactions, isEmpty);
+    expect(await stateStore.repository.local.loadQueue(), isEmpty);
+
+    final queueMemory = _FailingPersistenceMemory();
+    final queueServer = MemorySyncServer();
+    final queueStore = await syncDevice(queueServer, memory: queueMemory);
+    var queueCallbackCount = 0;
+    installLocalMutationCallback(queueStore, () => queueCallbackCount++);
+    queueMemory.failQueueWrite = true;
+
+    await expectLater(
+        queueStore.addTransaction(syncTransaction('queue-failure')),
+        throwsA(isA<StateError>()));
+    expect(queueCallbackCount, 0);
+    expect((await queueStore.repository.local.load())!.transactions.single.id,
+        'queue-failure',
+        reason: 'The state write may precede a failed queue write.');
+    expect(await queueStore.repository.local.loadQueue(), isEmpty);
   });
 
   testWidgets('rapid local mutations debounce into one automatic sync request',
@@ -229,5 +284,8 @@ void main() {
         .map((operation) => operation['entity_id'])
         .toSet();
     expect(sentIds, {'coalesced-1', 'coalesced-2', 'coalesced-3'});
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(server.pushCalls, pushesBeforeMutations + 1,
+        reason: 'A second debounce interval must not create a duplicate push.');
   });
 }

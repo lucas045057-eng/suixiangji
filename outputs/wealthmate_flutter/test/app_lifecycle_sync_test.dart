@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wealthmate_flutter/main.dart' show WealthMateApp;
 import 'package:wealthmate_flutter/state/finance_store.dart';
 import 'package:wealthmate_flutter/ui/app_shell.dart';
 
@@ -55,6 +56,30 @@ void main() {
     expect(server.maxActiveSyncRequests, 1);
   });
 
+  testWidgets('real login transition mounts the app and requests sync',
+      (tester) async {
+    final server = MemorySyncServer();
+    final store = await syncDevice(server);
+    final api = store.repository.api!;
+    api.token = null;
+    api.lastVerifiedUserId = null;
+    store.repository.unbindLocalOwner();
+
+    await tester.pumpWidget(WealthMateApp(
+      store: store,
+      api: api,
+      auth: store.authStore,
+    ));
+    expect(find.text('登录你的本地财富空间'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(0), 'same-owner');
+    await tester.enterText(find.byType(TextField).at(1), 'password');
+    await tester.tap(find.widgetWithText(FilledButton, '登录'));
+    await _pumpUntil(tester, () => server.pullCalls == 1);
+
+    expect(find.text('登录你的本地财富空间'), findsNothing);
+    expect(server.pullCalls, 1);
+  });
+
   testWidgets('resumed requests sync for an authenticated foreground app',
       (tester) async {
     final server = MemorySyncServer();
@@ -92,6 +117,13 @@ void main() {
         (tester) async {
       final server = MemorySyncServer();
       await _mountAuthenticated(tester, server);
+      final pullsBeforeTimer = server.pullCalls;
+
+      await tester.pump(const Duration(seconds: 29, milliseconds: 999));
+      expect(server.pullCalls, pullsBeforeTimer,
+          reason: 'Foreground timer must wait for the full interval.');
+      await tester.pump(const Duration(milliseconds: 1));
+      await _pumpUntil(tester, () => server.pullCalls > pullsBeforeTimer);
       final pullsBeforeBackground = server.pullCalls;
 
       tester.binding.handleAppLifecycleStateChanged(state);
@@ -99,7 +131,17 @@ void main() {
       await tester.pump(const Duration(seconds: 31));
 
       expect(server.pullCalls, pullsBeforeBackground,
-          reason: 'Background lifecycle states must not retain the timer.');
+          reason: 'The already-started timer must be cancelled in background.');
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      final pullsBeforeRearm = server.pullCalls;
+      await tester.pump(const Duration(seconds: 29, milliseconds: 999));
+      expect(server.pullCalls, pullsBeforeRearm);
+      await tester.pump(const Duration(milliseconds: 1));
+      await _pumpUntil(tester, () => server.pullCalls > pullsBeforeRearm);
+      expect(server.pullCalls, pullsBeforeRearm + 1,
+          reason: 'Resume must re-arm the foreground timer.');
     });
   }
 
