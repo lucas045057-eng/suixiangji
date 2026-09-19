@@ -100,6 +100,102 @@ void main() {
     expect(find.text('立即更新'), findsOneWidget);
   });
 
+  testWidgets('downloading state renders percentage and cancellation',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AppUpdateDialog(
+        version: availableVersion(),
+        forceUpdate: false,
+        onLaunch: (Uri _) async => true,
+      ),
+    ));
+
+    expect(find.text('下载中 50%'), findsOneWidget);
+    expect(find.text('取消下载'), findsOneWidget);
+  });
+
+  testWidgets('downloaded state says the installer file is ready',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AppUpdateDialog(
+        version: availableVersion(),
+        forceUpdate: false,
+        onLaunch: (Uri _) async => true,
+      ),
+    ));
+
+    expect(find.text('安装文件已准备好'), findsOneWidget);
+    expect(find.text('安装更新'), findsOneWidget);
+  });
+
+  testWidgets('installing state is visible and disables duplicate action',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AppUpdateDialog(
+        version: availableVersion(),
+        forceUpdate: false,
+        onLaunch: (Uri _) async => true,
+      ),
+    ));
+
+    expect(find.text('正在安装更新'), findsOneWidget);
+    final action = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(action.onPressed, isNull);
+  });
+
+  testWidgets('permission state explains how to continue installation',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AppUpdateDialog(
+        version: availableVersion(),
+        forceUpdate: true,
+        onLaunch: (Uri _) async => true,
+      ),
+    ));
+
+    expect(find.text('请允许随想记安装应用更新'), findsOneWidget);
+    expect(find.text('继续安装'), findsOneWidget);
+  });
+
+  testWidgets('download failure is readable and offers retry', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: AppUpdateDialog(
+          version: availableVersion(),
+          forceUpdate: false,
+          onLaunch: (Uri _) async => false,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('立即更新'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('下载失败，请检查网络后重试'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('ordinary primary action does not launch a browser',
+      (tester) async {
+    var externalLaunches = 0;
+    await tester.pumpWidget(MaterialApp(
+      home: AppUpdateDialog(
+        version: availableVersion(),
+        forceUpdate: false,
+        onLaunch: (Uri _) async {
+          externalLaunches += 1;
+          return true;
+        },
+      ),
+    ));
+
+    await tester.tap(find.text('立即更新'));
+    await tester.pumpAndSettle();
+
+    expect(externalLaunches, 0,
+        reason: 'The native downloader/installer must be the primary action.');
+  });
+
   testWidgets('update check failure leaves the app shell usable',
       (tester) async {
     final updates = updateStore();
