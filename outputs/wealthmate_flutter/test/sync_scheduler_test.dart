@@ -1,59 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wealthmate_flutter/core/sync/sync_scheduler.dart';
 
 import 'core/two_device_sync_test.dart'
     show MemorySyncServer, SyncBarrier, syncDevice, syncTransaction;
-
-typedef SyncPipeline = Future<bool> Function();
-typedef SyncEligibility = bool Function();
-typedef SyncSchedulerBuilder = SyncScheduler Function({
-  required SyncPipeline runPipeline,
-  required SyncEligibility canRun,
-  Duration debounce,
-});
-
-/// Compile-time contract for the production scheduler introduced by V1.0.4.
-///
-/// The RED tests below exercise the current real FinanceStore pipeline. This
-/// declaration deliberately contains no test implementation that could make a
-/// missing production scheduler look green.
-abstract class SyncScheduler {
-  SyncScheduler({
-    required SyncPipeline runPipeline,
-    required SyncEligibility canRun,
-    Duration debounce = const Duration(milliseconds: 250),
-  });
-
-  Future<void> request({String reason = 'unknown', bool immediate = false});
-  bool get isActive;
-  void dispose();
-}
-
-/// Compiler-only probe: the behavioral tests below deliberately use the real
-/// FinanceStore pipeline, while this implementation keeps every member of the
-/// scheduler contract type-checked instead of leaving the declaration unused.
-class _SyncSchedulerContractProbe implements SyncScheduler {
-  _SyncSchedulerContractProbe({
-    required this.runPipeline,
-    required this.canRun,
-    this.debounce = const Duration(milliseconds: 250),
-  });
-
-  final SyncPipeline runPipeline;
-  final SyncEligibility canRun;
-  final Duration debounce;
-
-  @override
-  Future<void> request({String reason = 'unknown', bool immediate = false}) =>
-      throw UnimplementedError('contract probe is never used as a scheduler');
-
-  @override
-  bool get isActive => false;
-
-  @override
-  void dispose() {}
-}
 
 Future<bool> _completesWithin(Future<void> future,
     [Duration limit = const Duration(milliseconds: 150)]) async {
@@ -75,17 +24,13 @@ Map<String, Object?> _payload(
 void main() {
   test('scheduler seam is compile-time checked without masking real behavior',
       () async {
-    final SyncSchedulerBuilder builder = _SyncSchedulerContractProbe.new;
-    final SyncScheduler scheduler = builder(
+    final scheduler = SyncScheduler(
       runPipeline: () async => true,
       canRun: () => true,
     );
 
-    expect(scheduler, isA<SyncScheduler>());
-    final probe = scheduler as _SyncSchedulerContractProbe;
-    expect(probe.canRun(), isTrue);
-    expect(await probe.runPipeline(), isTrue);
-    expect(probe.debounce, const Duration(milliseconds: 250));
+    await scheduler.request(immediate: true);
+    expect(scheduler.debounce, const Duration(milliseconds: 250));
     scheduler.dispose();
   });
 

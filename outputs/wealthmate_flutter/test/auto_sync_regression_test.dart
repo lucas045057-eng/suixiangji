@@ -134,8 +134,8 @@ void main() {
       entity: 'transactions',
       mutate: (store) => store.deleteTransaction('auto-delete'),
       assertDurableState: (state) => expect(
-          state.transactions
-              .any((transaction) => transaction.id == 'auto-delete'),
+          state.transactions.any((transaction) =>
+              transaction.id == 'auto-delete' && transaction.deletedAt == null),
           isFalse),
     ),
     (

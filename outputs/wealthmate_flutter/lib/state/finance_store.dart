@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'dart:convert';
+import 'dart:async';
 
 import '../data/finance_repository.dart';
 import '../data/api_client.dart';
@@ -19,6 +20,7 @@ import '../features/quick_entry/state/quick_entry_store.dart';
 import '../features/insights/data/insights_remote_data_source.dart';
 import '../features/insights/data/insights_repository.dart';
 import '../features/insights/state/insights_store.dart';
+import '../core/sync/sync_scheduler.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
@@ -92,7 +94,9 @@ class FinanceStore extends ChangeNotifier {
         },
       ),
       initialState: _state,
-      postConfirm: repository.api == null ? null : sync,
+      // The ledger mutation boundary schedules sync after state and queue
+      // persistence. QuickEntry must not create a second request here.
+      postConfirm: null,
     );
     if (!identical(budget.repository.session, repository.session)) {
       throw ArgumentError.value(
@@ -148,6 +152,13 @@ class FinanceStore extends ChangeNotifier {
       insights.adoptState(next, notify: true);
       notifyListeners();
     };
+    ledger.onLocalMutation = _publishLocalMutation;
+    assets.onLocalMutation = _publishLocalMutation;
+    budget.onLocalMutation = _publishLocalMutation;
+    _syncScheduler = SyncScheduler(
+      runPipeline: _runSyncPipeline,
+      canRun: () => repository.api == null || repository.isLocalOwnerBound,
+    );
   }
 
   final FinanceRepository repository;
@@ -159,10 +170,15 @@ class FinanceStore extends ChangeNotifier {
   FinanceState _state;
   final AuthStore? _authStore;
   String? _message;
+  late final SyncScheduler _syncScheduler;
   final Set<String> _pendingDeletionCleanupUserIds = <String>{};
   bool _pendingDeletionCleanupStateUnknown = false;
   int _sessionGeneration = 0;
   (int, int)? _syncingSession;
+
+  /// Optional diagnostic/test observer. The callback is invoked only after a
+  /// local SyncQueue mutation and its aggregate state have been persisted.
+  void Function(String reason)? onLocalMutation;
 
   FinanceState _withSyncActivity(FinanceState next) {
     if (_syncingSession != _session) return next;
@@ -190,6 +206,7 @@ class FinanceStore extends ChangeNotifier {
       (_sessionGeneration, repository.sessionIdentity.$2);
   List<BudgetAlert> get budgetAlerts => budget.alerts;
   bool get isDemoMode => repository.api == null;
+  bool get isSyncActive => _syncScheduler.isActive;
   List<Category> get activeCategories =>
       _state.categories.where((item) => item.active).toList(growable: false);
   FinanceMetrics get metrics => insights.metrics;
@@ -565,8 +582,20 @@ class FinanceStore extends ChangeNotifier {
     await assets.setDefaultAccount(accountId);
   }
 
-  Future<void> sync() async {
-    if (_syncingSession == _session) return;
+  Future<void> requestSync(String reason, {bool immediate = false}) {
+    return _syncScheduler.request(reason: reason, immediate: immediate);
+  }
+
+  Future<void> sync() => requestSync('manual', immediate: true);
+
+  void _publishLocalMutation(String reason) {
+    onLocalMutation?.call(reason);
+    if (repository.api != null) {
+      unawaited(requestSync(reason));
+    }
+  }
+
+  Future<bool> _runSyncPipeline() async {
     final started = _session;
     _syncingSession = started;
     _state = _withSyncActivity(
@@ -579,7 +608,7 @@ class FinanceStore extends ChangeNotifier {
         _state,
         isCurrent: () => _session == started,
       );
-      if (_session != started) return;
+      if (_session != started) return true;
       _state = synced;
       _message = _state.syncState.error ??
           (_state.conflicts.isNotEmpty
@@ -589,6 +618,15 @@ class FinanceStore extends ChangeNotifier {
                   : _state.syncState.lastSyncedAt == null
                       ? '离线演示/待配置'
                       : '已完成同步');
+      return _state.syncState.error == null;
+    } on Object catch (error) {
+      if (_session == started) {
+        _state = _state.copyWith(
+            syncState: _state.syncState.copyWith(error: error.toString()));
+        _adoptFeatureState();
+        notifyListeners();
+      }
+      return false;
     } finally {
       if (_syncingSession == started) _syncingSession = null;
       if (_session == started) {
@@ -626,6 +664,12 @@ class FinanceStore extends ChangeNotifier {
 
   Future<void> refreshExchangeRate(String baseCurrency) async {
     await assets.refreshExchangeRate(baseCurrency);
+  }
+
+  @override
+  void dispose() {
+    _syncScheduler.dispose();
+    super.dispose();
   }
 
   Future<void> restoreDemoData() async {

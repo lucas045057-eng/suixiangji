@@ -18,6 +18,7 @@ class AssetStore extends ChangeNotifier {
 
   /// Called when an Assets mutation also needs to update a compatibility store.
   void Function(FinanceState state)? onStateChanged;
+  void Function(String reason)? onLocalMutation;
   void Function(String? message)? onMessageChanged;
 
   FinanceState get state => _state;
@@ -105,6 +106,7 @@ class AssetStore extends ChangeNotifier {
     }
     _message = '账户已保存到本地，联网后会同步';
     _notifyChanged();
+    onLocalMutation?.call('assets.account.add');
   }
 
   Future<void> updateAccount(Account account) async {
@@ -124,6 +126,7 @@ class AssetStore extends ChangeNotifier {
     }
     _message = '账户配置已保存';
     _notifyChanged();
+    onLocalMutation?.call('assets.account.update');
   }
 
   Future<void> calibrateBalance(Account account, double delta) async {
@@ -145,6 +148,7 @@ class AssetStore extends ChangeNotifier {
     }
     _message = '账户余额已校准';
     _notifyChanged();
+    onLocalMutation?.call('assets.account.calibrate');
   }
 
   Future<void> setDefaultAccount(String accountId) async {

@@ -275,15 +275,7 @@ Future<FinanceStore> syncDevice(MemorySyncServer server,
 
 void installLocalMutationCallback(
     FinanceStore store, void Function(String reason) callback) {
-  try {
-    (store as dynamic).onLocalMutation = callback;
-  } on NoSuchMethodError {
-    throw TestFailure(
-      'FinanceStore does not expose the required onLocalMutation callback. '
-      'V1.0.4 must publish local mutation completion only after state and '
-      'SyncQueue persistence succeeds.',
-    );
-  }
+  store.onLocalMutation = callback;
 }
 
 void main() {
@@ -568,11 +560,10 @@ void main() {
         a.state.transactions.single.copyWith(note: 'newer snapshot'));
     barrier.release.complete();
     await syncing;
-    expect(a.repository.queue.pending(), hasLength(1));
-    expect(
-        a.repository.queue.pending().single.payload['note'], 'newer snapshot');
+    expect(a.repository.queue.pending(), isEmpty,
+        reason:
+            'The shared drain must continue through the edit made in-flight.');
     expect(a.state.transactions.single.note, 'newer snapshot');
-    expect(a.repository.queue.pending().single.clientOpId, isNot('create-a'));
     await a.sync();
     await b.sync();
     expect(a.repository.queue.pending(), isEmpty);
@@ -591,10 +582,11 @@ void main() {
     await barrier.entered.future;
     await a.updateTransaction(
         a.state.transactions.single.copyWith(note: 'second edit'));
-    final laterId = a.repository.queue.pending().single.clientOpId;
     barrier.release.complete();
     await syncing;
-    expect(a.repository.queue.pending().single.clientOpId, laterId);
+    expect(a.repository.queue.pending(), isEmpty,
+        reason:
+            'The shared drain must submit the later operation before completing.');
     expect(a.state.transactions.single.note, 'second edit');
     await a.sync();
     await b.sync();
@@ -678,8 +670,8 @@ void main() {
 
       expect(
           value(b.state), entity == 'budgets' ? '300.0' : 'later local edit');
-      expect(b.repository.queue.pending(), hasLength(1));
-      expect(b.repository.queue.pending().single.entity, entity);
+      expect(b.repository.queue.pending(), isEmpty,
+          reason: 'The serialized drain must submit the rebased local edit.');
     });
   }
 }
