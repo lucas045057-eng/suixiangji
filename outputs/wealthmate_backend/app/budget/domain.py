@@ -3,6 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Mapping
 
+TOTAL_BUDGET_CATEGORY = '__total__'
+
 
 def normalise_budget_values(values: Mapping[str, Any]) -> dict[str, Any]:
     """Normalise storage values without changing the public budget contract."""

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../../domain/transaction_query.dart' as finance;
 import '../../assets/domain/asset_rules.dart';
 import '../../budget/domain/budget_rules.dart' as budget_rules;
 
@@ -190,18 +191,17 @@ class InsightRules {
   }
 
   static double? _cnyAmount(FinanceTransaction transaction) {
-    if (transaction.currency == 'CNY') {
-      return transaction.cnyAmount ?? transaction.amount;
-    }
-    return transaction.cnyAmount;
+    return finance.cnyAmount(transaction);
   }
 
   static DateTime? _occurredDate(FinanceTransaction transaction) {
-    final raw = transaction.occurredAt ?? transaction.date;
-    if (raw.length >= 19 && raw[10] == 'T') {
-      return DateTime.tryParse(raw.substring(0, 19));
-    }
-    return DateTime.tryParse(raw);
+    final date = finance.businessDate(transaction);
+    if (date == null) return null;
+    final raw = transaction.occurredAt ?? '';
+    final stamp =
+        DateTime.tryParse(raw.length >= 19 ? raw.substring(0, 19) : raw);
+    return DateTime(
+        date.year, date.month, date.day, stamp?.hour ?? 0, stamp?.minute ?? 0);
   }
 
   static double _round(double value, [int digits = 2]) {

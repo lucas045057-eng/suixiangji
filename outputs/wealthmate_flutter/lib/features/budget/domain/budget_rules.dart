@@ -1,4 +1,7 @@
 import '../../../domain/models.dart';
+import '../../../domain/transaction_query.dart';
+
+const totalBudgetCategory = '__total__';
 
 BudgetAlertLevel? levelForRatio(double ratio) {
   if (ratio > 1) return BudgetAlertLevel.over;
@@ -18,26 +21,23 @@ BudgetProgress progressFor(Budget budget, double spent) {
 }
 
 List<BudgetProgress> progressForMonth(FinanceState state, String month) {
-  final transactions = state.transactions.where((item) =>
-      item.deletedAt == null &&
-      item.type == TransactionType.expense &&
-      item.date.startsWith(month));
+  final first = DateTime.parse('$month-01');
+  final transactions = TransactionQuery(
+          start: first,
+          end: DateTime(first.year, first.month + 1, 0),
+          type: TransactionType.expense)
+      .select(state);
   return state.budgets
       .where((budget) =>
           budget.deletedAt == null && budget.active && budget.month == month)
       .map((budget) {
     final spent = transactions
-        .where((item) => item.categoryId == budget.categoryId)
-        .fold<double>(0, (sum, item) => sum + _cnyAmount(item));
+        .where((item) =>
+            budget.categoryId == totalBudgetCategory ||
+            item.categoryId == budget.categoryId)
+        .fold<double>(0, (sum, item) => sum + (cnyAmount(item) ?? 0));
     return progressFor(budget, _round(spent));
   }).toList(growable: false);
-}
-
-double _cnyAmount(FinanceTransaction transaction) {
-  if (transaction.currency == 'CNY') {
-    return transaction.cnyAmount ?? transaction.amount;
-  }
-  return transaction.cnyAmount ?? 0;
 }
 
 double _round(double value) => (value * 100).round() / 100;

@@ -112,7 +112,9 @@ def period_metrics(rows: list[TransactionRecord], period: str, start: date, end:
         occurred = _record_datetime(row)
         if occurred.tzinfo is not None:
             occurred = occurred.replace(tzinfo=None)
-        bucket_key = datetime.combine(occurred.date(), time.min) if not day_mode else occurred.replace(minute=0, second=0, microsecond=0)
+        # Timestamp supplies the hour only. The editable business date is the
+        # canonical period key, shared with the ledger/monthly/budget scope.
+        bucket_key = datetime.combine(row.occurred_on, time(hour=occurred.hour if day_mode else 0))
         position = index.get(bucket_key)
         if position is None:
             continue

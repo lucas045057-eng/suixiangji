@@ -136,7 +136,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           ),
         ),
       1 => LedgerPage(store: widget.store),
-      2 => StatsPage(insights: widget.store.insights),
+      2 =>
+        StatsPage(insights: widget.store.insights, ledger: widget.store.ledger),
       3 => WealthPage(store: widget.store.assets, ledger: widget.store.ledger),
       _ => SettingsPage(
           store: widget.store,

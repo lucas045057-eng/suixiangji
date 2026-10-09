@@ -19,8 +19,9 @@ class BudgetStore extends ChangeNotifier {
 
   FinanceState get state => _state;
   List<Budget> get budgets => List.unmodifiable(_state.budgets);
-  List<Category> get activeCategories =>
-      _state.categories.where((item) => item.active).toList(growable: false);
+  List<Category> get activeCategories => _state.categories
+      .where((item) => item.active && item.type == TransactionType.expense)
+      .toList(growable: false);
   List<BudgetAlert> get alerts => List.unmodifiable(_alerts);
   List<BudgetProgress> get progress =>
       rules.progressForMonth(_state, _monthKey);
@@ -46,11 +47,26 @@ class BudgetStore extends ChangeNotifier {
     required String categoryId,
     required double limit,
   }) async {
+    if (!limit.isFinite ||
+        limit <= 0 ||
+        !RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(month)) {
+      throw ArgumentError('请输入有效月份和正数预算');
+    }
+    final existing = _state.budgets
+        .where((b) =>
+            b.deletedAt == null &&
+            (id != null
+                ? b.id == id
+                : b.month == month && b.categoryId == categoryId))
+        .firstOrNull;
     final budget = Budget(
-      id: id ?? 'budget-${DateTime.now().microsecondsSinceEpoch}',
+      id: id ??
+          existing?.id ??
+          'budget-${DateTime.now().microsecondsSinceEpoch}',
       month: month,
       categoryId: categoryId,
       limit: limit,
+      serverVersion: existing?.serverVersion,
     );
     final baseState = _initialStatePending ? _state : null;
     _initialStatePending = false;
@@ -59,6 +75,28 @@ class BudgetStore extends ChangeNotifier {
     onStateChanged?.call(next);
     notifyListeners();
     onLocalMutation?.call('budget.upsert');
+  }
+
+  Future<void> allocateTotal(String month) async {
+    final total = _state.budgets
+        .where((b) =>
+            b.active &&
+            b.deletedAt == null &&
+            b.month == month &&
+            b.categoryId == rules.totalBudgetCategory)
+        .firstOrNull;
+    final categories = activeCategories;
+    if (total == null || categories.isEmpty) throw StateError('请先设置月度总预算和支出分类');
+    final cents = (total.limit * 100).round();
+    if (cents < categories.length) throw StateError('总预算不足以为每个分类分配 0.01 元');
+    for (var i = 0; i < categories.length; i++) {
+      await upsertBudget(
+          month: month,
+          categoryId: categories[i].id,
+          limit: (cents ~/ categories.length +
+                  (i < cents % categories.length ? 1 : 0)) /
+              100);
+    }
   }
 
   Future<List<BudgetAlert>> checkBudgetAlerts() async {

@@ -6,7 +6,7 @@ from threading import Barrier
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import delete, event, select, update
+from sqlalchemy import delete, event, select, update, text
 from sqlalchemy.engine import make_url
 
 from app.db import SessionLocal
@@ -82,16 +82,31 @@ def test_concurrent_pushes_allocate_unique_versions_and_keep_old_cursor_complete
         SyncPushIn(operations=[_transaction_operation(prefix, "second")]),
     ]
     flush_barrier = Barrier(2)
+    start_barrier = Barrier(2)
 
     def pause_both_allocators(_mapper, _connection, target):
         if target.id == user_id:
-            flush_barrier.wait(timeout=10)
+            # A correctly serialized allocator holds the user row lock: forcing
+            # both threads past it would deadlock the test itself. Synchronize
+            # at flush only for the former, unlocked allocator to reproduce its
+            # duplicate version race deterministically.
+            locked = _connection.scalar(text("""
+                SELECT EXISTS (SELECT 1 FROM pg_locks
+                WHERE pid = pg_backend_pid() AND relation = 'users'::regclass
+                  AND mode = 'RowShareLock' AND granted)
+            """))
+            if not locked:
+                flush_barrier.wait(timeout=10)
+
+    def concurrent_push(payload, session, user):
+        start_barrier.wait(timeout=10)
+        return push(payload, session, user)
 
     event.listen(User, "before_update", pause_both_allocators)
     try:
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [
-                pool.submit(push, payload, session, user)
+                pool.submit(concurrent_push, payload, session, user)
                 for payload, session, user in zip(payloads, sessions, users, strict=True)
             ]
             results = [future.result(timeout=20) for future in futures]

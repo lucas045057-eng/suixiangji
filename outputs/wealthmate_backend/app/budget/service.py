@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import Budget, Category, User
-from .domain import normalise_budget_values
+from .domain import normalise_budget_values, TOTAL_BUDGET_CATEGORY
 from .schemas import BudgetIn, BudgetPatch
 
 
@@ -46,10 +46,12 @@ def save_budget(
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
     category_id = values.get("category_id")
-    if category_id:
+    if category_id and category_id != TOTAL_BUDGET_CATEGORY:
         category = db.get(Category, category_id)
         if not category or category.user_id != user.id:
             raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
+        if category.kind != 'expense':
+            raise HTTPException(status_code=422, detail='预算仅支持支出分类')
     data = normalise_budget_values({
         "month": values["month"],
         "category_id": values["category_id"],

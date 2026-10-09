@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../features/insights/state/insights_store.dart';
+import '../features/ledger/state/ledger_store.dart';
+import '../domain/models.dart';
+import '../domain/transaction_query.dart';
+import 'ledger_page.dart';
 import 'widgets/bar_chart.dart';
 import 'widgets/line_chart.dart';
 import 'widgets/pie_chart.dart';
 import 'widgets/ui_helpers.dart';
 
-enum StatsPeriod { day, week, month }
+enum StatsPeriod { day, week, month, custom }
 
 class StatsPage extends StatefulWidget {
-  const StatsPage({required this.insights, super.key});
+  const StatsPage({required this.insights, this.ledger, this.now, super.key});
 
   final InsightsStore insights;
+  final LedgerStore? ledger;
+  final DateTime? now;
 
   @override
   State<StatsPage> createState() => _StatsPageState();
@@ -19,17 +25,28 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   StatsPeriod period = StatsPeriod.month;
+  bool byAccount = false;
+  DateTimeRange? customRange;
+  DateTime get today => day(widget.now ?? DateTime.now());
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.insights,
       builder: (context, _) {
-        final range = _rangeFor(period, widget.insights.metrics.monthKey);
+        final selectedRange =
+            _rangeFor(period, widget.insights.metrics.monthKey);
+        final range = DateTimeRange(
+            start: selectedRange.start,
+            end: selectedRange.end.isAfter(today) &&
+                    !selectedRange.start.isAfter(today)
+                ? today
+                : selectedRange.end);
         final points = widget.insights.trend(range);
         final categoryTotals = widget.insights.expenseByCategory(range);
         final accountTotals = widget.insights.expenseByAccount(range);
-        final categories = _sortedCategoryItems(categoryTotals);
+        final categories =
+            _sortedCategoryItems(byAccount ? accountTotals : categoryTotals);
         final totalExpense =
             categoryTotals.values.fold<double>(0, (sum, value) => sum + value);
         final highestCategory =
@@ -39,12 +56,8 @@ class _StatsPageState extends State<StatsPage> {
             : accountTotals.entries
                 .reduce((a, b) => a.value >= b.value ? a : b)
                 .key;
-        final average = totalExpense == 0
-            ? 0.0
-            : totalExpense /
-                (period == StatsPeriod.day
-                    ? 1.0
-                    : (range.duration.inDays + 1).toDouble());
+        final average = dailyAverage(
+            totalExpense, selectedRange.start, selectedRange.end, today);
         return SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -59,17 +72,40 @@ class _StatsPageState extends State<StatsPage> {
                     style: const TextStyle(
                         color: Color(0xFF87958F), fontSize: 11)),
                 const SizedBox(height: 16),
-                SegmentedButton<StatsPeriod>(
+                SegmentedButton<StatsPeriod>(segments: const [
+                  ButtonSegment(value: StatsPeriod.day, label: Text('本日')),
+                  ButtonSegment(value: StatsPeriod.week, label: Text('本周')),
+                  ButtonSegment(value: StatsPeriod.month, label: Text('本月')),
+                  ButtonSegment(value: StatsPeriod.custom, label: Text('自选')),
+                ], selected: {
+                  period
+                }, onSelectionChanged: (value) => _selectPeriod(value.first)),
+                if (period == StatsPeriod.month)
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    IconButton(
+                        tooltip: '上个月',
+                        onPressed: () => _changeMonth(-1),
+                        icon: const Icon(Icons.chevron_left)),
+                    Text(widget.insights.monthKey),
+                    IconButton(
+                        tooltip: '下个月',
+                        onPressed: () => _changeMonth(1),
+                        icon: const Icon(Icons.chevron_right)),
+                  ]),
+                Text(
+                    '日均按已过去的 ${averageDays(selectedRange.start, selectedRange.end, today)} 天计算；历史月份按整月计算。',
+                    style: const TextStyle(fontSize: 10)),
+                const SizedBox(height: 10),
+                SegmentedButton<bool>(
                     segments: const [
-                      ButtonSegment(value: StatsPeriod.day, label: Text('本日')),
-                      ButtonSegment(value: StatsPeriod.week, label: Text('本周')),
-                      ButtonSegment(value: StatsPeriod.month, label: Text('本月'))
+                      ButtonSegment(value: false, label: Text('按分类')),
+                      ButtonSegment(value: true, label: Text('按账户'))
                     ],
                     selected: {
-                      period
+                      byAccount
                     },
                     onSelectionChanged: (value) =>
-                        setState(() => period = value.first)),
+                        setState(() => byAccount = value.first)),
                 const SizedBox(height: 14),
                 _summaryGrid(
                     totalExpense, average, highestCategory, highestAccount),
@@ -119,7 +155,9 @@ class _StatsPageState extends State<StatsPage> {
                               style: TextStyle(
                                   color: Color(0xFF87958F), fontSize: 10)),
                           const SizedBox(height: 15),
-                          SpendingBarChart(items: categories),
+                          SpendingBarChart(
+                              items: categories,
+                              onTap: (item) => _drill(item, range)),
                         ]),
                   ),
                 ),
@@ -143,6 +181,8 @@ class _StatsPageState extends State<StatsPage> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ExpensePieChart(
+                                    onTap: (index) =>
+                                        _drill(categories[index], range),
                                     items: categories
                                         .map((item) => PieChartItem(
                                             label: item.label,
@@ -156,7 +196,10 @@ class _StatsPageState extends State<StatsPage> {
                                             CrossAxisAlignment.start,
                                         children: [
                                       for (final item in categories)
-                                        _pieLegend(item, totalExpense)
+                                        InkWell(
+                                            onTap: () => _drill(item, range),
+                                            child:
+                                                _pieLegend(item, totalExpense))
                                     ])),
                               ],
                             ),
@@ -249,10 +292,7 @@ class _StatsPageState extends State<StatsPage> {
   List<BarChartItem> _sortedCategoryItems(Map<String, double> values) {
     final entries = values.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final top = entries.take(6).toList();
-    final other =
-        entries.skip(6).fold<double>(0, (sum, item) => sum + item.value);
-    if (other > 0) top.add(MapEntry('other', other));
+    final top = entries;
     const colors = [
       Color(0xFF2F9F7D),
       Color(0xFF6A6CF4),
@@ -265,18 +305,23 @@ class _StatsPageState extends State<StatsPage> {
     return [
       for (var index = 0; index < top.length; index += 1)
         BarChartItem(
-            label: top[index].key == 'uncategorized'
-                ? '未分类'
-                : top[index].key == 'other'
-                    ? '其他'
-                    : categoryName(widget.insights.state, top[index].key),
+            id: top[index].key,
+            label: byAccount
+                ? accountName(widget.insights.state, top[index].key)
+                : top[index].key == 'uncategorized'
+                    ? '未分类'
+                    : top[index].key == 'other'
+                        ? '其他'
+                        : categoryName(widget.insights.state, top[index].key),
             value: top[index].value,
             color: colors[index % colors.length])
     ];
   }
 
   DateTimeRange _rangeFor(StatsPeriod selected, String monthKey) {
-    final now = DateTime.now();
+    final now = today;
+    if (selected == StatsPeriod.custom && customRange != null)
+      return customRange!;
     if (selected == StatsPeriod.day)
       return DateTimeRange(
           start: DateTime(now.year, now.month, now.day),
@@ -296,8 +341,45 @@ class _StatsPageState extends State<StatsPage> {
   String _periodLabel(StatsPeriod value) => switch (value) {
         StatsPeriod.day => '本日',
         StatsPeriod.week => '本周',
-        StatsPeriod.month => '本月'
+        StatsPeriod.month => '本月',
+        StatsPeriod.custom => '自选时段'
       };
+
+  Future<void> _changeMonth(int delta) async {
+    final current = DateTime.parse('${widget.insights.monthKey}-01');
+    final next = DateTime(current.year, current.month + delta, 1);
+    await widget.insights.refresh(
+        month: '${next.year}-${next.month.toString().padLeft(2, '0')}');
+  }
+
+  Future<void> _selectPeriod(StatsPeriod value) async {
+    if (value == StatsPeriod.custom) {
+      final selected = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+          initialDateRange: customRange);
+      if (selected == null || !mounted) return;
+      customRange = selected;
+    }
+    setState(() => period = value);
+  }
+
+  void _drill(BarChartItem item, DateTimeRange range) {
+    final ledger = widget.ledger;
+    if (ledger == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+            appBar: AppBar(title: Text('${item.label} · 支出明细')),
+            body: LedgerPage(
+                ledger: ledger,
+                initialQuery: TransactionQuery(
+                    start: range.start,
+                    end: range.end,
+                    type: TransactionType.expense,
+                    categoryIds: byAccount ? null : {item.id!},
+                    accountId: byAccount ? item.id : null)))));
+  }
 
   String _formatDate(DateTime value) => '${value.month}/${value.day}';
 
