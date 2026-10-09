@@ -157,6 +157,42 @@ class AuthStore extends ChangeNotifier {
     _clearSession();
   }
 
+  Future<String?> generateRecoveryCode(String currentPassword) async {
+    final generation = _sessionGeneration;
+    try {
+      final code = await repository.generateRecoveryCode(currentPassword);
+      if (generation != _sessionGeneration) return null;
+      _message = null;
+      notifyListeners();
+      return code;
+    } on ApiFailure catch (failure) {
+      if (generation == _sessionGeneration) {
+        _message = failure.message;
+        notifyListeners();
+      }
+      return null;
+    }
+  }
+
+  Future<bool> recoverPassword(
+      String username, String code, String password) async {
+    final generation = _sessionGeneration;
+    try {
+      await repository.recoverPassword(username, code, password);
+      if (generation != _sessionGeneration) return false;
+      await logout();
+      _message = '密码已重置，请使用新密码登录';
+      notifyListeners();
+      return true;
+    } on ApiFailure catch (failure) {
+      if (generation == _sessionGeneration) {
+        _message = failure.message;
+        notifyListeners();
+      }
+      return false;
+    }
+  }
+
   void clearSession() {
     _sessionGeneration++;
     _clearSession();

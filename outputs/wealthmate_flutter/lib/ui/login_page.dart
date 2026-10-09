@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
 import 'register_page.dart';
+import 'password_recovery_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -72,8 +73,7 @@ class _LoginPageState extends State<LoginPage> {
                         if (widget.onRetryCleanup != null) ...[
                           const SizedBox(height: 8),
                           OutlinedButton(
-                              onPressed:
-                                  retryingCleanup ? null : _retryCleanup,
+                              onPressed: retryingCleanup ? null : _retryCleanup,
                               child: Text(retryingCleanup ? '清理中…' : '重试本机清理')),
                         ],
                       ],
@@ -103,6 +103,14 @@ class _LoginPageState extends State<LoginPage> {
                               ? null
                               : () => Navigator.of(context).push(
                                   MaterialPageRoute<void>(
+                                      builder: (_) => PasswordRecoveryPage(
+                                          auth: widget.auth))),
+                          child: const Text('忘记密码')),
+                      TextButton(
+                          onPressed: loading
+                              ? null
+                              : () => Navigator.of(context)
+                                  .push(MaterialPageRoute<void>(
                                       builder: (_) => RegisterPage(
                                           auth: widget.auth,
                                           onLoggedIn: () {

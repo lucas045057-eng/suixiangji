@@ -29,6 +29,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(256))
+    recovery_code_hash: Mapped[str | None] = mapped_column(String(256),nullable=True)
     display_name: Mapped[str] = mapped_column(String(128), default="财富用户")
     quick_memories: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     auth_version: Mapped[int] = mapped_column(Integer, default=0)

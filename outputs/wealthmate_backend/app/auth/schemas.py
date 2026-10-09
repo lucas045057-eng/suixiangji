@@ -45,3 +45,11 @@ class ProfilePatch(BaseModel):
 class PasswordChange(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=8, max_length=256)
+
+class RecoveryCodeIn(BaseModel):
+    current_password: str = Field(min_length=1,max_length=256)
+
+class PasswordRecoverIn(BaseModel):
+    username: str = Field(min_length=1,max_length=256)
+    recovery_code: str = Field(min_length=1,max_length=128)
+    new_password: str = Field(min_length=8,max_length=256)

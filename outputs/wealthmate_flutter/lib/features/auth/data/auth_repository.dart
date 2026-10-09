@@ -47,4 +47,8 @@ class AuthRepository {
       remote.changePassword(currentPassword, newPassword);
 
   Future<void> logout() => remote.logout();
+  Future<String> generateRecoveryCode(String password) =>
+      remote.generateRecoveryCode(password);
+  Future<void> recoverPassword(String username, String code, String password) =>
+      remote.recoverPassword(username, code, password);
 }
