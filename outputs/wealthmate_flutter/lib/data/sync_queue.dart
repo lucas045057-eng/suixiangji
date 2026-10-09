@@ -14,6 +14,7 @@ class SyncOperation {
     required this.payload,
     this.createdAt,
     this.conflictClientOpId,
+    this.submittedOperation,
   });
 
   final String clientOpId;
@@ -23,6 +24,7 @@ class SyncOperation {
   final Map<String, Object?> payload;
   final String? createdAt;
   final String? conflictClientOpId;
+  final Map<String, Object?>? submittedOperation;
 
   Map<String, Object?> toJson() => {
         'client_op_id': clientOpId,
@@ -33,6 +35,8 @@ class SyncOperation {
         'created_at': createdAt,
         if (conflictClientOpId != null)
           'conflict_client_op_id': conflictClientOpId,
+        if (submittedOperation != null)
+          'submitted_operation': submittedOperation,
       };
 
   factory SyncOperation.fromJson(Map<String, Object?> json) => SyncOperation(
@@ -43,6 +47,8 @@ class SyncOperation {
         payload: (json['payload'] as Map).cast<String, Object?>(),
         createdAt: json['created_at'] as String?,
         conflictClientOpId: json['conflict_client_op_id'] as String?,
+        submittedOperation:
+            (json['submitted_operation'] as Map?)?.cast<String, Object?>(),
       );
 }
 
@@ -59,8 +65,10 @@ class SyncQueue {
         item.entity == operation.entity && item.entityId == operation.entityId);
     if (entityIndex >= 0) {
       final existing = _items[entityIndex];
-      if (existing.conflictClientOpId != null &&
-          operation.conflictClientOpId == null) {
+      if ((existing.conflictClientOpId != null &&
+              operation.conflictClientOpId == null) ||
+          (existing.submittedOperation != null &&
+              operation.submittedOperation == null)) {
         operation = SyncOperation(
             clientOpId: operation.clientOpId,
             entity: operation.entity,
@@ -68,7 +76,10 @@ class SyncQueue {
             type: operation.type,
             payload: operation.payload,
             createdAt: operation.createdAt,
-            conflictClientOpId: existing.conflictClientOpId);
+            conflictClientOpId:
+                operation.conflictClientOpId ?? existing.conflictClientOpId,
+            submittedOperation:
+                operation.submittedOperation ?? existing.submittedOperation);
       }
       if (existing.clientOpId == operation.clientOpId &&
           existing.type == SyncOperationType.upsert &&

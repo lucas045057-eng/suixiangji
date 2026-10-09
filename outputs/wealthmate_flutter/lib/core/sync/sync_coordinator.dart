@@ -137,7 +137,31 @@ class SyncCoordinator {
       );
     }
     try {
-      final operations = await session.pendingOperations();
+      if ((await session.pendingOperations()).any((op) =>
+          op.entity == 'budgets' &&
+          op.submittedOperation == null &&
+          op.conflictClientOpId == null)) {
+        await session.mutateQueue((pendingQueue) {
+          for (final op in pendingQueue.pending()) {
+            if (op.entity != 'budgets' ||
+                op.submittedOperation != null ||
+                op.conflictClientOpId != null) continue;
+            pendingQueue.enqueue(SyncOperation(
+                clientOpId: op.clientOpId,
+                entity: op.entity,
+                entityId: op.entityId,
+                type: op.type,
+                payload: op.payload,
+                createdAt: op.createdAt,
+                submittedOperation: op.toJson()));
+          }
+        });
+      }
+      final operations = (await session.pendingOperations())
+          .map((op) => op.submittedOperation == null
+              ? op
+              : SyncOperation.fromJson(op.submittedOperation!))
+          .toList();
       final result = await api!.push(operations);
       onWatermark?.call((result['server_version'] as num?)?.toInt() ?? 0);
       final accepted =
@@ -183,6 +207,7 @@ class SyncCoordinator {
             final nextId = pending.clientOpId == operation.clientOpId
                 ? 'edit-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}'
                 : pending.clientOpId;
+            if (pending.entity == 'budgets') queue.complete(pending.clientOpId);
             queue.enqueue(SyncOperation(
               clientOpId: nextId,
               entity: pending.entity,
@@ -258,6 +283,7 @@ class SyncCoordinator {
                   op.entity == 'budgets' && op.entityId == sent.entityId)
               .firstOrNull;
           if (pending == null) continue;
+          queue.complete(pending.clientOpId);
           queue.enqueue(SyncOperation(
               clientOpId: pending.clientOpId,
               entity: pending.entity,
