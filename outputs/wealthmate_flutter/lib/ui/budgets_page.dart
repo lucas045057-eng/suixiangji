@@ -191,10 +191,9 @@ class _BudgetsPageState extends State<BudgetsPage> {
                     items: [
                       const DropdownMenuItem(
                           value: totalBudgetCategory, child: Text('月度总预算')),
-                      ...widget.store.activeCategories
-                          .map((item) => DropdownMenuItem(
+                      ...widget.store.activeCategories.map((item) =>
+                          DropdownMenuItem(
                               value: item.id, child: Text(item.name)))
-                          .toList()
                     ],
                     onChanged: (next) => categoryId.value = next ?? value)),
             const SizedBox(height: 12),

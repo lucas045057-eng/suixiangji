@@ -37,6 +37,7 @@ async def make_draft(db: Session, user: User, payload: DraftIn) -> dict:
                 Account.user_id == user.id,
                 Account.name == draft["account_hint"],
                 Account.deleted_at.is_(None),
+                Account.archived_at.is_(None),
             )
             .first()
         )
@@ -48,6 +49,8 @@ async def make_draft(db: Session, user: User, payload: DraftIn) -> dict:
             .filter(
                 Category.user_id == user.id,
                 Category.name == draft["category_hint"],
+                Category.active.is_(True),
+                Category.kind == draft['kind'],
             )
             .first()
         )

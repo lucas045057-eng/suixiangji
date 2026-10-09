@@ -2,6 +2,41 @@ import '../../../domain/models.dart';
 
 /// Pure transaction and category decisions for the Ledger feature.
 class LedgerRules {
+  static FinanceTransaction prepareConversion(
+      FinanceState state, FinanceTransaction transaction) {
+    if (transaction.currency == 'CNY') {
+      return transaction.copyWith(
+          cnyAmount: transaction.cnyAmount ?? transaction.amount,
+          exchangeRate: 1,
+          conversionStatus: 'ready');
+    }
+    // A posted conversion is a historical snapshot, never a live quotation.
+    if (transaction.cnyAmount != null) return transaction;
+    final businessDate = DateTime.tryParse(transaction.date);
+    final rates = state.exchangeRates.where((rate) {
+      final rateDate = DateTime.tryParse(rate.rateDate);
+      return rate.baseCurrency == transaction.currency &&
+          rate.quoteCurrency == 'CNY' &&
+          rate.rate.isFinite &&
+          rate.rate > 0 &&
+          businessDate != null &&
+          rateDate != null &&
+          !rateDate.isAfter(businessDate);
+    }).toList()
+      ..sort((a, b) => b.rateDate.compareTo(a.rateDate));
+    if (rates.isEmpty) {
+      return transaction.copyWith(conversionStatus: 'pending');
+    }
+    final snapshot = rates.first;
+    return transaction.copyWith(
+        cnyAmount:
+            (transaction.amount * snapshot.rate * 100).roundToDouble() / 100,
+        exchangeRate: snapshot.rate,
+        exchangeRateDate: snapshot.rateDate,
+        exchangeRateSource: snapshot.source,
+        conversionStatus: 'ready');
+  }
+
   static FinanceState upsertTransaction(
       FinanceState state, FinanceTransaction transaction) {
     validateTransactionCategory(state, transaction);

@@ -26,6 +26,7 @@ class StatsPage extends StatefulWidget {
 class _StatsPageState extends State<StatsPage> {
   StatsPeriod period = StatsPeriod.month;
   bool byAccount = false;
+  int chart = 0;
   DateTimeRange? customRange;
   DateTime get today => day(widget.now ?? DateTime.now());
 
@@ -110,102 +111,117 @@ class _StatsPageState extends State<StatsPage> {
                 _summaryGrid(
                     totalExpense, average, highestCategory, highestAccount),
                 const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('支出趋势',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(
-                              '${_formatDate(range.start)} - ${_formatDate(range.end)} · 按${period == StatsPeriod.day ? '小时' : '天'}统计',
-                              style: const TextStyle(
-                                  color: Color(0xFF87958F), fontSize: 10)),
-                          const SizedBox(height: 14),
-                          if (points.every((point) => point.expense == 0))
-                            const Text('当前时段还没有支出',
+                SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 0, label: Text('趋势')),
+                      ButtonSegment(value: 1, label: Text('柱状')),
+                      ButtonSegment(value: 2, label: Text('占比')),
+                    ],
+                    selected: {
+                      chart
+                    },
+                    onSelectionChanged: (value) =>
+                        setState(() => chart = value.first)),
+                const SizedBox(height: 12),
+                if (chart == 0)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('支出趋势',
                                 style: TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 12))
-                          else
-                            WealthLineChart(
-                                values: points
-                                    .map((point) => point.expense)
-                                    .toList()),
-                          if (points.any((point) => point.expense > 0))
-                            _legend(
-                                '支出', totalExpense, const Color(0xFFC77C3E)),
-                        ]),
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            Text(
+                                '${_formatDate(range.start)} - ${_formatDate(range.end)} · 按${period == StatsPeriod.day ? '小时' : '天'}统计',
+                                style: const TextStyle(
+                                    color: Color(0xFF87958F), fontSize: 10)),
+                            const SizedBox(height: 14),
+                            if (points.every((point) => point.expense == 0))
+                              const Text('当前时段还没有支出',
+                                  style: TextStyle(
+                                      color: Color(0xFF87958F), fontSize: 12))
+                            else
+                              WealthLineChart(
+                                  values: points
+                                      .map((point) => point.expense)
+                                      .toList()),
+                            if (points.any((point) => point.expense > 0))
+                              _legend(
+                                  '支出', totalExpense, const Color(0xFFC77C3E)),
+                          ]),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('分类支出柱状图',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          const Text('金额越长，代表本时段占用越多',
-                              style: TextStyle(
-                                  color: Color(0xFF87958F), fontSize: 10)),
-                          const SizedBox(height: 15),
-                          SpendingBarChart(
-                              items: categories,
-                              onTap: (item) => _drill(item, range)),
-                        ]),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('分类占比',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 15),
-                          if (categories.isEmpty)
-                            const Text('当前时段还没有可统计的支出',
+                if (chart == 1)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(byAccount ? '账户支出柱状图' : '分类支出柱状图',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            const Text('金额越长，代表本时段占用越多',
                                 style: TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 12))
-                          else
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ExpensePieChart(
-                                    onTap: (index) =>
-                                        _drill(categories[index], range),
-                                    items: categories
-                                        .map((item) => PieChartItem(
-                                            label: item.label,
-                                            value: item.value,
-                                            color: item.color))
-                                        .toList()),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                      for (final item in categories)
-                                        InkWell(
-                                            onTap: () => _drill(item, range),
-                                            child:
-                                                _pieLegend(item, totalExpense))
-                                    ])),
-                              ],
-                            ),
-                        ]),
+                                    color: Color(0xFF87958F), fontSize: 10)),
+                            const SizedBox(height: 15),
+                            SpendingBarChart(
+                                items: categories,
+                                onTap: (item) => _drill(item, range)),
+                          ]),
+                    ),
                   ),
-                ),
+                const SizedBox(height: 14),
+                if (chart == 2)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(byAccount ? '账户占比' : '分类占比',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 15),
+                            if (categories.isEmpty)
+                              const Text('当前时段还没有可统计的支出',
+                                  style: TextStyle(
+                                      color: Color(0xFF87958F), fontSize: 12))
+                            else
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ExpensePieChart(
+                                      onTap: (index) =>
+                                          _drill(categories[index], range),
+                                      items: categories
+                                          .map((item) => PieChartItem(
+                                              label: item.label,
+                                              value: item.value,
+                                              color: item.color))
+                                          .toList()),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                      child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                        for (final item in categories)
+                                          InkWell(
+                                              onTap: () => _drill(item, range),
+                                              child: _pieLegend(
+                                                  item, totalExpense))
+                                      ])),
+                                ],
+                              ),
+                          ]),
+                    ),
+                  ),
                 if (widget.insights.metrics.pendingConversionCount > 0) ...[
                   const SizedBox(height: 12),
                   const Text('有外币账目缺少可靠汇率，已从人民币统计中暂时排除。',

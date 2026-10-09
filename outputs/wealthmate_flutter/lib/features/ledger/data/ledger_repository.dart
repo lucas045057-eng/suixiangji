@@ -18,6 +18,13 @@ class LedgerRepository {
 
   Future<FinanceState?> load() => session.load();
 
+  Future<FinanceState> saveCurrencyPreferences(
+          String preferred, List<String> common, {FinanceState? baseState}) =>
+      session.write(
+          (current) => current.copyWith(
+              preferredCurrency: preferred, commonCurrencies: common),
+          initialState: baseState);
+
   Future<FinanceState> applyTransaction(
     FinanceState Function(FinanceState) mutation, {
     required SyncOperation operation,
@@ -32,16 +39,21 @@ class LedgerRepository {
 
   Future<FinanceState> saveTransaction(FinanceTransaction transaction,
       {FinanceState? baseState}) {
-    return applyTransaction(
-      (current) => LedgerRules.upsertTransaction(current, transaction),
-      operation: SyncOperation(
-        clientOpId: transaction.clientOpId,
-        entity: 'transactions',
-        entityId: transaction.id,
-        type: SyncOperationType.upsert,
-        payload: transaction.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      ),
+    return session.write(
+      (current) => LedgerRules.upsertTransaction(
+          current, LedgerRules.prepareConversion(current, transaction)),
+      deriveOperations: (_, next) => [
+        SyncOperation(
+          clientOpId: transaction.clientOpId,
+          entity: 'transactions',
+          entityId: transaction.id,
+          type: SyncOperationType.upsert,
+          payload: next.transactions
+              .firstWhere((row) => row.id == transaction.id)
+              .toJson(),
+          createdAt: DateTime.now().toIso8601String(),
+        )
+      ],
       initialState: baseState,
     );
   }

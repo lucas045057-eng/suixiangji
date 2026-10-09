@@ -16,6 +16,8 @@ import 'package:wealthmate_flutter/state/finance_store.dart';
 import 'package:wealthmate_flutter/ui/stats_page.dart';
 import 'package:wealthmate_flutter/ui/ledger_page.dart';
 import 'package:wealthmate_flutter/ui/widgets/bar_chart.dart';
+import 'package:wealthmate_flutter/ui/widgets/line_chart.dart';
+import 'package:wealthmate_flutter/ui/widgets/pie_chart.dart';
 
 const bills = [
   FinanceTransaction(
@@ -114,6 +116,11 @@ void main() {
                 insights: store.insights,
                 ledger: store.ledger,
                 now: DateTime(2026, 10, 9)))));
+    expect(find.byType(SpendingBarChart),findsNothing);
+    expect(find.byType(ExpensePieChart),findsNothing);
+    await tester.tap(find.text('柱状'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WealthLineChart),findsNothing);
     await tester.scrollUntilVisible(find.text('分类支出柱状图'), 200);
     final categoryRow = find.descendant(
         of: find.byType(SpendingBarChart), matching: find.text('餐饮'));

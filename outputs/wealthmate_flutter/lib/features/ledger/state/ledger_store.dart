@@ -68,6 +68,20 @@ class LedgerStore extends ChangeNotifier {
     onLocalMutation?.call('ledger.transaction.add');
   }
 
+  Future<void> setCurrencyPreferences(
+      String preferred, List<String> common) async {
+    final currencies = {
+      preferred.toUpperCase(),
+      ...common.map((c) => c.toUpperCase())
+    }.toList();
+    if (currencies.length > 12 ||
+        currencies.any((c) => !RegExp(r'^[A-Z]{3}$').hasMatch(c)))
+      throw ArgumentError('币种须为三个英文字母，常用币种最多12种');
+    await _apply((base) => repository.saveCurrencyPreferences(
+        preferred.toUpperCase(), currencies,
+        baseState: base));
+  }
+
   Future<void> updateTransaction(FinanceTransaction transaction) async {
     final existing = _state.transactions
         .where((item) => item.id == transaction.id)

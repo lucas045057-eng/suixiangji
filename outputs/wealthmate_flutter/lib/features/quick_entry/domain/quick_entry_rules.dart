@@ -24,7 +24,10 @@ class QuickEntryRules {
       type: remoteDraft.type,
       date: remoteDraft.date.isEmpty ? localDraft.date : remoteDraft.date,
       note: remoteDraft.note.isEmpty ? localDraft.note : remoteDraft.note,
-      currency: remoteDraft.currency,
+      currency: FinanceRules.currencyFromText(localDraft.note) ??
+          (remoteDraft.currency != 'CNY'
+              ? remoteDraft.currency
+              : localDraft.currency),
     );
   }
 

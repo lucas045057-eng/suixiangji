@@ -12,6 +12,7 @@ import 'account_management_page.dart';
 import 'app_update_dialog.dart';
 import 'category_management_page.dart';
 import 'profile_settings_page.dart';
+import 'currency_preferences_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -57,13 +58,13 @@ class SettingsPage extends StatelessWidget {
                           leading: CircleAvatar(
                               backgroundColor: const Color(0xFFF3B187),
                               child: Text(
-                                  (store.profile?.displayName ?? '林默')
+                                  (store.profile?.displayName ?? '朋友')
                                       .characters
                                       .first,
                                   style: const TextStyle(
                                       color: Color(0xFF56301E),
                                       fontWeight: FontWeight.w800))),
-                          title: Text(store.profile?.displayName ?? '林默',
+                          title: Text(store.profile?.displayName ?? '朋友',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
                           subtitle: Text(
@@ -215,6 +216,16 @@ class SettingsPage extends StatelessWidget {
                         subtitle: const Text('会覆盖当前本地演示数据'),
                         onTap: () => _confirmRestore(context)),
                   ])),
+                  Card(
+                      child: ListTile(
+                          leading: const Icon(Icons.currency_exchange),
+                          title: const Text('记账币种'),
+                          subtitle: Text(
+                              '默认 ${store.ledger.state.preferredCurrency} · 常用币种'),
+                          onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => CurrencyPreferencesPage(
+                                      ledger: store.ledger))))),
                   if (!store.isDemoMode) ...[
                     const SizedBox(height: 12),
                     Card(

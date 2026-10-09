@@ -55,7 +55,7 @@ class AssetRules {
   static FinanceState setDefaultAccount(FinanceState state, String accountId) {
     final eligible = state.accounts.any((item) =>
         item.id == accountId &&
-        item.deletedAt == null &&
+        item.isActive &&
         item.type == AccountType.asset);
     return eligible ? state.copyWith(defaultAccountId: accountId) : state;
   }

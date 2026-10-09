@@ -560,6 +560,8 @@ class FinanceState {
   const FinanceState({
     this.schemaVersion = 1,
     this.currentMonth = '',
+    this.preferredCurrency = 'CNY',
+    this.commonCurrencies = const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],
     this.accounts = const <Account>[],
     this.categories = const <Category>[],
     this.transactions = const <FinanceTransaction>[],
@@ -575,6 +577,8 @@ class FinanceState {
 
   final int schemaVersion;
   final String currentMonth;
+  final String preferredCurrency;
+  final List<String> commonCurrencies;
   final List<Account> accounts;
   final List<Category> categories;
   final List<FinanceTransaction> transactions;
@@ -590,6 +594,8 @@ class FinanceState {
   FinanceState copyWith({
     int? schemaVersion,
     String? currentMonth,
+    String? preferredCurrency,
+    List<String>? commonCurrencies,
     List<Account>? accounts,
     List<Category>? categories,
     List<FinanceTransaction>? transactions,
@@ -605,6 +611,8 @@ class FinanceState {
     return FinanceState(
       schemaVersion: schemaVersion ?? this.schemaVersion,
       currentMonth: currentMonth ?? this.currentMonth,
+      preferredCurrency: preferredCurrency ?? this.preferredCurrency,
+      commonCurrencies: commonCurrencies ?? this.commonCurrencies,
       accounts: accounts ?? this.accounts,
       categories: categories ?? this.categories,
       transactions: transactions ?? this.transactions,
@@ -622,6 +630,8 @@ class FinanceState {
   Map<String, Object?> toJson() => {
         'schema_version': schemaVersion,
         'current_month': currentMonth,
+        'preferred_currency': preferredCurrency,
+        'common_currencies': commonCurrencies,
         'accounts': accounts.map((item) => item.toJson()).toList(),
         'categories': categories.map((item) => item.toJson()).toList(),
         'transactions': transactions.map((item) => item.toJson()).toList(),
@@ -648,6 +658,10 @@ class FinanceState {
   factory FinanceState.fromJson(Map<String, Object?> json) => FinanceState(
         schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 1,
         currentMonth: json['current_month'] as String? ?? '',
+        preferredCurrency: json['preferred_currency'] as String? ?? 'CNY',
+        commonCurrencies:
+            (json['common_currencies'] as List?)?.cast<String>() ??
+                const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],
         accounts: ((json['accounts'] as List<Object?>?) ?? const <Object?>[])
             .map((item) =>
                 Account.fromJson((item! as Map).cast<String, Object?>()))
