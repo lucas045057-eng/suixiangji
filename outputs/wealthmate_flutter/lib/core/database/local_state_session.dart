@@ -125,14 +125,15 @@ class LocalStateSession {
           ? context.state ?? const FinanceState()
           : initialState ?? context.state ?? const FinanceState();
       final next = mutation(current);
+      final nextQueue = SyncQueue(context.queue.pending());
       for (final operation in [
         ...appendOperations,
         ...?deriveOperations?.call(current, next),
       ]) {
-        context.queue.enqueue(operation);
+        nextQueue.enqueue(operation);
       }
-      await context.local.save(next);
-      await context.local.saveQueue(context.queue);
+      await context.local.saveStateAndQueue(next, nextQueue);
+      context.queue.replace(nextQueue.pending());
       context.state = next;
       context.hasPersistedState = true;
       return next;
@@ -142,8 +143,7 @@ class LocalStateSession {
   Future<FinanceState> replaceState(FinanceState next) {
     return _withCurrentContext((context) async {
       await _ensureLoaded(context);
-      await context.local.save(next);
-      await context.local.saveQueue(context.queue);
+      await context.local.saveStateAndQueue(next, context.queue);
       context.state = next;
       context.hasPersistedState = true;
       return next;
@@ -153,8 +153,10 @@ class LocalStateSession {
   Future<void> mutateQueue(void Function(SyncQueue queue) mutation) =>
       _withCurrentContext((context) async {
         await _ensureLoaded(context);
-        mutation(context.queue);
-        await context.local.saveQueue(context.queue);
+        final next = SyncQueue(context.queue.pending());
+        mutation(next);
+        await context.local.saveQueue(next);
+        context.queue.replace(next.pending());
       });
 
   Future<List<SyncOperation>> pendingOperations() =>

@@ -110,7 +110,7 @@ def main():
     assert make_url(get_settings().database_url).get_backend_name() == "postgresql", "Real PostgreSQL is mandatory"
     prefix = "beta_test_" + uuid4().hex[:8]
     password = secrets.token_urlsafe(24)
-    with httpx.Client(base_url="http://127.0.0.1:8000", timeout=30) as client:
+    with httpx.Client(base_url=os.environ.get('WEALTHMATE_INTEGRATION_API_URL','http://127.0.0.1:8000'), timeout=30) as client:
         shared = new_invite(2)
         def registration(name, code):
             return client.post("/auth/register", json={"username": name, "password": password, "invite_code": code})
