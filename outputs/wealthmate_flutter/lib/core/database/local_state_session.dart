@@ -124,19 +124,27 @@ class LocalStateSession {
       final current = context.hasPersistedState
           ? context.state ?? const FinanceState()
           : initialState ?? context.state ?? const FinanceState();
-      final next = mutation(current);
-      final nextQueue = SyncQueue(context.queue.pending());
-      for (final operation in [
-        ...appendOperations,
-        ...?deriveOperations?.call(current, next),
-      ]) {
-        nextQueue.enqueue(operation);
+      final previousOperations = context.queue.pending();
+      try {
+        final next = mutation(current);
+        final nextQueue = SyncQueue(context.queue.pending());
+        for (final operation in [
+          ...appendOperations,
+          ...?deriveOperations?.call(current, next),
+        ]) {
+          nextQueue.enqueue(operation);
+        }
+        await context.local.saveStateAndQueue(next, nextQueue);
+        context.queue.replace(nextQueue.pending());
+        context.state = next;
+        context.hasPersistedState = true;
+        return next;
+      } catch (_) {
+        // A sync mutation may change receipts before persistence fails.
+        // Restore the captured context, even if another user has rebound.
+        context.queue.replace(previousOperations);
+        rethrow;
       }
-      await context.local.saveStateAndQueue(next, nextQueue);
-      context.queue.replace(nextQueue.pending());
-      context.state = next;
-      context.hasPersistedState = true;
-      return next;
     });
   }
 

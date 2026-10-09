@@ -20,12 +20,20 @@ class BudgetRepository {
 
   Future<FinanceState> saveBudget(Budget budget, {FinanceState? baseState}) {
     return session.write(
-      (current) => current.copyWith(
-        budgets: [
-          ...current.budgets.where((item) => item.id != budget.id),
-          budget,
-        ],
-      ),
+      (current) {
+        if (current.budgets.any((item) =>
+            item.id != budget.id &&
+            item.month == budget.month &&
+            item.categoryId == budget.categoryId)) {
+          throw StateError('该月份和分类已有预算，请编辑已有预算');
+        }
+        return current.copyWith(
+          budgets: [
+            ...current.budgets.where((item) => item.id != budget.id),
+            budget,
+          ],
+        );
+      },
       appendOperations: [
         SyncOperation(
           clientOpId:

@@ -45,8 +45,24 @@ class _StatsPageState extends State<StatsPage> {
             _sortedCategoryItems(byAccount ? accountTotals : categoryTotals);
         final totalExpense =
             categoryTotals.values.fold<double>(0, (sum, value) => sum + value);
-        final highestCategory =
-            categories.isEmpty ? '暂无' : categories.first.label;
+        final highestCategoryId = categoryTotals.isEmpty
+            ? null
+            : categoryTotals.entries
+                .reduce((a, b) => a.value >= b.value ? a : b)
+                .key;
+        final highestCategory = highestCategoryId == null
+            ? '暂无'
+            : highestCategoryId == 'uncategorized'
+                ? '未分类'
+                : highestCategoryId == 'other'
+                    ? '其他'
+                    : categoryName(widget.insights.state, highestCategoryId);
+        final pendingConversionCount = TransactionQuery(
+                start: range.start, end: range.end)
+            .select(widget.insights.state)
+            .where((row) =>
+                row.type != TransactionType.transfer && cnyAmount(row) == null)
+            .length;
         final highestAccount = accountTotals.isEmpty
             ? '暂无'
             : accountTotals.entries
@@ -222,10 +238,11 @@ class _StatsPageState extends State<StatsPage> {
                           ]),
                     ),
                   ),
-                if (widget.insights.metrics.pendingConversionCount > 0) ...[
+                if (pendingConversionCount > 0) ...[
                   const SizedBox(height: 12),
-                  const Text('有外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
-                      style: TextStyle(color: Color(0xFFB65B55), fontSize: 11)),
+                  Text('有 $pendingConversionCount 笔外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
+                      style: const TextStyle(
+                          color: Color(0xFFB65B55), fontSize: 11)),
                 ],
               ],
             ),

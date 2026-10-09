@@ -28,7 +28,13 @@ class SyncCoordinator {
   Future<FinanceState> sync(FinanceState state,
       {bool Function()? isCurrent}) async {
     var pushWatermark = state.syncState.serverVersion;
-    final pushed = await _pushPending(state,
+    var ready = state;
+    if ((await session.pendingOperations())
+        .any((op) => op.conflictClientOpId != null)) {
+      ready = await _pullChanges(state, isCurrent: isCurrent);
+      if (ready.syncState.error != null) return ready;
+    }
+    final pushed = await _pushPending(ready,
         onWatermark: (version) => pushWatermark = max(pushWatermark, version),
         isCurrent: isCurrent);
     if (isCurrent != null && !isCurrent()) return pushed;
@@ -241,6 +247,27 @@ class SyncCoordinator {
             }
           }
         }
+        for (final conflict in conflictItems) {
+          final sent = operations
+              .where((op) => op.clientOpId == conflict['client_op_id'])
+              .firstOrNull;
+          if (sent == null || sent.entity != 'budgets') continue;
+          final pending = queue
+              .pending()
+              .where((op) =>
+                  op.entity == 'budgets' && op.entityId == sent.entityId)
+              .firstOrNull;
+          if (pending == null) continue;
+          queue.enqueue(SyncOperation(
+              clientOpId: pending.clientOpId,
+              entity: pending.entity,
+              entityId: pending.entityId,
+              type: pending.type,
+              payload: pending.payload,
+              createdAt: pending.createdAt,
+              conflictClientOpId:
+                  pending.conflictClientOpId ?? sent.clientOpId));
+        }
         final conflicts =
             conflictItems.map((item) => 'sync:${item['entity_id']}').toList();
         return current.copyWith(
@@ -283,8 +310,10 @@ class SyncCoordinator {
       final conflictOperations = _pendingConflictOperations(state);
       final pullSince = conflictOperations.isEmpty
           ? state.syncState.serverVersion
-          : _minimumConflictBaseVersion(
-              conflictOperations, state.syncState.serverVersion);
+          : conflictOperations.any((op) => op.entity == 'budgets')
+              ? 0
+              : _minimumConflictBaseVersion(
+                  conflictOperations, state.syncState.serverVersion);
       final remote = await api!.pullChanges(pullSince);
       if (isCurrent != null && !isCurrent()) return state;
       if (conflictOperations.isNotEmpty) {
@@ -399,6 +428,17 @@ class SyncCoordinator {
 
   List<SyncOperation> _pendingConflictOperations(FinanceState state) {
     final queued = queue.pending();
+    final budgetConflicts = queued
+        .where((op) => op.conflictClientOpId != null)
+        .map((op) => SyncOperation(
+            clientOpId: op.conflictClientOpId!,
+            entity: op.entity,
+            entityId: op.entityId,
+            type: op.type,
+            payload: op.payload,
+            createdAt: op.createdAt))
+        .toList();
+    if (budgetConflicts.isNotEmpty) return budgetConflicts;
     if (_pendingConflictClientOpIds.isNotEmpty) {
       final byOperation = queued
           .where((operation) =>
@@ -428,66 +468,102 @@ class SyncCoordinator {
 
   Future<FinanceState> _completeConflictRecovery(FinanceState state,
       PullResult remote, List<SyncOperation> conflictOperations) async {
-    // A local edit may replace the conflicted queue item while the recovery
-    // pull is in flight. Only an operation with the same id, type and payload
-    // is still the operation whose conflict can be resolved by this response.
-    final pendingAtRecovery = queue.pending();
-    bool isSameOperation(SyncOperation expected, SyncOperation actual) =>
-        expected.clientOpId == actual.clientOpId &&
-        expected.entity == actual.entity &&
-        expected.entityId == actual.entityId &&
-        expected.type == actual.type &&
-        mapEquals(expected.payload, actual.payload);
-    final activeConflictOperations = conflictOperations
-        .where((operation) =>
-            pendingAtRecovery.any((item) => isSameOperation(operation, item)))
-        .toList(growable: false);
-    final protectedEntityKeys = pendingAtRecovery
-        .where((pending) => !activeConflictOperations
-            .any((operation) => isSameOperation(operation, pending)))
-        .map((operation) => '${operation.entity}:${operation.entityId}')
-        .toSet();
-    bool isProtected(String entity, String id) =>
-        protectedEntityKeys.contains('$entity:$id');
-
-    bool hasAuthoritativeEntity(SyncOperation operation) {
-      switch (operation.entity) {
-        case 'transactions':
-          return remote.transactions
-              .any((item) => item.id == operation.entityId);
-        case 'accounts':
-          return remote.accounts.any((item) => item.id == operation.entityId);
-        case 'categories':
-          return remote.categories.any((item) => item.id == operation.entityId);
-        case 'budgets':
-          return remote.budgets.any((item) => item.id == operation.entityId);
-        default:
-          return false;
-      }
-    }
-
-    if (activeConflictOperations
-        .any((operation) => !hasAuthoritativeEntity(operation))) {
-      final current = await session.load() ?? state;
-      return current.copyWith(
-          syncState: current.syncState.copyWith(error: '冲突数据尚未恢复，请稍后重试'));
-    }
-
-    final resolvedEntityIds = <String>{
-      for (final operation in conflictOperations) operation.entityId,
-    };
     final nextState = await session.write((current) {
+      // A local edit may replace the conflicted queue item while the recovery
+      // pull is in flight. Only an operation with the same id, type and payload
+      // is still the operation whose conflict can be resolved by this response.
+      final pendingAtRecovery = queue.pending();
+      bool isSameOperation(SyncOperation expected, SyncOperation actual) =>
+          expected.clientOpId == actual.clientOpId &&
+          expected.entity == actual.entity &&
+          expected.entityId == actual.entityId &&
+          expected.type == actual.type &&
+          mapEquals(expected.payload, actual.payload);
+      final activeConflictOperations = conflictOperations
+          .where((operation) =>
+              pendingAtRecovery.any((item) => isSameOperation(operation, item)))
+          .toList(growable: false);
+      final protectedEntityKeys = pendingAtRecovery
+          .where((pending) => !activeConflictOperations
+              .any((operation) => isSameOperation(operation, pending)))
+          .map((operation) => '${operation.entity}:${operation.entityId}')
+          .toSet();
+      bool isProtected(String entity, String id) =>
+          protectedEntityKeys.contains('$entity:$id');
+
+      bool hasAuthoritativeEntity(SyncOperation operation) {
+        switch (operation.entity) {
+          case 'transactions':
+            return remote.transactions
+                .any((item) => item.id == operation.entityId);
+          case 'accounts':
+            return remote.accounts.any((item) => item.id == operation.entityId);
+          case 'categories':
+            return remote.categories
+                .any((item) => item.id == operation.entityId);
+          case 'budgets':
+            return remote.budgets.any((item) =>
+                item.id == operation.entityId ||
+                (item.month == operation.payload['month'] &&
+                    item.categoryId == operation.payload['category_id']));
+          default:
+            return false;
+        }
+      }
+
+      if (activeConflictOperations
+          .any((operation) => !hasAuthoritativeEntity(operation))) {
+        return current.copyWith(
+            syncState: current.syncState.copyWith(error: '冲突数据尚未恢复，请稍后重试'));
+      }
+
+      final resolvedEntityIds = <String>{
+        for (final operation in conflictOperations) operation.entityId,
+      };
       for (final operation in activeConflictOperations) {
         queue.complete(operation.clientOpId);
       }
       for (final operation in conflictOperations) {
         _pendingConflictClientOpIds.remove(operation.clientOpId);
       }
+      final budgetAliases = activeConflictOperations
+          .where((op) =>
+              op.entity == 'budgets' &&
+              !remote.budgets.any((item) => item.id == op.entityId))
+          .map((op) => op.entityId)
+          .toSet();
+      final canonicalBudgets = <String, Budget>{};
+      for (final pending in pendingAtRecovery) {
+        if (pending.entity != 'budgets' ||
+            !isProtected(pending.entity, pending.entityId)) continue;
+        final canonical = remote.budgets
+            .where((item) =>
+                item.month == pending.payload['month'] &&
+                item.categoryId == pending.payload['category_id'])
+            .firstOrNull;
+        if (canonical != null && canonical.id != pending.entityId) {
+          canonicalBudgets[pending.entityId] = canonical;
+          protectedEntityKeys.add('budgets:${canonical.id}');
+        }
+      }
+      final retainedBudgets = current.budgets
+          .where((item) =>
+              !budgetAliases.contains(item.id) &&
+              !canonicalBudgets.values
+                  .any((canonical) => canonical.id == item.id))
+          .map((item) => canonicalBudgets.containsKey(item.id)
+              ? Budget.fromJson({
+                  ...item.toJson(),
+                  'id': canonicalBudgets[item.id]!.id,
+                  'server_version': canonicalBudgets[item.id]!.serverVersion
+                })
+              : item)
+          .toList();
       final merged = mergePulledBudgets(
           mergePulledCategories(
               mergePulledAccounts(
                   mergePulled(
-                      current,
+                      current.copyWith(budgets: retainedBudgets),
                       remote.transactions
                           .where(
                               (item) => !isProtected('transactions', item.id))
@@ -524,12 +600,18 @@ class SyncCoordinator {
             pending.entity == 'categories') {
           continue;
         }
+        final canonical = canonicalBudgets[pending.entityId];
+        queue.complete(pending.clientOpId);
         queue.enqueue(SyncOperation(
           clientOpId: pending.clientOpId,
           entity: pending.entity,
-          entityId: pending.entityId,
+          entityId: canonical?.id ?? pending.entityId,
           type: pending.type,
-          payload: {...pending.payload, 'server_version': nextVersion},
+          payload: {
+            ...pending.payload,
+            if (canonical != null) 'id': canonical.id,
+            'server_version': canonical?.serverVersion ?? nextVersion
+          },
           createdAt: pending.createdAt,
         ));
       }

@@ -145,9 +145,19 @@ void main() {
       await reopened.assets.restoreAccount(hkd.id);
       await reopened.budget
           .upsertBudget(month: '2026-10', categoryId: '__total__', limit: 100);
+      networks[1].offline = true;
+      await b.budget
+          .upsertBudget(month: '2026-10', categoryId: '__total__', limit: 200);
+      await b.ledger.updateTransaction(
+          b.state.transactions.single.copyWith(note: '预算冲突同批账目'));
       await reopened.sync();
+      networks[1].offline = false;
       await b.sync();
       expect(b.state.budgets.single.limit, 100);
+      expect(b.state.budgets.single.id, reopened.state.budgets.single.id);
+      expect(b.repository.queue.pending(), isEmpty);
+      await reopened.sync();
+      expect(reopened.state.transactions.single.note, '预算冲突同批账目');
       expect(b.state.accounts.firstWhere((r) => r.id == hkd.id).note, '用途');
       final bill = b.state.transactions.single;
       await b.ledger.updateTransaction(bill.copyWith(note: '第二端修改'));

@@ -109,12 +109,15 @@ def login(db: Session, payload: LoginIn) -> dict:
     }
 
 
-def get_current_user(db: Session, token: str) -> User:
+def get_current_user(db: Session, token: str, *, for_update: bool = False) -> User:
     try:
         claims = decode_token(token)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail="登录已失效") from exc
-    found = db.get(User, claims.get("sub"))
+    query = db.query(User).filter(User.id == claims.get('sub')).populate_existing()
+    if for_update:
+        query = query.with_for_update()
+    found = query.first()
     if not found:
         raise HTTPException(status_code=401, detail="用户不存在")
     if claims["auth_version"] != (found.auth_version or 0):

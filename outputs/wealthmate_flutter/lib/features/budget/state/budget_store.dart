@@ -53,11 +53,9 @@ class BudgetStore extends ChangeNotifier {
       throw ArgumentError('请输入有效月份和正数预算');
     }
     final existing = _state.budgets
-        .where((b) =>
-            b.deletedAt == null &&
-            (id != null
-                ? b.id == id
-                : b.month == month && b.categoryId == categoryId))
+        .where((b) => (id != null
+            ? b.id == id
+            : b.month == month && b.categoryId == categoryId))
         .firstOrNull;
     final budget = Budget(
       id: id ??
