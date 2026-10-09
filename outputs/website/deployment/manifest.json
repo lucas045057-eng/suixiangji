@@ -1,0 +1,13 @@
+{
+  "siteUrl": "https://suixiangji.icu/",
+  "productRelease": "v1.0.4",
+  "sourceHead": "6a87b0ef694ae87ad5e8780839f5d568692ea09a",
+  "files": {
+    "index.html": "19455e75dfe0f7f68123923c43ba65c9b06fee83487ee9f63c26133c43618f27",
+    "styles/main.css": "68303f5c579e607c916150d7fbae3879cc3aa5bfc664c3dd27e20c3997c016cf",
+    "js/main.js": "71895348f208d345b74910d926d5db305dcecd51c5e00d69d2b9867326bbca92",
+    "js/site-config.js": "d017f797be974d9773bc49209f345868d3251243f3f447aa2d9c6a4ff3009316",
+    "assets/images/favicon.svg": "f9cd235f2882e8906afe65a4355068d01ddc7d380902c5df139839eec0769d13",
+    "assets/images/og-image.png": "33f2ac30b9bc9a4e102e2fa2df5909eb592688652e5bcc110a3afe11a2c11f10"
+  }
+}

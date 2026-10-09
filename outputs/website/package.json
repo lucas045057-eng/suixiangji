@@ -1,0 +1,15 @@
+{
+  "name": "suixiangji-official-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/config.test.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "metadata": "node tools/sync-metadata.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "playwright": "1.64.0"
+  }
+}
