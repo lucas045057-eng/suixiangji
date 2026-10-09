@@ -12,7 +12,7 @@
 - 分支feat/v1.0.5-requirements-closure；不直接main、不修改生产、不发布Release。
 - 只增强Auth/Ledger/Assets/Budget/QuickEntry/Insights/Backup/Sync；业务UI不直接写库。
 - 先失败验收测试再产品代码；逐包同步测试；缺环境NOT VERIFIED。
-- 原需求原文不改、错位分析新增校正列；UR-015仍待澄清。
+- 原需求原文不改、错位分析新增校正列；UR-015已由用户澄清：图表有点多，单图切换。
 - 最终版本1.0.5+8、Android包名/签名延续；生产签名材料不入Git。
 
 ## Review Focus

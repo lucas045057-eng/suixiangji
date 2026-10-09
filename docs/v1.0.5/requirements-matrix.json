@@ -63,13 +63,30 @@
       "classification": "关联",
       "merge_group": "G-ACCOUNT",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/models.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart",
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "保存用途备注，列表显示副标题；同步到第二端并保持账户ID。",
+      "case_id": "ACC-UR-004"
     },
     {
       "id": "UR-005",
@@ -101,13 +118,26 @@
       "classification": "已存在不完整",
       "merge_group": "G-ENTRY",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/finance_rules.dart",
+        "outputs/wealthmate_flutter/lib/features/quick_entry/data/quick_entry_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart",
+        "outputs/wealthmate_flutter/test/features/quick_entry/quick_entry_store_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "“我午饭吃了16块”正确金额、真实分类ID、有效默认账户；低置信草稿可修改后确认。",
+      "case_id": "ACC-UR-005"
     },
     {
       "id": "UR-006",
@@ -139,13 +169,28 @@
       "classification": "已存在体验不足",
       "merge_group": "G-ENTRY",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/currency_preferences_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/widgets/transaction_form.dart",
+        "outputs/wealthmate_flutter/lib/features/ledger/data/ledger_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5",
+        "1a2e19b",
+        "2433bb1"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "新记账默认CNY，常用币种可选，本机偏好重启保留；编辑保留原币种，换币时清除旧币种换算。",
+      "case_id": "ACC-UR-006"
     },
     {
       "id": "UR-007",
@@ -177,13 +222,25 @@
       "classification": "关联",
       "merge_group": "G-ACCOUNT",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/settings_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "22ace70"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "我的页只预览3个有效账户；全部账户可搜索、分组、查看归档和恢复。",
+      "case_id": "ACC-UR-007"
     },
     {
       "id": "UR-008",
@@ -215,13 +272,28 @@
       "classification": "关联",
       "merge_group": "G-INSIGHTS",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart",
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53",
+        "90833e5",
+        "2433bb1"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "分类/账户维度可切换；仅显示当前图型，聚合与同范围账本一致。",
+      "case_id": "ACC-UR-008"
     },
     {
       "id": "UR-009",
@@ -253,13 +325,25 @@
       "classification": "独立",
       "merge_group": "G-HOME",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/dashboard_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/app_shell.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "问候使用真实昵称和当前时段，不再固定“林默”；真机合成账户显示“晚上好，中文验收”。",
+      "case_id": "ACC-UR-009"
     },
     {
       "id": "UR-010",
@@ -292,13 +376,25 @@
       "classification": "共同根因",
       "merge_group": "G-FX",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "22ace70"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "接口失败返回带日期和来源的缓存、标记stale；无缓存明确失败/待换算；手动汇率不写公共汇率接口。",
+      "case_id": "ACC-UR-010"
     },
     {
       "id": "UR-011",
@@ -331,13 +427,30 @@
       "classification": "关联",
       "merge_group": "G-INSIGHTS",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/budget/domain/budget_rules.dart",
+        "outputs/wealthmate_flutter/lib/features/budget/data/budget_repository.dart",
+        "outputs/wealthmate_flutter/lib/ui/budgets_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "59fab53",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "月度总额沿用原预算实体，反复编辑不重复；分类分配精确到分，总额和分类限额不相加，离线及双端一致。",
+      "case_id": "ACC-UR-011"
     },
     {
       "id": "UR-012",
@@ -370,13 +483,26 @@
       "classification": "关联",
       "merge_group": "G-QUERY",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart",
+        "outputs/wealthmate_flutter/lib/ui/ledger_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "补记按发生日期排序；搜索、分类、收支、日期筛选可组合；已归档分类的历史账单仍可查。",
+      "case_id": "ACC-UR-012"
     },
     {
       "id": "UR-013",
@@ -408,13 +534,27 @@
       "classification": "独立",
       "merge_group": "G-ENTRY",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/widgets/transaction_form.dart",
+        "outputs/wealthmate_flutter/lib/ui/widgets/transaction_form.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/transaction_note_ime_composition_test.dart",
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "mobile-final-acceptance.json"
+      ],
+      "commits": [
+        "90833e5"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "快捷记与手动备注使用文本/多行输入和zh_CN提示；真机拼音组合、选词、重新聚焦内容不丢失。",
+      "case_id": "ACC-UR-013"
     },
     {
       "id": "UR-014",
@@ -446,13 +586,31 @@
       "classification": "独立",
       "merge_group": "G-AUTH",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/password_recovery_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/recovery_code_page.dart",
+        "outputs/wealthmate_flutter/lib/features/auth/data/auth_remote_data_source.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_recovery_flow_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_recovery.py",
+        "outputs/wealthmate_backend/tests/test_v105_recovery_postgres.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "fc909de",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "预存恢复码可在未登录时重置原账号密码；一次消费、限流、统一失败提示，撤销旧会话但用户ID和财务数据保留。",
+      "case_id": "ACC-UR-014"
     },
     {
       "id": "UR-015",
@@ -477,22 +635,33 @@
         "核查是否已支持重置；验证无法登录到恢复访问全流程",
         "需先确定可验证的联系方式"
       ],
-      "corrected_goal": "图表反馈原话截断，具体需求待补全",
+      "corrected_goal": "图表收纳：每次仅显示一张图",
       "packages": [
         "WP-C"
       ],
-      "classification": "待澄清",
+      "classification": "关联",
       "merge_group": "G-CHART",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "待澄清",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": [
-        "原话截断；已询问，最新文件仍截断"
-      ]
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart",
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "用户已澄清“图表有点多”：趋势/柱状/占比切换，每次仅显示一张图，保留分类/账户及下钻能力。",
+      "case_id": "ACC-UR-015",
+      "clarification": "用户在本会话补充：图表有点多。原截断反馈原样保留。"
     },
     {
       "id": "UR-016",
@@ -525,13 +694,31 @@
       "classification": "共同根因",
       "merge_group": "G-ACCOUNT-SYNC",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_detail_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_assets_sync_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "归档使用archived_at，不写deleted_at；隐藏新记账候选但保留历史关联，重启/双端/恢复一致。",
+      "case_id": "ACC-UR-016"
     },
     {
       "id": "UR-017",
@@ -563,13 +750,25 @@
       "classification": "关联",
       "merge_group": "G-ACCOUNT",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/settings_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "22ace70"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "复用同一账户管理界面；我的页展示概览、3个常用账户和全部账户入口，账户多时仍可搜索定位。",
+      "case_id": "ACC-UR-017"
     },
     {
       "id": "UR-018",
@@ -603,13 +802,30 @@
       "classification": "共同根因",
       "merge_group": "G-FX-SYNC",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart",
+        "outputs/wealthmate_flutter/lib/core/database/local_state_session.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_assets_sync_test.dart",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "1a2e19b",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "HKD→USD→HKD连续/并发转换独立；本地金额和队列来自同一状态，重启/同步拉取不回退、不重复乘，原币金额不变。",
+      "case_id": "ACC-UR-018"
     },
     {
       "id": "UR-019",
@@ -642,13 +858,29 @@
       "classification": "已存在需核验",
       "merge_group": "G-INSIGHTS",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart",
+        "outputs/wealthmate_flutter/lib/features/insights/domain/insight_rules.dart",
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53",
+        "2433bb1",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "日均只取选定日期范围：历史月按完整自然日、当前月截至今天、未来月0；图表全月总额与月度预算一致。",
+      "case_id": "ACC-UR-019"
     },
     {
       "id": "UR-020",
@@ -681,13 +913,26 @@
       "classification": "关联",
       "merge_group": "G-QUERY",
       "provenance": "用户原话",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/ledger_page.dart",
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "点击餐饮分类进入同月同分类支出账单，合计与图表一致；返回保留月份及维度。",
+      "case_id": "ACC-UR-020"
     },
     {
       "id": "UR-021",
@@ -720,13 +965,27 @@
       "classification": "重复",
       "merge_group": "G-QUERY",
       "provenance": "UR-020派生分析",
-      "implementation_status": "待开发",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart",
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "acceptance_assertion": "派生重复项仍逐行核验：与UR-020共享下钻，待换算项明确计数，不把未知金额静默当成0。",
+      "case_id": "ACC-UR-021"
     }
   ],
   "engineering": [
@@ -747,13 +1006,38 @@
       "packages": [
         "WP-E"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_detail_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart",
+        "outputs/wealthmate_flutter/lib/core/database/local_state_session.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_assets_sync_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_flutter/test/core/two_device_sync_test.dart",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_flutter/test/v105_sqlite_upgrade_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "9bb675a",
+        "1a2e19b"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C01",
+      "merge_group": "G-ACCOUNT-SYNC",
+      "corrected_goal": "多端同步/离线队列",
+      "acceptance_assertion": "离线新增修改删除→登录同步→跨端无重复；旧队列升级兼容"
     },
     {
       "id": "C02",
@@ -772,13 +1056,30 @@
       "packages": [
         "WP-E"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_backend/tests/test_sync_postgres_concurrency.py",
+        "outputs/wealthmate_backend/integration/postgres_acceptance.py"
+      ],
+      "tests": [
+        "outputs/wealthmate_backend/tests/test_sync_postgres_concurrency.py",
+        "outputs/wealthmate_backend/integration/postgres_acceptance.py"
+      ],
+      "evidence": [
+        "backend-final.log",
+        "postgres-current.log",
+        "postgres-historical-red.log",
+        "postgres-http-acceptance.log"
+      ],
+      "commits": [
+        "22ace70"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C02",
+      "merge_group": "G-C02",
+      "corrected_goal": "真实 PostgreSQL 并发验证",
+      "acceptance_assertion": "隔离 PostgreSQL 上跑完并发版本、重试、回滚三项"
     },
     {
       "id": "C03",
@@ -798,13 +1099,33 @@
         "WP-B",
         "WP-E"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_detail_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/account_management_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_assets_sync_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C03",
+      "merge_group": "G-ACCOUNT-SYNC",
+      "corrected_goal": "归档账户",
+      "acceptance_assertion": "历史账单保留、归档隐藏、可恢复、跨端一致"
     },
     {
       "id": "C04",
@@ -824,13 +1145,32 @@
         "WP-F",
         "WP-B"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart",
+        "outputs/wealthmate_flutter/lib/core/database/local_state_session.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_assets_sync_test.dart",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "22ace70",
+        "1a2e19b",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C04",
+      "merge_group": "G-FX-SYNC",
+      "corrected_goal": "多币种换算交叉回退",
+      "acceptance_assertion": "HKD→USD 后 HKD 不回退；不重复折算"
     },
     {
       "id": "C05",
@@ -850,13 +1190,31 @@
         "WP-F",
         "WP-C"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart",
+        "outputs/wealthmate_flutter/lib/features/insights/domain/insight_rules.dart",
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53",
+        "2433bb1",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C05",
+      "merge_group": "G-INSIGHTS",
+      "corrected_goal": "统计日均口径",
+      "acceptance_assertion": "本月选择仅计本月，过去月份日分母口径固定"
     },
     {
       "id": "C06",
@@ -876,13 +1234,28 @@
         "WP-F",
         "WP-C"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/stats_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/ledger_page.dart",
+        "outputs/wealthmate_flutter/lib/domain/transaction_query.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "59fab53"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C06",
+      "merge_group": "G-QUERY",
+      "corrected_goal": "统计分类到明细",
+      "acceptance_assertion": "点击餐饮统计打开同筛选账单，聚合=明细之和"
     },
     {
       "id": "C07",
@@ -902,13 +1275,32 @@
         "WP-F",
         "WP-C"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/budget/domain/budget_rules.dart",
+        "outputs/wealthmate_flutter/lib/features/budget/data/budget_repository.dart",
+        "outputs/wealthmate_flutter/lib/ui/budgets_page.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "59fab53",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C07",
+      "merge_group": "G-INSIGHTS",
+      "corrected_goal": "月度总预算",
+      "acceptance_assertion": "设置全月总额、跨设备同步、类别预算不重复计入"
     },
     {
       "id": "C08",
@@ -927,13 +1319,28 @@
       "packages": [
         "WP-A"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/domain/finance_rules.dart",
+        "outputs/wealthmate_flutter/lib/features/quick_entry/data/quick_entry_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart",
+        "outputs/wealthmate_flutter/test/features/quick_entry/quick_entry_store_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C08",
+      "merge_group": "G-ENTRY",
+      "corrected_goal": "自然语言快捷记",
+      "acceptance_assertion": "常用句子形成回归语料，手动修改率下降"
     },
     {
       "id": "C09",
@@ -952,13 +1359,27 @@
       "packages": [
         "WP-B"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/features/assets/data/assets_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_assets_closure_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_assets_closure.py"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "22ace70"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C09",
+      "merge_group": "G-FX",
+      "corrected_goal": "汇率接口可用性",
+      "acceptance_assertion": "断网/超时使用标记日期的缓存，不默默显示旧结果"
     },
     {
       "id": "C10",
@@ -977,13 +1398,33 @@
       "packages": [
         "WP-D"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/password_recovery_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/recovery_code_page.dart",
+        "outputs/wealthmate_flutter/lib/features/auth/data/auth_remote_data_source.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_recovery_flow_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_recovery.py",
+        "outputs/wealthmate_backend/tests/test_v105_recovery_postgres.py",
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log",
+        "flutter-live-api.log"
+      ],
+      "commits": [
+        "fc909de",
+        "9bb675a"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C10",
+      "merge_group": "G-AUTH",
+      "corrected_goal": "找回密码",
+      "acceptance_assertion": "未登录场景可证明账号所有权并重置；防账号枚举"
     },
     {
       "id": "C11",
@@ -1002,13 +1443,30 @@
       "packages": [
         "WP-A"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/lib/ui/currency_preferences_page.dart",
+        "outputs/wealthmate_flutter/lib/ui/widgets/transaction_form.dart",
+        "outputs/wealthmate_flutter/lib/features/ledger/data/ledger_repository.dart"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+      ],
+      "evidence": [
+        "flutter-final.log",
+        "backend-final.log"
+      ],
+      "commits": [
+        "90833e5",
+        "1a2e19b",
+        "2433bb1"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C11",
+      "merge_group": "G-ENTRY",
+      "corrected_goal": "记账默认币种",
+      "acceptance_assertion": "默认 CNY，记住有效的用户偏好；多币种账户不误覆盖"
     },
     {
       "id": "C12",
@@ -1027,13 +1485,164 @@
       "packages": [
         "WP-E"
       ],
-      "implementation_status": "待核验",
-      "acceptance_status": "NOT VERIFIED",
-      "implementation": [],
-      "tests": [],
-      "evidence": [],
-      "commits": [],
-      "remaining": []
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "implementation": [
+        "outputs/wealthmate_flutter/pubspec.yaml",
+        "outputs/wealthmate_flutter/lib/core/config/app_config.dart",
+        "tools/build-android-release.ps1"
+      ],
+      "tests": [
+        "outputs/wealthmate_flutter/test/v105_sqlite_upgrade_test.dart",
+        "tools/build-android-release.tests.ps1"
+      ],
+      "evidence": [
+        "android-build.log",
+        "phone-before-summary.log",
+        "phone-after-summary.log",
+        "windows-build.log",
+        "windows-startup-smoke.log"
+      ],
+      "commits": [
+        "1a2e19b",
+        "2433bb1"
+      ],
+      "remaining": [],
+      "case_id": "ACC-C12",
+      "merge_group": "G-C12",
+      "corrected_goal": "版本与安装连续性",
+      "acceptance_assertion": "升级 versionCode，安装覆盖后本地数据/队列/登录不丢失"
     }
-  ]
+  ],
+  "work_packages": [
+    {
+      "id": "WP-F",
+      "name": "共享财务口径",
+      "raw_ids": [
+        "UR-010",
+        "UR-011",
+        "UR-012",
+        "UR-018",
+        "UR-019",
+        "UR-020",
+        "UR-021"
+      ],
+      "engineering_ids": [
+        "C04",
+        "C05",
+        "C06",
+        "C07"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "remaining": []
+    },
+    {
+      "id": "WP-A",
+      "name": "记账与账本",
+      "raw_ids": [
+        "UR-005",
+        "UR-006",
+        "UR-012",
+        "UR-013"
+      ],
+      "engineering_ids": [
+        "C08",
+        "C11"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "remaining": []
+    },
+    {
+      "id": "WP-B",
+      "name": "账户、资产与汇率",
+      "raw_ids": [
+        "UR-004",
+        "UR-007",
+        "UR-010",
+        "UR-016",
+        "UR-017",
+        "UR-018"
+      ],
+      "engineering_ids": [
+        "C03",
+        "C04",
+        "C09"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "remaining": []
+    },
+    {
+      "id": "WP-C",
+      "name": "统计、预算与首页",
+      "raw_ids": [
+        "UR-008",
+        "UR-009",
+        "UR-011",
+        "UR-015",
+        "UR-019",
+        "UR-020",
+        "UR-021"
+      ],
+      "engineering_ids": [
+        "C05",
+        "C06",
+        "C07"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "remaining": []
+    },
+    {
+      "id": "WP-D",
+      "name": "认证与恢复码",
+      "raw_ids": [
+        "UR-014"
+      ],
+      "engineering_ids": [
+        "C10"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "PASS",
+      "remaining": []
+    },
+    {
+      "id": "WP-E",
+      "name": "同步、升级及发布验收",
+      "raw_ids": [
+        "UR-016",
+        "UR-018"
+      ],
+      "engineering_ids": [
+        "C01",
+        "C02",
+        "C03",
+        "C12"
+      ],
+      "implementation_status": "已实现",
+      "acceptance_status": "NOT VERIFIED",
+      "remaining": [
+        "独立代码审查因执行额度不足未运行；完整Windows人工业务流程和第二台Android物理设备验收未验证。"
+      ]
+    }
+  ],
+  "code_sha": "9bb675a22b083ca9d2ef89a3af6a7c3abd04b9e7",
+  "as_of": "2026-10-09 Asia/Shanghai",
+  "release_status": "NOT READY：保留候选版，尚有未验证发布门禁",
+  "review": {
+    "independent_status": "NOT VERIFIED",
+    "reason": "按执行技能尝试一次独立审查，审查代理在执行前因额度限制失败，无审查结论。",
+    "self_review": "完成；修复编辑换币快照、历史汇率日期、图表预算范围及旧CNY空快照的回归缺陷。"
+  },
+  "metrics": {
+    "raw_pass": 18,
+    "raw_total": 18,
+    "package_pass": 5,
+    "package_total": 6,
+    "implemented_packages": 6,
+    "engineering_pass": 12,
+    "engineering_total": 12
+  }
 }
