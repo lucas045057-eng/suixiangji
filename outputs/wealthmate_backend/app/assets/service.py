@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Account, ExchangeRate, Transaction, User
 from ..services.exchange import fetch_frankfurter_rate
-from .domain import date_value, json_value, money
+from .domain import date_value, json_value, money, cny_value
 from .schemas import AccountIn, RateIn
 
 
@@ -212,7 +212,8 @@ def wealth(db: Session, user: User) -> dict:
         if account_pending:
             pending += 1
         for row in rows:
-            if row.cny_amount is None:
+            value = cny_value(row.amount, row.currency, row.cny_amount)
+            if value is None:
                 if (
                     row.account_id == account.id
                     or row.from_account_id == account.id
@@ -221,7 +222,6 @@ def wealth(db: Session, user: User) -> dict:
                     pending += 1
                     account_pending = True
                 continue
-            value = row.cny_amount
             if row.kind == "transfer":
                 if row.from_account_id == account.id:
                     balance -= value

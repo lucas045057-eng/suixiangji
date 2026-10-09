@@ -7,6 +7,11 @@ from typing import Any
 
 TWOPLACES = Decimal("0.01")
 
+def cny_value(amount: Decimal, currency: str, snapshot: Decimal | None) -> Decimal | None:
+    if snapshot is not None:
+        return money(snapshot)
+    return money(amount) if currency.upper() == 'CNY' else None
+
 
 def money(value: Decimal | int | float | str | None) -> Decimal:
     if value is None:

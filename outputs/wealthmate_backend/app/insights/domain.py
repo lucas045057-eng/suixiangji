@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from ..assets.domain import money
+from ..assets.domain import money, cny_value
 
 
 @dataclass(frozen=True)
@@ -41,10 +41,10 @@ def monthly_metrics(rows: list[TransactionRecord], month: str) -> dict[str, Any]
     for row in rows:
         if row.deleted or row.occurred_on.strftime("%Y-%m") != month or row.kind == "transfer":
             continue
-        if row.cny_amount is None:
+        value = cny_value(row.amount, row.currency, row.cny_amount)
+        if value is None:
             pending += 1
             continue
-        value = money(row.cny_amount)
         if row.kind == "income":
             income += value
         elif row.kind == "expense":
@@ -118,10 +118,10 @@ def period_metrics(rows: list[TransactionRecord], period: str, start: date, end:
         position = index.get(bucket_key)
         if position is None:
             continue
-        if row.cny_amount is None:
+        value = cny_value(row.amount, row.currency, row.cny_amount)
+        if value is None:
             pending += 1
             continue
-        value = money(row.cny_amount)
         if row.kind == "income":
             income += value
             series[position]["income"] += value
