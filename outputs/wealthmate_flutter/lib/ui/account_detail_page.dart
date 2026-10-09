@@ -19,6 +19,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   late final TextEditingController nameController;
   late final TextEditingController currencyController;
   late final TextEditingController openingController;
+  late final TextEditingController noteController;
   late Account _account;
   late AccountType type;
   late AccountKind accountKind;
@@ -31,6 +32,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     final account = widget.account;
     _account = account;
     nameController = TextEditingController(text: account.name);
+    noteController = TextEditingController(text: account.note);
     currencyController = TextEditingController(text: account.currency);
     openingController =
         TextEditingController(text: account.openingBalance.toString());
@@ -45,6 +47,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     nameController.dispose();
     currencyController.dispose();
     openingController.dispose();
+    noteController.dispose();
     super.dispose();
   }
 
@@ -91,6 +94,13 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               TextField(
                   controller: nameController,
                   decoration: const InputDecoration(labelText: '账户名称')),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: noteController,
+                  maxLength: 256,
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(
+                      labelText: '用途备注', hintText: '例如工资卡、旅行备用')),
               const SizedBox(height: 12),
               DropdownButtonFormField<AccountKind>(
                   initialValue: accountKind,
@@ -144,9 +154,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   label: const Text('余额校准')),
               const SizedBox(height: 8),
               TextButton.icon(
-                  onPressed: _archive,
+                  onPressed: _account.archivedAt == null ? _archive : _restore,
                   icon: const Icon(Icons.archive_outlined),
-                  label: const Text('归档账户'),
+                  label: Text(_account.archivedAt == null ? '归档账户' : '恢复账户'),
                   style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFFB65B55))),
             ],
@@ -166,6 +176,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     }
     final updated = _account.copyWith(
         name: name,
+        note: noteController.text.trim(),
         type: type,
         accountKind: accountKind,
         currency: currency,
@@ -188,8 +199,12 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   }
 
   Future<void> _archive() async {
-    await widget.store.updateAccount(
-        _account.copyWith(deletedAt: DateTime.now().toIso8601String()));
+    await widget.store.archiveAccount(_account.id);
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _restore() async {
+    await widget.store.restoreAccount(_account.id);
     if (mounted) Navigator.pop(context);
   }
 

@@ -68,6 +68,8 @@ class Account {
     this.exchangeRateSource,
     this.isLiquid = false,
     this.isDefaultPayment = false,
+    this.note = '',
+    this.archivedAt,
     this.deletedAt,
     this.serverVersion,
     this.updatedAt,
@@ -85,6 +87,9 @@ class Account {
   final String? exchangeRateSource;
   final bool isLiquid;
   final bool isDefaultPayment;
+  final String note;
+  final String? archivedAt;
+  bool get isActive => deletedAt == null && archivedAt == null;
   final String? deletedAt;
   final int? serverVersion;
   final String? updatedAt;
@@ -102,6 +107,9 @@ class Account {
     String? exchangeRateSource,
     bool? isLiquid,
     bool? isDefaultPayment,
+    String? note,
+    String? archivedAt,
+    bool clearArchivedAt = false,
     String? deletedAt,
     int? serverVersion,
     String? updatedAt,
@@ -119,6 +127,8 @@ class Account {
       exchangeRateSource: exchangeRateSource ?? this.exchangeRateSource,
       isLiquid: isLiquid ?? this.isLiquid,
       isDefaultPayment: isDefaultPayment ?? this.isDefaultPayment,
+      note: note ?? this.note,
+      archivedAt: clearArchivedAt ? null : archivedAt ?? this.archivedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       serverVersion: serverVersion ?? this.serverVersion,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -138,6 +148,8 @@ class Account {
         'opening_rate_source': exchangeRateSource,
         'is_liquid': isLiquid,
         'is_default_payment': isDefaultPayment,
+        'note': note,
+        'archived_at': archivedAt,
         'deleted_at': deletedAt,
         'server_version': serverVersion,
         'updated_at': updatedAt,
@@ -156,6 +168,8 @@ class Account {
         exchangeRateSource: json['opening_rate_source'] as String?,
         isLiquid: json['is_liquid'] as bool? ?? false,
         isDefaultPayment: json['is_default_payment'] as bool? ?? false,
+        note: json['note'] as String? ?? '',
+        archivedAt: json['archived_at'] as String?,
         deletedAt: json['deleted_at'] as String?,
         serverVersion: (json['server_version'] as num?)?.toInt(),
         updatedAt: json['updated_at'] as String?,

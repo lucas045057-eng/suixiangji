@@ -115,14 +115,20 @@ class LocalStateSession {
   Future<FinanceState> write(
     StateMutation mutation, {
     Iterable<SyncOperation> appendOperations = const [],
+    Iterable<SyncOperation> Function(FinanceState current, FinanceState next)?
+        deriveOperations,
     FinanceState? initialState,
   }) {
     return _withCurrentContext((context) async {
       await _ensureLoaded(context);
-      final next = mutation(context.hasPersistedState
+      final current = context.hasPersistedState
           ? context.state ?? const FinanceState()
-          : initialState ?? context.state ?? const FinanceState());
-      for (final operation in appendOperations) {
+          : initialState ?? context.state ?? const FinanceState();
+      final next = mutation(current);
+      for (final operation in [
+        ...appendOperations,
+        ...?deriveOperations?.call(current, next),
+      ]) {
         context.queue.enqueue(operation);
       }
       await context.local.save(next);

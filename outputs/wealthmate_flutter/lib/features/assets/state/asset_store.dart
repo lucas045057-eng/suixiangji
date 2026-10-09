@@ -23,9 +23,8 @@ class AssetStore extends ChangeNotifier {
 
   FinanceState get state => _state;
   List<Account> get accounts => List.unmodifiable(_state.accounts);
-  List<Account> get activeAccounts => _state.accounts
-      .where((item) => item.deletedAt == null)
-      .toList(growable: false);
+  List<Account> get activeAccounts =>
+      _state.accounts.where((item) => item.isActive).toList(growable: false);
   List<ExchangeRateSnapshot> get exchangeRates =>
       List.unmodifiable(_state.exchangeRates);
   List<Goal> get goals => List.unmodifiable(_state.goals);
@@ -129,6 +128,22 @@ class AssetStore extends ChangeNotifier {
     onLocalMutation?.call('assets.account.update');
   }
 
+  Future<void> archiveAccount(String id) async {
+    final account =
+        _state.accounts.where((a) => a.id == id && a.isActive).firstOrNull;
+    if (account == null) return;
+    await updateAccount(account.copyWith(
+        archivedAt: DateTime.now().toIso8601String(), isDefaultPayment: false));
+  }
+
+  Future<void> restoreAccount(String id) async {
+    final account = _state.accounts
+        .where((a) => a.id == id && a.deletedAt == null && a.archivedAt != null)
+        .firstOrNull;
+    if (account == null) return;
+    await updateAccount(account.copyWith(clearArchivedAt: true));
+  }
+
   Future<void> calibrateBalance(Account account, double delta) async {
     final current =
         _state.accounts.where((item) => item.id == account.id).firstOrNull;
@@ -154,7 +169,7 @@ class AssetStore extends ChangeNotifier {
   Future<void> setDefaultAccount(String accountId) async {
     final eligible = _state.accounts.any((item) =>
         item.id == accountId &&
-        item.deletedAt == null &&
+        item.isActive &&
         item.type == AccountType.asset);
     if (!eligible) return;
     if (!await _apply((baseState) =>
@@ -172,9 +187,11 @@ class AssetStore extends ChangeNotifier {
     required String source,
   }) async {
     final base = baseCurrency.trim().toUpperCase();
-    if (base.length < 3 ||
+    if (!RegExp(r'^[A-Z]{3}$').hasMatch(base) ||
         base == 'CNY' ||
+        !rate.isFinite ||
         rate <= 0 ||
+        DateTime.tryParse(rateDate) == null ||
         source.trim().isEmpty) {
       _message = '汇率需要填写有效币种、正数汇率和来源';
       _notifyMessageChanged();
@@ -191,17 +208,9 @@ class AssetStore extends ChangeNotifier {
         repository.saveExchangeRate(snapshot, baseState: baseState))) {
       return;
     }
-    if (repository.remote != null) {
-      try {
-        await repository.remote!.saveExchangeRate(snapshot.toJson());
-        _message = '汇率已保存并同步';
-      } on ApiFailure {
-        _message = '汇率已保存在本机，联网后可再次同步';
-      }
-    } else {
-      _message = '汇率已保存到本地';
-    }
+    _message = '汇率已保存到本地，账户快照将随账目同步';
     _notifyChanged();
+    onLocalMutation?.call('assets.rate.manual');
   }
 
   Future<void> refreshExchangeRate(String baseCurrency) async {
@@ -214,15 +223,18 @@ class AssetStore extends ChangeNotifier {
       final json = await repository.remote!
           .fetchExchangeRate(baseCurrency.toUpperCase());
       final snapshot = ExchangeRateSnapshot.fromJson(json);
-      if (snapshot.rate <= 0) {
+      if (!snapshot.rate.isFinite || snapshot.rate <= 0) {
         throw const ApiFailure(ApiFailureKind.validation, '公开汇率无效');
       }
       if (!await _apply((baseState) =>
           repository.saveExchangeRate(snapshot, baseState: baseState))) {
         return;
       }
-      _message = '已获取并保存 ${snapshot.baseCurrency}/CNY 汇率';
+      _message = json['stale'] == true
+          ? '汇率服务暂不可用，使用 ${snapshot.rateDate} 的缓存汇率'
+          : '已获取并保存 ${snapshot.baseCurrency}/CNY 汇率';
       _notifyChanged();
+      onLocalMutation?.call('assets.rate.refresh');
     } on Object {
       _message = '获取汇率失败，已保留上一次可靠汇率';
       _notifyMessageChanged();

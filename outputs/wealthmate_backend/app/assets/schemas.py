@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 class AccountIn(BaseModel):
     id: str | None = None
     name: str = Field(min_length=1, max_length=128)
+    note: str = Field(default='', max_length=256)
+    archived_at: datetime | None = None
     kind: Literal["asset", "liability"] = "asset"
     account_kind: Literal[
         "cash",

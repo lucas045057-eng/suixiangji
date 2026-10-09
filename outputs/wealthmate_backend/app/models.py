@@ -58,6 +58,8 @@ class Account(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
+    note: Mapped[str] = mapped_column(String(256), default='', server_default='')
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     kind: Mapped[str] = mapped_column(String(32), default="asset")
     account_kind: Mapped[str] = mapped_column(String(32), default="other")
     currency: Mapped[str] = mapped_column(String(16), default="CNY")

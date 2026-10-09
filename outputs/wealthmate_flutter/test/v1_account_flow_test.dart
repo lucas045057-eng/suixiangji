@@ -354,7 +354,17 @@ void main() {
       (tester) async {
     final methods = <String>[];
     final h = Harness(client: MockClient((request) async {
-      methods.add(request.method);
+      if (request.url.path == '/exchange/rates') methods.add(request.method);
+      if (request.url.path == '/sync/push') {
+        final operations = (jsonDecode(request.body) as Map)['operations'] as List;
+        return http.Response(jsonEncode({'accepted': [
+          for (final op in operations) {'client_op_id':op['client_op_id'],
+            'entity_id':op['entity_id'],'server_version':1,'created':true}
+        ],'conflicts':[],'server_version':1}),200);
+      }
+      if (request.url.path == '/sync/pull') {
+        return http.Response('{"accounts":[],"transactions":[],"categories":[],"budgets":[],"server_version":1}',200);
+      }
       return http.Response(
           '{"base_currency":"USD","quote_currency":"CNY","rate":7.1,"rate_date":"2026-09-08","source":"trusted"}',
           200);
@@ -367,12 +377,13 @@ void main() {
     await h.store.load();
     await tester.pumpWidget(
         MaterialApp(home: ExchangeRatesPage(store: h.store.assets)));
-    // The manual-entry control is part of the pre-Auth baseline UI. This test
-    // is concerned with the trusted online GET contract, not its visibility.
+    // Public rate access stays GET-only; private account snapshots now travel
+    // through the ordinary sync queue so a later pull cannot revert conversion.
     expect(find.text('手动录入'), findsOneWidget);
     await tester.tap(find.text('获取汇率'));
     await tester.pumpAndSettle();
     expect(methods, ['GET']);
     expect(h.store.state.exchangeRates.single.rate, 7.1);
+    expect(h.store.assets.accounts.single.exchangeRate,7.1);
   });
 }
