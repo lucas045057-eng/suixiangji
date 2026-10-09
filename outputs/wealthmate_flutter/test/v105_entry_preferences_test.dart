@@ -11,6 +11,49 @@ import 'package:wealthmate_flutter/ui/app_shell.dart';
 import 'v105_assets_closure_test.dart' show Memory;
 
 void main() {
+  testWidgets(
+      'editing currency discards the other currency conversion snapshot',
+      (tester) async {
+    const existing = FinanceTransaction(
+        id: 'edit',
+        date: '2026-10-09',
+        type: TransactionType.expense,
+        amount: 2,
+        currency: 'USD',
+        cnyAmount: 13,
+        exchangeRate: 6.5,
+        accountId: 'cash',
+        categoryId: 'food');
+    final store = FinanceStore(
+        repository: FinanceRepository(
+            local: LocalRepository(Memory()), queue: SyncQueue()),
+        initialState: const FinanceState(exchangeRates: [
+          ExchangeRateSnapshot(
+              baseCurrency: 'HKD',
+              rate: .9,
+              rateDate: '2026-10-09',
+              source: 'synthetic')
+        ], transactions: [
+          existing
+        ], accounts: [
+          Account(id: 'cash', name: '现金', type: AccountType.asset)
+        ], categories: [
+          Category(id: 'food', name: '餐饮')
+        ]));
+    addTearDown(store.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SingleChildScrollView(
+                child: TransactionForm(store: store, initial: existing)))));
+    await tester.tap(find.text('HKD'));
+    await tester.pump();
+    await tester.ensureVisible(find.text('保存修改'));
+    await tester.tap(find.text('保存修改'));
+    await tester.pumpAndSettle();
+    expect(store.state.transactions.single.currency, 'HKD');
+    expect(store.state.transactions.single.cnyAmount, 1.8);
+    expect(store.state.transactions.single.exchangeRate, .9);
+  });
   test(
       'manual and quick-entry writes use dated FX snapshots and preserve historical conversions',
       () async {

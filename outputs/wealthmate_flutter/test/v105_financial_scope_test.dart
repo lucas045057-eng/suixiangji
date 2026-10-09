@@ -77,6 +77,43 @@ const bills = [
 ];
 
 void main() {
+  testWidgets(
+      'selected month charts and budget retain same future-dated bill scope',
+      (tester) async {
+    final store = FinanceStore(
+        repository: FinanceRepository(
+            local: LocalRepository(Memory()), queue: SyncQueue()),
+        initialState:
+            const FinanceState(currentMonth: '2026-10', transactions: [
+          FinanceTransaction(
+              id: 'today',
+              date: '2026-10-09',
+              type: TransactionType.expense,
+              amount: 16),
+          FinanceTransaction(
+              id: 'future',
+              date: '2026-10-30',
+              type: TransactionType.expense,
+              amount: 20)
+        ], budgets: [
+          Budget(
+              id: 'total',
+              month: '2026-10',
+              categoryId: '__total__',
+              limit: 100)
+        ]));
+    addTearDown(store.dispose);
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: StatsPage(
+                insights: store.insights,
+                ledger: store.ledger,
+                now: DateTime(2026, 10, 9)))));
+    final values =
+        tester.widget<WealthLineChart>(find.byType(WealthLineChart)).values;
+    expect(values.fold<double>(0, (a, b) => a + b),
+        budgets.progressForMonth(store.state, '2026-10').single.spent);
+  });
   test('average uses selected elapsed days, leap months and future zero', () {
     expect(
         dailyAverage(90, DateTime(2026, 10, 1), DateTime(2026, 10, 31),
@@ -116,11 +153,11 @@ void main() {
                 insights: store.insights,
                 ledger: store.ledger,
                 now: DateTime(2026, 10, 9)))));
-    expect(find.byType(SpendingBarChart),findsNothing);
-    expect(find.byType(ExpensePieChart),findsNothing);
+    expect(find.byType(SpendingBarChart), findsNothing);
+    expect(find.byType(ExpensePieChart), findsNothing);
     await tester.tap(find.text('柱状'));
     await tester.pumpAndSettle();
-    expect(find.byType(WealthLineChart),findsNothing);
+    expect(find.byType(WealthLineChart), findsNothing);
     await tester.scrollUntilVisible(find.text('分类支出柱状图'), 200);
     final categoryRow = find.descendant(
         of: find.byType(SpendingBarChart), matching: find.text('餐饮'));

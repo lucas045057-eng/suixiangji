@@ -60,6 +60,8 @@ def attach_latest_rate(db: Session, values: dict) -> dict:
     rate = db.query(ExchangeRate).filter(
         ExchangeRate.base_currency == currency,
         ExchangeRate.quote_currency == "CNY",
+        ExchangeRate.rate_date <= date_value(values.get("occurred_on") or values.get("date")),
+        ExchangeRate.rate > 0,
     ).order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc()).first()
     if not rate:
         return values

@@ -173,7 +173,7 @@ class _TransactionFormState extends State<TransactionForm> {
         maxLines: 4,
         keyboardType: TextInputType.multiline,
         enableSuggestions: true,
-        hintLocales:const [Locale('zh','CN'),Locale('en','US')],
+        hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
         autocorrect: false,
         decoration: const InputDecoration(
             labelText: '刚刚发生了什么？', hintText: '例如：今天中午外卖 32 元，支付宝'),
@@ -288,7 +288,7 @@ class _TransactionFormState extends State<TransactionForm> {
           controller: noteController,
           keyboardType: TextInputType.multiline,
           enableSuggestions: true,
-          hintLocales:const [Locale('zh','CN'),Locale('en','US')],
+          hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
           autocorrect: false,
           decoration:
               const InputDecoration(labelText: '备注', hintText: '例如：午餐、通勤或房租')),
@@ -314,7 +314,12 @@ class _TransactionFormState extends State<TransactionForm> {
     final normalizedCurrency =
         (currency.isEmpty ? 'CNY' : currency).trim().toUpperCase();
     final isCny = normalizedCurrency == 'CNY';
-    final exchangeRate = isCny ? 1.0 : existing?.exchangeRate;
+    final sameCurrency = existing?.currency == normalizedCurrency;
+    final exchangeRate = isCny
+        ? 1.0
+        : sameCurrency
+            ? existing?.exchangeRate
+            : null;
     final convertedAmount = isCny
         ? amount
         : exchangeRate != null && exchangeRate > 0

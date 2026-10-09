@@ -58,6 +58,20 @@ def test_account_input_preserves_optional_lifecycle_fields():
     assert data.get('note') == '日常用途'
     assert data.get('archived_at') is not None
 
+def test_transaction_rate_never_uses_a_quote_newer_than_business_date(db):
+    from app.ledger.service import attach_latest_rate
+    db.add_all([
+        ExchangeRate(base_currency='USD', quote_currency='CNY',rate=Decimal('6.5'),rate_date=date(2026,9,1),source='synthetic'),
+        ExchangeRate(base_currency='USD', quote_currency='CNY',rate=Decimal('7'),rate_date=date(2026,10,9),source='synthetic'),
+    ])
+    db.commit()
+    old=attach_latest_rate(db,dict(currency='USD',date='2026-09-02',amount=2))
+    assert old['exchange_rate']==Decimal('6.5')
+    missing=attach_latest_rate(db,dict(currency='USD',date='2026-08-01',amount=2))
+    assert 'exchange_rate' not in missing
+    historical=attach_latest_rate(db,dict(currency='USD',date='2026-09-02',amount=2,cny_amount=12))
+    assert historical['cny_amount']==12 and 'exchange_rate' not in historical
+
 
 def test_old_payload_does_not_erase_new_fields(db):
     user = db.get(User,'v105-owner')

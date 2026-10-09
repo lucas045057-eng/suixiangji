@@ -37,12 +37,7 @@ class _StatsPageState extends State<StatsPage> {
       builder: (context, _) {
         final selectedRange =
             _rangeFor(period, widget.insights.metrics.monthKey);
-        final range = DateTimeRange(
-            start: selectedRange.start,
-            end: selectedRange.end.isAfter(today) &&
-                    !selectedRange.start.isAfter(today)
-                ? today
-                : selectedRange.end);
+        final range = selectedRange;
         final points = widget.insights.trend(range);
         final categoryTotals = widget.insights.expenseByCategory(range);
         final accountTotals = widget.insights.expenseByAccount(range);
@@ -57,8 +52,13 @@ class _StatsPageState extends State<StatsPage> {
             : accountTotals.entries
                 .reduce((a, b) => a.value >= b.value ? a : b)
                 .key;
+        final elapsedExpense = knownTotal(TransactionQuery(
+                start: range.start,
+                end: range.end.isAfter(today) ? today : range.end,
+                type: TransactionType.expense)
+            .select(widget.insights.state));
         final average = dailyAverage(
-            totalExpense, selectedRange.start, selectedRange.end, today);
+            elapsedExpense, selectedRange.start, selectedRange.end, today);
         return SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -94,7 +94,7 @@ class _StatsPageState extends State<StatsPage> {
                         icon: const Icon(Icons.chevron_right)),
                   ]),
                 Text(
-                    '日均按已过去的 ${averageDays(selectedRange.start, selectedRange.end, today)} 天计算；历史月份按整月计算。',
+                    '日均仅计截至今日的账目，按已过去的 ${averageDays(selectedRange.start, selectedRange.end, today)} 天计算；历史月份按整月计算。',
                     style: const TextStyle(fontSize: 10)),
                 const SizedBox(height: 10),
                 SegmentedButton<bool>(
