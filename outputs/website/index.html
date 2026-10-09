@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F6F8F5" />
+    <title>随想记 - 极简至上，越用越懂你的 AI 记账</title>
+    <meta name="description" content="随想记是一款极简的个人记账与财务管理应用，通过 AI 逐渐理解你的使用习惯，让记录、整理和回顾财务变得越来越简单。">
+    <link rel="canonical" href="https://suixiangji.icu/">
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="随想记">
+    <meta property="og:title" content="随想记 - 极简至上，越用越懂你的 AI 记账">
+    <meta property="og:description" content="随想记是一款极简的个人记账与财务管理应用，通过 AI 逐渐理解你的使用习惯，让记录、整理和回顾财务变得越来越简单。">
+    <meta property="og:url" content="https://suixiangji.icu/">
+    <meta property="og:image" content="https://suixiangji.icu/assets/images/og-image.png">
+    <meta property="og:image:alt" content="随想记：记账，可以越来越简单。">
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg" />
+    <link rel="stylesheet" href="styles/main.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" id="site-header">
+      <div class="nav-inner">
+        <a class="brand" href="#home" aria-label="随想记，回到首页"
+          ><span aria-hidden="true">✦</span> <span data-brand>随想记</span></a
+        >
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-controls="primary-nav"
+          aria-expanded="false"
+          aria-label="打开导航菜单"
+        >
+          <span></span><span></span>
+        </button>
+        <nav class="primary-nav" id="primary-nav" aria-label="主导航">
+          <a href="#home" class="nav-link">首页</a>
+          <a href="#ai" class="nav-link">AI</a>
+          <a href="#devices" class="nav-link">多端</a>
+          <a href="#download" class="nav-link">下载</a>
+          <a
+            data-github
+            href="https://github.com/lucas045057-eng/suixiangji"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="nav-link"
+            >GitHub <span aria-hidden="true">↗</span><span class="sr-only">（新窗口）</span></a
+          >
+          <a href="#download" class="button nav-download">下载随想记 <span aria-hidden="true">↗</span></a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero container" id="home" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="tiny-star" aria-hidden="true">✦</span> 极简记账 · 越用越懂你</p>
+          <h1 id="hero-title"><span>记账，可以</span><span>越来越简单。</span></h1>
+          <p class="hero-description">
+            随想记是一款极简的 AI 记账应用。<br />少一点填写，少一点整理。<br />用得久一点，它会慢慢记住你的习惯。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#download"
+              >下载随想记 <svg aria-hidden="true"><use href="#icon-arrow-down" /></svg
+            ></a>
+            <a
+              class="text-link"
+              data-github
+              href="https://github.com/lucas045057-eng/suixiangji"
+              target="_blank"
+              rel="noopener noreferrer"
+              >查看 GitHub <span aria-hidden="true">↗</span><span class="sr-only">（新窗口）</span></a
+            >
+          </div>
+          <p class="hero-footnote">第一次很简单，用久了更简单。</p>
+        </div>
+        <figure
+          class="product-stage"
+          aria-label="Android 与 Windows 记账界面示意，展示现有记账、预算和统计能力"
+        >
+          <div class="stage-disc" aria-hidden="true"></div>
+          <div class="desktop-device">
+            <div class="window-top">
+              <span class="window-brand">✦ 随想记</span><span aria-hidden="true">− &nbsp; □ &nbsp; ×</span>
+            </div>
+            <img
+              class="product-screenshot"
+              src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='1'%20height='1'%3E%3C/svg%3E"
+              data-screenshot="windows"
+              alt="随想记 Windows 客户端截图"
+              hidden
+            />
+            <div class="desktop-app" data-mockup="windows">
+              <div class="app-sidebar">
+                <span class="sidebar-logo">✦</span
+                ><span class="selected"
+                  ><svg><use href="#icon-home" /></svg> 首页</span
+                ><span
+                  ><svg><use href="#icon-book" /></svg> 账本</span
+                ><span
+                  ><svg><use href="#icon-chart" /></svg> 统计</span
+                ><span
+                  ><svg><use href="#icon-wallet" /></svg> 财富</span
+                ><span class="sidebar-bottom">我的</span>
+              </div>
+              <div class="desktop-content">
+                <div class="app-greeting">
+                  <span><small>个人财务空间</small><strong>把生活，慢慢记下来。</strong></span
+                  ><span class="app-avatar">林</span>
+                </div>
+                <div class="desktop-metrics">
+                  <div>
+                    <small>本月支出</small><strong>¥ 3,286<span>.00</span></strong>
+                    <div class="mini-line">
+                      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+                    </div>
+                  </div>
+                  <div>
+                    <small>本月预算剩余</small><strong>¥ 1,714<span>.00</span></strong
+                    ><span class="budget-track"><i></i></span><small>按自己的节奏来</small>
+                  </div>
+                </div>
+                <div class="app-list-title">最近账目 <span>查看全部 ↗</span></div>
+                <div class="transaction">
+                  <span class="transaction-icon"
+                    ><svg><use href="#icon-food" /></svg></span
+                  ><span>午间的一碗面<small>餐饮 · 今天</small></span
+                  ><b>− ¥28.00</b>
+                </div>
+                <div class="transaction">
+                  <span class="transaction-icon"
+                    ><svg><use href="#icon-train" /></svg></span
+                  ><span>回家的地铁<small>交通 · 今天</small></span
+                  ><b>− ¥6.00</b>
+                </div>
+                <div class="transaction">
+                  <span class="transaction-icon"
+                    ><svg><use href="#icon-bag" /></svg></span
+                  ><span>生活的小补给<small>购物 · 昨天</small></span
+                  ><b>− ¥86.00</b>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="phone-device">
+            <div class="phone-camera" aria-hidden="true"></div>
+            <img
+              class="product-screenshot"
+              src="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='1'%20height='1'%3E%3C/svg%3E"
+              data-screenshot="android"
+              alt="随想记 Android 客户端截图"
+              hidden
+            />
+            <div class="phone-app" data-mockup="android">
+              <div class="phone-status">9:41 <span aria-hidden="true">▮▮▮ &nbsp; ▰</span></div>
+              <div class="phone-greeting">
+                <small>个人财务空间</small><strong>早上好，林默 <span aria-hidden="true">☀</span></strong
+                ><span>今天，也简单一点。</span>
+              </div>
+              <div class="phone-summary">
+                <small>本月支出</small><strong>¥ 3,286<span>.00</span></strong>
+                <div>
+                  <span>收入 <b>¥8,500</b></span
+                  ><span>结余 <b>¥5,214</b></span>
+                </div>
+              </div>
+              <div class="phone-budget">
+                <span>本月预算 <b>还有 ¥1,714</b></span
+                ><span class="budget-track"><i></i></span>
+              </div>
+              <div class="phone-quick"><span class="tiny-star">✦</span> 记一句话，就够了 <span>＋</span></div>
+              <div class="app-list-title">最近账目 <span>今天</span></div>
+              <div class="transaction">
+                <span class="transaction-icon"
+                  ><svg><use href="#icon-food" /></svg></span
+                ><span>午间的一碗面<small>餐饮</small></span
+                ><b>−28.00</b>
+              </div>
+              <div class="transaction">
+                <span class="transaction-icon"
+                  ><svg><use href="#icon-train" /></svg></span
+                ><span>回家的地铁<small>交通</small></span
+                ><b>−6.00</b>
+              </div>
+              <div class="phone-nav">
+                <span class="selected"
+                  ><svg><use href="#icon-home" /></svg>首页</span
+                ><span
+                  ><svg><use href="#icon-book" /></svg>账本</span
+                ><span
+                  ><svg><use href="#icon-chart" /></svg>统计</span
+                ><span
+                  ><svg><use href="#icon-wallet" /></svg>财富</span
+                ><span
+                  ><svg><use href="#icon-person" /></svg>我的</span
+                >
+              </div>
+            </div>
+          </div>
+          <div class="stage-note"><span aria-hidden="true">✦</span> 少一点操作，多一点生活。</div>
+          <figcaption>产品界面示意 · 数据为演示数据</figcaption>
+        </figure>
+        <a class="scroll-cue" href="#philosophy"
+          ><span>慢慢了解随想记</span><svg aria-hidden="true"><use href="#icon-arrow-down" /></svg
+        ></a>
+      </section>
+
+      <section class="philosophy container section-space" id="philosophy" aria-labelledby="philosophy-title">
+        <div class="section-heading">
+          <p class="section-kicker">简单，是慢慢发生的</p>
+          <h2 id="philosophy-title">第一天很简单，<br />用久了更简单。</h2>
+        </div>
+        <div class="steps">
+          <article class="step">
+            <span class="step-number">01 <i></i></span>
+            <h3>随手记</h3>
+            <p>先把生活记录下来。<br />不用一开始就想好所有分类和规则。</p>
+          </article>
+          <article class="step">
+            <span class="step-number">02 <i></i></span>
+            <h3>慢慢懂你</h3>
+            <p>记住你确认过的分类与账户。<br />让熟悉的表达，下次少选一点。</p>
+          </article>
+          <article class="step">
+            <span class="step-number">03 <i></i></span>
+            <h3>少管一点</h3>
+            <p>我们希望，重复与整理的工作更少。<br />把注意力留给生活本身。</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="ai-stories" id="ai" aria-labelledby="ai-title">
+        <div class="container">
+          <div class="section-heading ai-heading">
+            <p class="section-kicker"><span class="ai-spark" aria-hidden="true">✦</span> 安静地，帮一点忙</p>
+            <h2 id="ai-title">AI，不是多一个按钮。</h2>
+            <p>它更像一个安静地帮你整理账本的人。</p>
+            <p class="direction-note">确认后的分类与账户记忆已实现。下面的更多场景，是我们正在打磨的方向。</p>
+          </div>
+
+          <div class="story story-routine" data-reveal>
+            <div class="story-copy">
+              <div class="scene-tabs" role="tablist" aria-label="少一点重复的场景">
+                <button
+                  type="button"
+                  id="tab-recurring"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-recurring"
+                  data-scene="recurring"
+                >
+                  固定支出</button
+                ><button
+                  type="button"
+                  id="tab-cleanup"
+                  role="tab"
+                  aria-selected="false"
+                  tabindex="-1"
+                  aria-controls="panel-cleanup"
+                  data-scene="cleanup"
+                >
+                  账本清理
+                </button>
+              </div>
+              <div class="scene-text" data-text="recurring">
+                <span class="feature-status" data-feature="recurringExpenses">正在打磨</span>
+                <h3>重复的事情，<br />不用每次重新认识。</h3>
+                <p>
+                  房租、会员、每月的话费。<br />我们希望，让账本自己发现这些规律。<br />不必先建立一套复杂的规则。
+                </p>
+              </div>
+              <div class="scene-text" data-text="cleanup" hidden>
+                <span class="feature-status" data-feature="ledgerCleanup">正在打磨</span>
+                <h3>账本用久了，<br />也应该保持干净。</h3>
+                <p>平时不用管，<br />需要整理的时候再告诉你。<br />把收拾账本，变成一件轻松的事。</p>
+              </div>
+            </div>
+            <div class="scene-surface mint-surface">
+              <div
+                class="scene-panel"
+                id="panel-recurring"
+                role="tabpanel"
+                aria-labelledby="tab-recurring"
+                tabindex="0"
+              >
+                <div class="demo-window">
+                  <div class="demo-header">
+                    <span>每个月，熟悉的那些事</span><span class="muted">生活账本</span>
+                  </div>
+                  <div class="expense-row">
+                    <span class="demo-icon"
+                      ><svg aria-hidden="true"><use href="#icon-home" /></svg></span
+                    ><span>房租<small>住房</small></span
+                    ><b>¥2,200</b>
+                  </div>
+                  <div class="expense-row">
+                    <span class="demo-icon"
+                      ><svg aria-hidden="true"><use href="#icon-play" /></svg></span
+                    ><span>视频会员<small>娱乐</small></span
+                    ><b>¥25</b>
+                  </div>
+                  <div class="expense-row">
+                    <span class="demo-icon"
+                      ><svg aria-hidden="true"><use href="#icon-phone" /></svg></span
+                    ><span>手机话费<small>生活</small></span
+                    ><b>¥59</b>
+                  </div>
+                  <div class="ai-hint">
+                    <span class="ai-spark" aria-hidden="true">✦</span>
+                    <div>
+                      <p id="recurring-result" role="status">这些好像每个月都会出现。<br />要记住它们吗？</p>
+                      <div class="hint-actions">
+                        <button type="button" class="mini-button" data-demo-action="remember">记住</button
+                        ><button type="button" class="mini-button plain" data-demo-action="ignore">
+                          忽略
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <p class="demo-caption">产品方向演示 · 当前版本尚未提供</p>
+              </div>
+              <div
+                class="scene-panel"
+                id="panel-cleanup"
+                role="tabpanel"
+                aria-labelledby="tab-cleanup"
+                tabindex="0"
+                hidden
+              >
+                <div class="cleanup-visual">
+                  <div class="tidy-symbol" aria-hidden="true">✧</div>
+                  <div class="demo-window cleanup-window">
+                    <span class="ai-spark" aria-hidden="true">✦</span>
+                    <h4>发现 4 个可以整理的项目</h4>
+                    <p>让账本，轻一点。</p>
+                    <button
+                      class="mini-button"
+                      type="button"
+                      data-demo-action="cleanup"
+                      aria-expanded="false"
+                      aria-controls="cleanup-details"
+                    >
+                      看看 <span aria-hidden="true">↗</span>
+                    </button>
+                    <ul id="cleanup-details" hidden>
+                      <li>重复的生活账户</li>
+                      <li>很久未使用的分类</li>
+                      <li>未使用的旧标签</li>
+                      <li>空预算</li>
+                    </ul>
+                  </div>
+                </div>
+                <p class="demo-caption">产品方向演示 · 当前版本尚未提供</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="story story-money" data-reveal>
+            <div class="story-copy">
+              <div class="scene-tabs" role="tablist" aria-label="真实消费的场景">
+                <button
+                  type="button"
+                  id="tab-refund"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-refund"
+                  data-scene="refund"
+                >
+                  退款配对</button
+                ><button
+                  type="button"
+                  id="tab-shared"
+                  role="tab"
+                  aria-selected="false"
+                  tabindex="-1"
+                  aria-controls="panel-shared"
+                  data-scene="shared"
+                >
+                  AA / 垫付
+                </button>
+              </div>
+              <div class="scene-text" data-text="refund">
+                <span class="feature-status" data-feature="refundMatching">正在打磨</span>
+                <h3>退回来的钱，<br />不应该算成新的收入。</h3>
+                <p>购买，再退款。<br />我们希望，账本能把它们连起来，<br />看懂这并不是“赚了 299 元”。</p>
+              </div>
+              <div class="scene-text" data-text="shared" hidden>
+                <span class="feature-status" data-feature="sharedExpenseUnderstanding">正在打磨</span>
+                <h3>付出去的钱，<br />不一定都是你花掉的。</h3>
+                <p>AA、垫付和收款，<br />我们希望让它们更接近真实消费。<br />真正花了多少，一眼看懂。</p>
+              </div>
+            </div>
+            <div class="scene-surface neutral-surface">
+              <div
+                class="scene-panel"
+                id="panel-refund"
+                role="tabpanel"
+                aria-labelledby="tab-refund"
+                tabindex="0"
+              >
+                <div class="receipt-pair">
+                  <div class="small-receipt">
+                    <span class="receipt-dot"></span><small>9 月 12 日 · 购物</small><strong>购买耳机</strong
+                    ><b>− ¥299</b>
+                  </div>
+                  <span class="receipt-connector" aria-hidden="true">↔</span>
+                  <div class="small-receipt">
+                    <span class="receipt-dot mint"></span><small>9 月 15 日 · 退款</small
+                    ><strong>退款到账</strong><b>+ ¥299</b>
+                  </div>
+                </div>
+                <div class="matched-line">
+                  <span class="ai-spark" aria-hidden="true">✦</span> 已找到对应消费
+                  <span class="refund-pill">已退款</span>
+                </div>
+                <p class="demo-caption">产品方向演示 · 当前版本尚未提供</p>
+              </div>
+              <div
+                class="scene-panel"
+                id="panel-shared"
+                role="tabpanel"
+                aria-labelledby="tab-shared"
+                tabindex="0"
+                hidden
+              >
+                <div class="shared-calculation">
+                  <div><span>聚餐付款</span><b>¥400</b></div>
+                  <span class="calculation-minus" aria-hidden="true">−</span>
+                  <div><span>朋友转回</span><b>¥300</b></div>
+                </div>
+                <div class="actual-expense">
+                  <span>你的实际支出</span><strong>¥100<span>.00</span></strong>
+                </div>
+                <p class="demo-caption">产品方向演示 · 当前版本尚未提供</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="story story-understand" data-reveal>
+            <div class="story-copy">
+              <div class="scene-tabs" role="tablist" aria-label="理解账本的场景">
+                <button
+                  type="button"
+                  id="tab-attribution"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-attribution"
+                  data-scene="attribution"
+                >
+                  看看变化</button
+                ><button
+                  type="button"
+                  id="tab-categories"
+                  role="tab"
+                  aria-selected="false"
+                  tabindex="-1"
+                  aria-controls="panel-categories"
+                  data-scene="categories"
+                >
+                  分类慢慢形成
+                </button>
+              </div>
+              <div class="scene-text" data-text="attribution">
+                <span class="feature-status" data-feature="spendingAttribution">逐步完善</span>
+                <h3>不只知道花了多少，<br />也知道为什么。</h3>
+                <p>
+                  已经可以按分类回顾消费、查看月报。<br />下一步，我们希望用一句话，<br />说清生活里发生了什么变化。
+                </p>
+              </div>
+              <div class="scene-text" data-text="categories" hidden>
+                <span class="feature-status" data-feature="adaptiveCategories">逐步完善</span>
+                <h3>分类不用<br />一开始就想好。</h3>
+                <p>
+                  已有自定义分类与确认后的分类记忆。<br />我们希望让分类跟着生活慢慢形成，<br />常用的留下，不用的少一点。
+                </p>
+              </div>
+            </div>
+            <div class="scene-surface insight-surface">
+              <div
+                class="scene-panel"
+                id="panel-attribution"
+                role="tabpanel"
+                aria-labelledby="tab-attribution"
+                tabindex="0"
+              >
+                <div class="insight-chart">
+                  <div class="chart-label">餐饮支出 <span>月度回顾</span></div>
+                  <div
+                    class="chart-columns"
+                    role="img"
+                    aria-label="演示数据：上月餐饮支出 860 元，本月 1120 元"
+                  >
+                    <div><i style="--bar-height: 58%"></i><span>上月</span></div>
+                    <div><i style="--bar-height: 78%"></i><span>本月</span></div>
+                  </div>
+                  <div class="insight-sentence">
+                    <span class="ai-spark" aria-hidden="true">✦</span>
+                    <p>本月餐饮支出比平时多了一些。<br /><strong>主要变化：工作日晚餐外卖更多了。</strong></p>
+                  </div>
+                </div>
+                <p class="demo-caption">归因方向演示 · 具体消费归因正在打磨</p>
+              </div>
+              <div
+                class="scene-panel"
+                id="panel-categories"
+                role="tabpanel"
+                aria-labelledby="tab-categories"
+                tabindex="0"
+                hidden
+              >
+                <div class="category-demo">
+                  <span class="ai-spark" aria-hidden="true">✦</span>
+                  <h4>常用分类</h4>
+                  <div class="category-tags">
+                    <span>餐饮</span><span>交通</span><span>购物</span><span>住房</span><span>娱乐</span
+                    ><span>其他</span>
+                  </div>
+                  <p>让分类跟着生活慢慢形成。</p>
+                </div>
+                <p class="demo-caption">分类方向演示 · 自动整理分类正在打磨</p>
+              </div>
+            </div>
+          </div>
+
+          <article class="alias-story" data-reveal aria-labelledby="alias-title">
+            <div class="alias-copy">
+              <p class="section-kicker"><span class="ai-spark" aria-hidden="true">✦</span> 属于你的表达</p>
+              <h3 id="alias-title">有些话，<br />只有自己的账本懂。</h3>
+              <p>
+                “老地方”，是公司附近的面馆。<br />“小蓝”，是每天骑的那辆单车。<br />用得久一点，让账本开始听懂你的日常。
+              </p>
+              <div class="alias-tags" aria-hidden="true">
+                <span>楼下</span><span>小蓝</span><span>房东</span><span class="highlight">老地方</span
+                ><span>健身房</span>
+              </div>
+              <p class="alias-truth" data-feature-note="personalAliases">
+                当前会记住已确认表达对应的分类与账户；地点含义理解与省略金额单位的写法正在打磨。
+              </p>
+            </div>
+            <div class="alias-demo">
+              <div class="alias-tabs" role="tablist" aria-label="称呼记忆的两次记录">
+                <button
+                  type="button"
+                  id="tab-first"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-first"
+                  data-scene="first"
+                >
+                  第一次记</button
+                ><span aria-hidden="true">→</span
+                ><button
+                  type="button"
+                  id="tab-again"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="panel-again"
+                  tabindex="-1"
+                  data-scene="again"
+                >
+                  下一次记
+                </button>
+              </div>
+              <div class="alias-demo-body">
+                <div
+                  id="panel-first"
+                  class="scene-panel"
+                  role="tabpanel"
+                  aria-labelledby="tab-first"
+                  tabindex="0"
+                >
+                  <div class="input-example">
+                    老地方 28<span class="input-caret" aria-hidden="true"></span>
+                  </div>
+                  <div class="alias-response">
+                    <span class="ai-spark" aria-hidden="true">✦</span>
+                    <div>
+                      <strong>“老地方”是什么？</strong>
+                      <p>认识一下，下次就不用再解释。</p>
+                    </div>
+                  </div>
+                  <div class="alias-confirmation">
+                    <span>公司附近的面馆</span><span class="category-pill">餐饮</span
+                    ><span class="checkmark" aria-hidden="true">✓</span>
+                  </div>
+                </div>
+                <div
+                  id="panel-again"
+                  class="scene-panel"
+                  role="tabpanel"
+                  aria-labelledby="tab-again"
+                  tabindex="0"
+                  hidden
+                >
+                  <div class="input-example">
+                    老地方 32<span class="input-caret" aria-hidden="true"></span>
+                  </div>
+                  <div class="alias-response">
+                    <span class="ai-spark" aria-hidden="true">✦</span>
+                    <div>
+                      <strong>这次，账本认识它了。</strong>
+                      <p>少一次选择，多一点熟悉。</p>
+                    </div>
+                  </div>
+                  <div class="alias-confirmation">
+                    <span>公司附近的面馆 <small>餐饮</small></span
+                    ><strong>¥32</strong><span class="checkmark" aria-hidden="true">✓</span>
+                  </div>
+                </div>
+              </div>
+              <p class="demo-caption">产品方向演示 · 已有分类与账户记忆，地点理解正在打磨</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="quiet-section container" aria-labelledby="quiet-title" data-reveal>
+        <span class="quiet-star" aria-hidden="true">✦</span>
+        <p class="section-kicker">我们想做的，是一种安静的陪伴</p>
+        <h2 id="quiet-title">能不打扰，就不打扰。</h2>
+        <p>
+          我们希望，随想记不用一直聊天、一直提醒、一直给建议。<br />真正需要处理的时候出现。<br />没什么问题的时候，就安静一点。
+        </p>
+        <div class="quiet-status">今天一切正常 <span aria-hidden="true">✓</span></div>
+        <span class="quiet-caption">产品体验方向</span>
+      </section>
+
+      <section class="basics container" aria-labelledby="basics-title">
+        <div class="basics-heading">
+          <p class="section-kicker">先把记账这件事做好</p>
+          <h2 id="basics-title">该有的，<br />都简单地放在那里。</h2>
+        </div>
+        <div class="basic-list">
+          <article>
+            <svg aria-hidden="true"><use href="#icon-book" /></svg>
+            <div>
+              <h3>日常记账</h3>
+              <p>记录收入和支出。</p>
+            </div>
+            <span aria-hidden="true">01</span>
+          </article>
+          <article>
+            <svg aria-hidden="true"><use href="#icon-wallet" /></svg>
+            <div>
+              <h3>资产</h3>
+              <p>知道自己的钱在哪里。</p>
+            </div>
+            <span aria-hidden="true">02</span>
+          </article>
+          <article>
+            <svg aria-hidden="true"><use href="#icon-budget" /></svg>
+            <div>
+              <h3>预算</h3>
+              <p>知道这个月还剩多少。</p>
+            </div>
+            <span aria-hidden="true">03</span>
+          </article>
+          <article>
+            <svg aria-hidden="true"><use href="#icon-chart" /></svg>
+            <div>
+              <h3>统计</h3>
+              <p>看看钱去了哪里。</p>
+            </div>
+            <span aria-hidden="true">04</span>
+          </article>
+        </div>
+      </section>
+
+      <section class="devices-section container section-space" id="devices" aria-labelledby="devices-title">
+        <div class="section-heading">
+          <p class="section-kicker">换个屏幕，继续自己的节奏</p>
+          <h2 id="devices-title">手机记，电脑看。</h2>
+          <p>随想记拥有 Android 与 Windows 客户端。<br />同一个账户，在不同设备继续记录和查看自己的账目。</p>
+        </div>
+        <div class="device-connection">
+          <div class="device-outline">
+            <svg aria-hidden="true"><use href="#icon-phone" /></svg><span>Android</span
+            ><small>随手记录</small>
+          </div>
+          <div class="connection-line" aria-hidden="true"><i></i><span>↔</span><i></i></div>
+          <div class="connection-brand"><span aria-hidden="true">✦</span><span data-brand>随想记</span></div>
+          <div class="connection-line" aria-hidden="true"><i></i><span>↔</span><i></i></div>
+          <div class="device-outline">
+            <svg aria-hidden="true"><use href="#icon-monitor" /></svg><span>Windows</span
+            ><small>从容回顾</small>
+          </div>
+        </div>
+        <p class="platform-note">Android 可下载 · Windows 公开安装包整理中</p>
+      </section>
+
+      <section class="download-section" id="download" aria-labelledby="download-title">
+        <div class="container">
+          <div class="section-heading">
+            <p class="section-kicker">从一笔小小的记录开始</p>
+            <h2 id="download-title">下载随想记。</h2>
+            <p>开始简单一点的记账。</p>
+          </div>
+          <div class="download-grid">
+            <article class="download-card">
+              <div class="platform-heading">
+                <svg aria-hidden="true"><use href="#icon-android" /></svg
+                ><span class="availability">现在开始</span>
+              </div>
+              <h3>Android</h3>
+              <p>把生活，装进口袋里。</p>
+              <dl class="download-meta" data-download-meta="android">
+                <div>
+                  <dt>当前版本</dt>
+                  <dd data-download-version="android">1.0.4 · Build 7</dd>
+                </div>
+                <div>
+                  <dt>文件大小</dt>
+                  <dd data-download-size="android">80.14 MB</dd>
+                </div>
+              </dl>
+              <div data-download-slot="android">
+                <button class="button button-download" type="button" disabled>正在核实下载信息</button>
+              </div>
+              <p class="download-subnote">来自 GitHub Release 的 APK</p>
+            </article>
+            <article class="download-card windows-card">
+              <div class="platform-heading">
+                <svg aria-hidden="true"><use href="#icon-windows" /></svg
+                ><span class="availability muted-availability">稍后见</span>
+              </div>
+              <h3>Windows</h3>
+              <p>大一点的屏幕，多一点从容。</p>
+              <div class="windows-status" data-download-meta="windows">
+                <span data-windows-status>Windows 版整理中</span
+                ><small>公开安装包准备好后，会在这里提供。</small>
+              </div>
+              <div data-download-slot="windows">
+                <button class="button button-download" type="button" disabled>Windows 版整理中</button>
+              </div>
+              <p class="download-subnote">当前暂无公开下载文件</p>
+            </article>
+          </div>
+          <div class="release-links">
+            <a
+              class="text-link"
+              data-github
+              href="https://github.com/lucas045057-eng/suixiangji"
+              target="_blank"
+              rel="noopener noreferrer"
+              >在 GitHub 查看项目 <span aria-hidden="true">↗</span><span class="sr-only">（新窗口）</span></a
+            ><a
+              data-release
+              href="https://github.com/lucas045057-eng/suixiangji/releases/tag/v1.0.4"
+              target="_blank"
+              rel="noopener noreferrer"
+              >版本说明 <span aria-hidden="true">↗</span><span class="sr-only">（新窗口）</span></a
+            >
+          </div>
+          <noscript
+            ><p class="noscript-note">
+              下载信息需要 JavaScript 校验。你也可以<a
+                href="https://github.com/lucas045057-eng/suixiangji/releases"
+                >前往 GitHub Releases 查看发布包</a
+              >。
+            </p></noscript
+          >
+        </div>
+      </section>
+
+      <section class="about-section container section-space" aria-labelledby="about-title">
+        <p class="section-kicker">一点关于名字的小事</p>
+        <h2 id="about-title">为什么叫「随想记」？</h2>
+        <p>
+          记账不应该是一件有压力的事情。<br />想到的时候记一下，慢慢留下自己的生活轨迹。<br />不需要把一切都整理得井井有条。<br />我们希望，需要的时候，随想记会帮你收拾好。
+        </p>
+        <p class="closing-line">随想记录，简单生活。</p>
+        <span class="about-flower" aria-hidden="true">✦</span>
+      </section>
+    </main>
+
+    <footer class="site-footer container">
+      <div class="footer-top">
+        <div>
+          <a class="brand" href="#home"><span aria-hidden="true">✦</span> <span data-brand>随想记</span></a>
+          <p data-tagline>极简至上，越用越懂你的 AI 记账。</p>
+        </div>
+        <nav aria-label="页脚导航">
+          <a href="#ai">AI</a><a href="#download">下载</a
+          ><a
+            data-github
+            href="https://github.com/lucas045057-eng/suixiangji"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub <span aria-hidden="true">↗</span><span class="sr-only">（新窗口）</span></a
+          >
+        </nav>
+      </div>
+      <div class="footer-bottom">
+        <span data-copyright>© 2026 随想记</span><span>留一点时间，给生活。</span>
+      </div>
+    </footer>
+
+    <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <symbol id="icon-arrow-down" viewBox="0 0 24 24"><path d="M12 4v15m-6-6 6 6 6-6" /></symbol>
+        <symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10H3V10Zm6 10v-7h6v7" /></symbol>
+        <symbol id="icon-book" viewBox="0 0 24 24"><path d="M5 3h14v18H5V3Zm4 5h6m-6 4h6m-6 4h4" /></symbol>
+        <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 3v17h17M8 16v-5m5 5V6m5 10V9" /></symbol>
+        <symbol id="icon-wallet" viewBox="0 0 24 24">
+          <path d="M4 7V4h14v4M4 7h16v13H4V7Zm11 5h6v4h-6v-4" />
+        </symbol>
+        <symbol id="icon-person" viewBox="0 0 24 24">
+          <circle cx="12" cy="7" r="4" />
+          <path d="M4 21v-3a8 8 0 0 1 16 0v3" />
+        </symbol>
+        <symbol id="icon-food" viewBox="0 0 24 24">
+          <path d="M4 12h16a8 8 0 0 1-16 0Zm-2 0h20M9 8V4m6 4V3M9 21h6" />
+        </symbol>
+        <symbol id="icon-train" viewBox="0 0 24 24">
+          <rect x="5" y="3" width="14" height="16" rx="3" />
+          <path d="M5 10h14M8 15h1m6 0h1M8 19l-2 3m10-3 2 3" />
+        </symbol>
+        <symbol id="icon-bag" viewBox="0 0 24 24">
+          <path d="M4 8h16l1 13H3L4 8Zm4 0V6a4 4 0 0 1 8 0v2" />
+        </symbol>
+        <symbol id="icon-play" viewBox="0 0 24 24">
+          <rect x="3" y="5" width="18" height="14" rx="3" />
+          <path d="m10 9 5 3-5 3V9Z" />
+        </symbol>
+        <symbol id="icon-phone" viewBox="0 0 24 24">
+          <rect x="6" y="2" width="12" height="20" rx="2" />
+          <path d="M10 5h4m-3 14h2" />
+        </symbol>
+        <symbol id="icon-monitor" viewBox="0 0 24 24">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <path d="M12 17v4m-5 0h10" />
+        </symbol>
+        <symbol id="icon-budget" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 6v6l4 3" />
+        </symbol>
+        <symbol id="icon-android" viewBox="0 0 24 24">
+          <path
+            d="M5 10h14v9H5v-9Zm0 0a7 7 0 0 1 14 0M8 4 6 1m10 3 2-3M8 19v3m8-3v3M2 10v8m20-8v8M9 7h.1M15 7h.1"
+          />
+        </symbol>
+        <symbol id="icon-windows" viewBox="0 0 24 24">
+          <path d="m2 4 8-1v8H2V4Zm11-1 9-1v9h-9V3ZM2 14h8v8l-8-1v-7Zm11 0h9v9l-9-1v-8Z" />
+        </symbol>
+      </defs>
+    </svg>
+  </body>
+</html>

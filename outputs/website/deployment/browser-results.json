@@ -1,0 +1,91 @@
+{
+  "url": "https://suixiangji.icu",
+  "viewports": [
+    {
+      "width": 1920,
+      "documentWidth": 1920,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 1440,
+      "documentWidth": 1440,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 1366,
+      "documentWidth": 1366,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 1024,
+      "documentWidth": 1024,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 768,
+      "documentWidth": 768,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 390,
+      "documentWidth": 390,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    },
+    {
+      "width": 375,
+      "documentWidth": 375,
+      "overflow": false,
+      "sceneSwitches": "PASS"
+    }
+  ],
+  "checks": [
+    "valid HTTPS www redirects to the official apex homepage, without a blog redirect",
+    "mobile menu: keyboard open, Escape close, focus return, inert hidden links, navigation anchor",
+    "desktop navigation: all four section anchors, header scroll state",
+    "scene tabs: keyboard arrows and Home, demonstration actions, cleanup disclosure",
+    "download state: Android enabled, Windows disabled without link; no broken anchors",
+    "SEO and resources: title, description, canonical, OG, favicon, one H1, language, all assets served",
+    "empty URLs fail closed even when enabled is true",
+    "reduced motion: smooth scrolling and reveal animation disabled",
+    "no-JS fallback: content visible, download safely disabled, Releases link present",
+    "normal motion: smooth scroll enabled, intersection reveal visible"
+  ],
+  "errors": [],
+  "accessibility": [
+    {
+      "width": 1920,
+      "violations": []
+    },
+    {
+      "width": 1440,
+      "violations": []
+    },
+    {
+      "width": 1366,
+      "violations": []
+    },
+    {
+      "width": 1024,
+      "violations": []
+    },
+    {
+      "width": 768,
+      "violations": []
+    },
+    {
+      "width": 390,
+      "violations": []
+    },
+    {
+      "width": 375,
+      "violations": []
+    }
+  ],
+  "result": "PASS"
+}
