@@ -280,16 +280,22 @@
       ],
       "tests": [
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
-        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart"
+        "outputs/wealthmate_flutter/test/v105_entry_preferences_test.dart",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart"
       ],
       "evidence": [
         "flutter-final.log",
-        "backend-final.log"
+        "backend-final.log",
+        "07_独立审查报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log"
       ],
       "commits": [
         "59fab53",
         "90833e5",
-        "2433bb1"
+        "2433bb1",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "acceptance_assertion": "分类/账户维度可切换；仅显示当前图型，聚合与同范围账本一致。",
@@ -437,19 +443,28 @@
       "tests": [
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
         "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
-        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_concurrent_edit_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_receipt_failure_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_review_regressions.py"
       ],
       "evidence": [
         "flutter-final.log",
         "backend-final.log",
-        "flutter-live-api.log"
+        "flutter-live-api.log",
+        "07_独立审查报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log"
       ],
       "commits": [
         "59fab53",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
-      "acceptance_assertion": "月度总额沿用原预算实体，反复编辑不重复；分类分配精确到分，总额和分类限额不相加，离线及双端一致。",
+      "acceptance_assertion": "月度总额沿用原预算实体，反复编辑不重复；分类分配精确到分，总额和分类限额不相加，离线及双端一致。；不同ID同月预算受控冲突不阻塞账目，最新编辑在排队、回执失败、恢复失败及重启后仍保留并上传。",
       "case_id": "ACC-UR-011"
     },
     {
@@ -490,7 +505,6 @@
         "outputs/wealthmate_flutter/lib/ui/ledger_page.dart"
       ],
       "tests": [
-        "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart"
       ],
       "evidence": [
@@ -597,19 +611,26 @@
         "outputs/wealthmate_flutter/test/v105_recovery_flow_test.dart",
         "outputs/wealthmate_backend/tests/test_v105_recovery.py",
         "outputs/wealthmate_backend/tests/test_v105_recovery_postgres.py",
-        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_review_regressions.py"
       ],
       "evidence": [
         "flutter-final.log",
         "backend-final.log",
-        "flutter-live-api.log"
+        "flutter-live-api.log",
+        "07_独立审查报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log"
       ],
       "commits": [
         "fc909de",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
-      "acceptance_assertion": "预存恢复码可在未登录时重置原账号密码；一次消费、限流、统一失败提示，撤销旧会话但用户ID和财务数据保留。",
+      "acceptance_assertion": "预存恢复码可在未登录时重置原账号密码；一次消费、限流、统一失败提示，撤销旧会话但用户ID和财务数据保留。；共享写认证与push锁后复核，旧请求在恢复提交后不能写入。",
       "case_id": "ACC-UR-014"
     },
     {
@@ -867,16 +888,22 @@
       ],
       "tests": [
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
-        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py"
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart"
       ],
       "evidence": [
         "flutter-final.log",
-        "backend-final.log"
+        "backend-final.log",
+        "07_独立审查报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log"
       ],
       "commits": [
         "59fab53",
         "2433bb1",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "acceptance_assertion": "日均只取选定日期范围：历史月按完整自然日、当前月截至今天、未来月0；图表全月总额与月度预算一致。",
@@ -973,15 +1000,21 @@
       ],
       "tests": [
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
-        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py"
+        "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart"
       ],
       "evidence": [
         "flutter-final.log",
-        "backend-final.log"
+        "backend-final.log",
+        "07_独立审查报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log"
       ],
       "commits": [
         "59fab53",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "acceptance_assertion": "派生重复项仍逐行核验：与UR-020共享下钻，待换算项明确计数，不把未知金额静默当成0。",
@@ -1020,18 +1053,28 @@
         "outputs/wealthmate_backend/tests/test_v105_assets_closure.py",
         "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
         "outputs/wealthmate_flutter/test/core/two_device_sync_test.dart",
-        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
-        "outputs/wealthmate_flutter/test/v105_sqlite_upgrade_test.dart"
+        "outputs/wealthmate_flutter/test/v105_sqlite_upgrade_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_concurrent_edit_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_receipt_failure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_review_regressions.py"
       ],
       "evidence": [
         "flutter-final.log",
         "backend-final.log",
-        "flutter-live-api.log"
+        "flutter-live-api.log",
+        "07_独立审查报告.md",
+        "08_服务器部署报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log",
+        "review-round2-green-backend.log"
       ],
       "commits": [
         "22ace70",
         "9bb675a",
-        "1a2e19b"
+        "1a2e19b",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "case_id": "ACC-C01",
@@ -1285,16 +1328,27 @@
       "tests": [
         "outputs/wealthmate_flutter/test/v105_financial_scope_test.dart",
         "outputs/wealthmate_backend/tests/test_v105_financial_scope.py",
-        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_concurrent_edit_test.dart",
+        "outputs/wealthmate_flutter/test/v105_budget_receipt_failure_test.dart",
+        "outputs/wealthmate_flutter/test/v105_review_regressions_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_review_regressions.py"
       ],
       "evidence": [
         "flutter-final.log",
         "backend-final.log",
-        "flutter-live-api.log"
+        "flutter-live-api.log",
+        "07_独立审查报告.md",
+        "08_服务器部署报告.md",
+        "review-round2-atomic-green.log",
+        "review-round2-receipt-green.log",
+        "review-round2-green-backend.log"
       ],
       "commits": [
         "59fab53",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "case_id": "ACC-C07",
@@ -1409,16 +1463,23 @@
         "outputs/wealthmate_flutter/test/v105_recovery_flow_test.dart",
         "outputs/wealthmate_backend/tests/test_v105_recovery.py",
         "outputs/wealthmate_backend/tests/test_v105_recovery_postgres.py",
-        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart"
+        "outputs/wealthmate_flutter/integration/v105_live_api_test.dart",
+        "outputs/wealthmate_backend/tests/test_v105_review_regressions.py"
       ],
       "evidence": [
         "flutter-final.log",
         "backend-final.log",
-        "flutter-live-api.log"
+        "flutter-live-api.log",
+        "07_独立审查报告.md",
+        "08_服务器部署报告.md",
+        "review-round2-green-backend.log",
+        "server-production-smoke.json"
       ],
       "commits": [
         "fc909de",
-        "9bb675a"
+        "9bb675a",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "case_id": "ACC-C10",
@@ -1501,11 +1562,18 @@
         "phone-before-summary.log",
         "phone-after-summary.log",
         "windows-build.log",
-        "windows-startup-smoke.log"
+        "windows-startup-smoke.log",
+        "07_独立审查报告.md",
+        "08_服务器部署报告.md",
+        "phone-final-reviewed-install.log",
+        "server-deployment-v105.json",
+        "server-postcheck-v105.json"
       ],
       "commits": [
         "1a2e19b",
-        "2433bb1"
+        "2433bb1",
+        "a0a40cf",
+        "b5f8fab"
       ],
       "remaining": [],
       "case_id": "ACC-C12",
@@ -1624,17 +1692,29 @@
       "implementation_status": "已实现",
       "acceptance_status": "NOT VERIFIED",
       "remaining": [
-        "独立代码审查因执行额度不足未运行；完整Windows人工业务流程和第二台Android物理设备验收未验证。"
+        "完整Windows人工业务流程未验证；第二台Android物理设备验收未验证。"
       ]
     }
   ],
-  "code_sha": "9bb675a22b083ca9d2ef89a3af6a7c3abd04b9e7",
+  "code_sha": "b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de",
   "as_of": "2026-10-09 Asia/Shanghai",
-  "release_status": "NOT READY：保留候选版，尚有未验证发布门禁",
+  "release_status": "DEPLOYED：服务器与Android分发已更新1.0.5+8；完整Windows人工流程及第二台物理Android验收未验证",
   "review": {
-    "independent_status": "NOT VERIFIED",
-    "reason": "按执行技能尝试一次独立审查，审查代理在执行前因额度限制失败，无审查结论。",
-    "self_review": "完成；修复编辑换币快照、历史汇率日期、图表预算范围及旧CNY空快照的回归缺陷。"
+    "independent_status": "PASS",
+    "conclusion": "APPROVE",
+    "candidate_sha": "b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de",
+    "report": "07_独立审查报告.md",
+    "independent_external_reproductions": 4,
+    "independent_related_flutter_tests": 38,
+    "findings_closed": [
+      "R1",
+      "R2",
+      "R3",
+      "R4",
+      "R5",
+      "R6"
+    ],
+    "remaining": []
   },
   "metrics": {
     "raw_pass": 18,
@@ -1644,5 +1724,82 @@
     "implemented_packages": 6,
     "engineering_pass": 12,
     "engineering_total": 12
+  },
+  "deployment": {
+    "status": "PASS",
+    "deployed_git_sha": "b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de",
+    "public_health": {
+      "status": "ok",
+      "service": "suixiangji-v1",
+      "git_sha": "b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de",
+      "server_time": "2026-10-09T14:58:09.209382Z"
+    },
+    "public_version": {
+      "latest_version": "1.0.5",
+      "latest_build": 8,
+      "minimum_supported_version": "1.0.0",
+      "minimum_supported_build": 3,
+      "force_update": false,
+      "download_url": "https://download.suixiangji.icu/app/suixiangji-v1.0.5-build8.apk",
+      "release_notes": "V1.0.5：账户用途与归档、统计与预算优化、恢复码找回密码、同步与升级修复。"
+    },
+    "database_head": "0004_v105_recovery",
+    "legacy_data_unchanged": true,
+    "database_container_preserved": true,
+    "database_volume": "suixiangji-staging_wealthmate_pgdata",
+    "backup_directory": "/opt/suixiangji/release-backups/v1.0.5-20261009T142938Z",
+    "backup_restore_verified": true,
+    "apk_sha256": "7e5ad62255b219e7901b6bd29bae9a60e0dc522839d56b66fe422406ccf48f55",
+    "download_url": "https://download.suixiangji.icu/app/suixiangji-v1.0.5-build8.apk",
+    "maintenance_seconds": 12.15,
+    "table_counts": {
+      "accounts": 22,
+      "agent_logs": 61,
+      "budgets": 2,
+      "categories": 64,
+      "exchange_rates": 8,
+      "invite_codes": 7,
+      "monthly_reports": 11,
+      "net_worth_snapshots": 11,
+      "sync_operations": 216,
+      "transactions": 112,
+      "users": 11
+    },
+    "github_pr": "https://github.com/lucas045057-eng/suixiangji/pull/2",
+    "synthetic_smoke": {
+      "status": "PASS",
+      "checks": [
+        "register_login_same_user",
+        "account_note",
+        "budget_collision_preserves_bill",
+        "sync_replay_idempotent",
+        "recovery_revokes_old_sessions_and_consumes_code",
+        "recovery_preserves_identity_and_finances",
+        "synthetic_user_and_invite_removed"
+      ],
+      "real_user_data_not_modified": true
+    },
+    "postcheck": {
+      "status": "PASS",
+      "original_rows_and_legacy_fields_unchanged": true,
+      "synthetic_smoke_data_cleaned": true,
+      "nginx_config_valid": true,
+      "existing_admin_running": true,
+      "public_sync_requires_auth": true,
+      "table_counts": {
+        "accounts": 22,
+        "agent_logs": 61,
+        "budgets": 2,
+        "categories": 64,
+        "exchange_rates": 8,
+        "invite_codes": 7,
+        "monthly_reports": 11,
+        "net_worth_snapshots": 11,
+        "sync_operations": 216,
+        "transactions": 112,
+        "users": 11
+      }
+    },
+    "independent_external_client_access": "NOT VERIFIED: local TLS errors / browser blocked by client / phone browser action blocked by policy"
   }
 }
