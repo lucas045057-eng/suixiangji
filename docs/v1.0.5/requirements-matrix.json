@@ -1698,7 +1698,7 @@
   ],
   "code_sha": "b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de",
   "as_of": "2026-10-09 Asia/Shanghai",
-  "release_status": "DEPLOYED：服务器与Android分发已更新1.0.5+8；完整Windows人工流程及第二台物理Android验收未验证",
+  "release_status": "DEPLOYED：Android更新分发1.0.5+9，V1.0.5已打标签并合并main；第二台手机下载安装通过（用户真机确认）；完整Windows人工流程及第二台手机其他业务核验未验证",
   "review": {
     "independent_status": "PASS",
     "conclusion": "APPROVE",
@@ -1801,5 +1801,14 @@
       }
     },
     "independent_external_client_access": "NOT VERIFIED: local TLS errors / browser blocked by client / phone browser action blocked by policy"
+  },
+  "post_release_acceptance_20261010": {
+    "android_version": "1.0.5+9",
+    "second_phone_download_install": "PASS_USER_CONFIRMED",
+    "evidence_source": "user message in current task",
+    "user_statement": "第二台手机下载安装验证通过",
+    "later_automatic_update_prompt": "NOT_VERIFIED",
+    "second_phone_full_business_data_checks": "NOT_VERIFIED",
+    "windows_full_manual_flows": "NOT_VERIFIED"
   }
 }
