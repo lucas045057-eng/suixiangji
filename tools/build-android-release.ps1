@@ -36,7 +36,7 @@ $ErrorActionPreference = 'Stop'
 
 $expectedApiBaseUrl = 'https://api.suixiangji.icu'
 $expectedVersionName = '1.0.5'
-$expectedVersionCode = 8
+$expectedVersionCode = 9
 $expectedApplicationId = 'com.example.wealthmate_flutter'
 $expectedSigningCertificateSha256 = 'CADEB8CA7786B755305E07A086B407D8DA7D6751D54566D9A0787D457DF32458'
 $forbiddenV1_0_2ApkSha256 = '7E71B0FEF91F9C734B5FB99A0ABAB8F783C2A28ADB8EEDA7A26A82EEEA29058A'

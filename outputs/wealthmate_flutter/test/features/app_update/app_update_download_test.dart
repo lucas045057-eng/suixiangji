@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:wealthmate_flutter/core/network/http_client_factory.dart';
 import 'package:wealthmate_flutter/features/app_update/data/app_update_downloader.dart';
 
 typedef DownloadProgress = void Function(int receivedBytes, int? totalBytes);
 AppUpdateDownloader _productionDownloader({
-  required HttpClient client,
+  required http.Client client,
   required Future<Directory> Function() destinationDirectory,
 }) =>
     AppUpdateDownloader(
@@ -14,83 +16,30 @@ AppUpdateDownloader _productionDownloader({
       destinationDirectory: destinationDirectory,
     );
 
-class FakeHttpClient implements HttpClient {
+class FakeHttpClient extends http.BaseClient {
   FakeHttpClient(this.response);
-
-  final HttpClientResponse response;
+  final http.StreamedResponse response;
   final List<Uri> openedUrls = <Uri>[];
-
   @override
-  Future<HttpClientRequest> openUrl(String method, Uri url) async {
-    openedUrls.add(url);
-    return FakeHttpClientRequest(response);
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    openedUrls.add(request.url);
+    return response;
   }
-
-  @override
-  void close({bool force = false}) {}
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-class FakeHttpClientRequest implements HttpClientRequest {
-  FakeHttpClientRequest(this.response);
-
-  final HttpClientResponse response;
-
-  @override
-  Future<HttpClientResponse> close() async => response;
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class FakeHttpClientResponse extends Stream<List<int>>
-    implements HttpClientResponse {
-  FakeHttpClientResponse({
-    required this.statusCode,
-    required this.contentLength,
-    required Stream<List<int>> body,
-  }) : _body = body;
-
-  factory FakeHttpClientResponse.bytes(
-    List<List<int>> chunks, {
-    int statusCode = HttpStatus.ok,
-    int? contentLength,
-  }) {
-    return FakeHttpClientResponse(
-      statusCode: statusCode,
-      contentLength: contentLength ??
-          chunks.fold<int>(0, (sum, chunk) => sum + chunk.length),
-      body: Stream<List<int>>.fromIterable(chunks),
-    );
-  }
-
-  final Stream<List<int>> _body;
-
-  @override
-  final int statusCode;
-
-  @override
-  final int contentLength;
-
-  @override
-  StreamSubscription<List<int>> listen(
-    void Function(List<int> event)? onData, {
-    Function? onError,
-    void Function()? onDone,
-    bool? cancelOnError,
-  }) {
-    return _body.listen(
-      onData,
-      onError: onError,
-      onDone: onDone,
-      cancelOnError: cancelOnError,
-    );
-  }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+class FakeHttpClientResponse extends http.StreamedResponse {
+  FakeHttpClientResponse(
+      {required int statusCode,
+      required int contentLength,
+      required Stream<List<int>> body})
+      : super(body, statusCode, contentLength: contentLength);
+  factory FakeHttpClientResponse.bytes(List<List<int>> chunks,
+          {int statusCode = HttpStatus.ok, int? contentLength}) =>
+      FakeHttpClientResponse(
+          statusCode: statusCode,
+          contentLength: contentLength ??
+              chunks.fold<int>(0, (sum, chunk) => sum + chunk.length),
+          body: Stream<List<int>>.fromIterable(chunks));
 }
 
 Future<List<String>> _filesUnder(Directory directory) async {
@@ -112,6 +61,30 @@ void main() {
     if (await appCache.exists()) {
       await appCache.delete(recursive: true);
     }
+  });
+
+  test('Android downloads use the established platform Cronet factory',
+      () async {
+    final client = FakeHttpClient(FakeHttpClientResponse.bytes([
+      [1, 2]
+    ]));
+    var cronetBuilds = 0;
+    final downloader = AppUpdateDownloader(
+        clientFactory: createPlatformHttpClientFactory(
+            isAndroid: true,
+            cronetClientBuilder: () {
+              cronetBuilds++;
+              return client;
+            },
+            packageHttpClientBuilder: () =>
+                throw StateError('Android must use Cronet')),
+        destinationDirectory: () async => appCache);
+    final path = await downloader.download(
+        Uri.parse('https://download.invalid/app.apk'),
+        onProgress: (_, __) {});
+    expect(cronetBuilds, 1);
+    expect(await File(path).readAsBytes(), [1, 2]);
+    downloader.close();
   });
 
   test('download rejects non-HTTPS URLs before opening a connection', () async {

@@ -57,7 +57,7 @@ class AppVersionTest(unittest.TestCase):
             result["body"],
             {
                 "latest_version": "1.0.5",
-                "latest_build": 8,
+                "latest_build": 9,
                 "minimum_supported_version": "1.0.0",
                 "minimum_supported_build": 3,
                 "force_update": False,

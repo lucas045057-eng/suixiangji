@@ -100,12 +100,18 @@ class WealthMateApp extends StatefulWidget {
   State<WealthMateApp> createState() => _WealthMateAppState();
 }
 
-class _WealthMateAppState extends State<WealthMateApp> {
+class _WealthMateAppState extends State<WealthMateApp>
+    with WidgetsBindingObserver {
   late bool authenticated;
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _checkingUpdate = false;
+  bool _showingUpdate = false;
+  int? _lastPromptedBuild;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     authenticated = widget.api == null ||
         (widget.api!.token != null && widget.api!.lastVerifiedUserId != null);
     widget.auth?.onAuthExpired = _handleAuthExpired;
@@ -119,6 +125,7 @@ class _WealthMateAppState extends State<WealthMateApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.auth?.onAuthExpired = null;
     widget.api?.close();
     super.dispose();
@@ -130,21 +137,48 @@ class _WealthMateAppState extends State<WealthMateApp> {
   }
 
   Future<void> _checkForStartupUpdate(AppUpdateStore updates) async {
-    await updates.check();
-    if (!mounted || !updates.updateAvailable) return;
-    final version = updates.remoteVersion;
-    if (version == null) return;
-    await showAppUpdateDialog(
-      context,
-      version: version,
-      forceUpdate: updates.forceUpdate,
-      updates: updates,
-    );
+    if (_checkingUpdate ||
+        _showingUpdate ||
+        _navigatorKey.currentState?.canPop() == true ||
+        !{
+          AppUpdateStatus.idle,
+          AppUpdateStatus.upToDate,
+          AppUpdateStatus.available,
+          AppUpdateStatus.failed
+        }.contains(updates.status)) return;
+    _checkingUpdate = true;
+    try {
+      await updates.check();
+      if (!mounted || !updates.updateAvailable) return;
+      final version = updates.remoteVersion;
+      // The app state's context is above MaterialApp and cannot open a dialog.
+      final updateContext = _navigatorKey.currentContext;
+      if (version == null ||
+          updateContext == null ||
+          !updateContext.mounted ||
+          version.latestBuild == _lastPromptedBuild) return;
+      _lastPromptedBuild = version.latestBuild;
+      _showingUpdate = true;
+      await showAppUpdateDialog(updateContext,
+          version: version, forceUpdate: updates.forceUpdate, updates: updates);
+    } finally {
+      _checkingUpdate = false;
+      _showingUpdate = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final updates = widget.updates;
+    if (state == AppLifecycleState.resumed && updates != null) {
+      unawaited(_checkForStartupUpdate(updates));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: '随想记',
       theme: wealthMateTheme(),

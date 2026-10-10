@@ -73,6 +73,11 @@ void main() {
       await api.pushStarted.future;
       await repository.saveBudget(const Budget(
           id: 'alias', month: '2026-10', categoryId: '__total__', limit: 300));
+      final edited = (await session.pendingOperations()).single;
+      expect(
+          edited.clientOpId, isNot(edited.submittedOperation!['client_op_id']),
+          reason:
+              'A later budget edit must not reuse the in-flight operation identity');
       store.fail = true;
       final failure = expectLater(syncing, throwsStateError);
       api.pushRelease.complete();

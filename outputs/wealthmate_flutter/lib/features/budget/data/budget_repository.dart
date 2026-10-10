@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import '../../../core/database/local_state_session.dart';
 import '../../../core/network/api_session.dart';
@@ -37,7 +38,7 @@ class BudgetRepository {
       appendOperations: [
         SyncOperation(
           clientOpId:
-              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}',
+              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}:${Random.secure().nextInt(1 << 32)}',
           entity: 'budgets',
           entityId: budget.id,
           type: SyncOperationType.upsert,
