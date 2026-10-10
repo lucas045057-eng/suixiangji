@@ -32,7 +32,7 @@
 
 2026-10-10 的 Android build9 修复启动更新弹窗的页面上下文，并让 APK 下载复用 Android Embedded Cronet；快速预算编辑的同步操作编号增加随机后缀，避免同一时刻的编辑复用编号。本轮 Flutter 399、构建守卫 18、后端发布信息 4 和静态分析通过。旧版 V1.0.4 的启动弹窗错误需要完成一次手动升级才能修复；在“我的 → 检查更新”重新获取更新信息后下载。[Android 1.0.5/build9 下载](https://github.com/lucas045057-eng/suixiangji/releases/download/v1.0.5/suixiangji-v1.0.5-build9.apk)。本轮下载与部署证据见 [修复报告](docs/v1.0.5/09_更新提示与下载修复报告.md)。
 
-原始记录18/18、工程要求12/12、工作包5/6通过。完整Windows人工流程和第二台物理Android仍未验证；2026-10-10 已从当前 Windows 电脑完整下载 GitHub 修复包，第二台手机的实际下载与覆盖安装仍待验证。feature分支已同步，main未合并；GitHub V1.0.5 已创建公开预发布。build8 的独立审查结论不扩展为 build9 独立审查通过。完整历史记录见 [部署报告](docs/v1.0.5/08_服务器部署报告.md) 和 `docs/v1.0.5/requirements-matrix.json`。
+原始记录18/18、工程要求12/12、工作包5/6通过。完整Windows人工流程和第二台物理Android仍未验证；2026-10-10 已从当前 Windows 电脑完整下载 GitHub 修复包，第二台手机的实际下载与覆盖安装仍待验证。主线整合状态见 [PR #2](https://github.com/lucas045057-eng/suixiangji/pull/2)；GitHub V1.0.5 已创建公开预发布。build9 在主线合并前补充独立代码审查，未发现阻断问题；build8 的历史独立审查结论保留原适用范围。完整历史记录见 [部署报告](docs/v1.0.5/08_服务器部署报告.md) 和 `docs/v1.0.5/requirements-matrix.json`。
 
 ## 目录
 
