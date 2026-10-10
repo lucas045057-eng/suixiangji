@@ -6,10 +6,18 @@ from ..core.rate_limit import limit_auth
 from ..db import get_db
 from ..models import User
 from . import service as auth_service
-from .schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
+from .schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn, RecoveryCodeIn, PasswordRecoverIn
 
 
 router = APIRouter()
+
+@router.post('/auth/recovery-code',dependencies=[Depends(limit_auth)])
+def generate_recovery_code(payload: RecoveryCodeIn, db: Session=Depends(get_db), user:User=Depends(get_current_user)) -> dict:
+    return auth_service.generate_recovery_code(db,user,payload)
+
+@router.post('/auth/recover',dependencies=[Depends(limit_auth)])
+def recover_password(payload:PasswordRecoverIn,db:Session=Depends(get_db)) -> dict:
+    return auth_service.recover_password(db,payload)
 
 
 @router.post("/auth/register", status_code=201, dependencies=[Depends(limit_auth)])

@@ -68,6 +68,8 @@ class Account {
     this.exchangeRateSource,
     this.isLiquid = false,
     this.isDefaultPayment = false,
+    this.note = '',
+    this.archivedAt,
     this.deletedAt,
     this.serverVersion,
     this.updatedAt,
@@ -85,6 +87,9 @@ class Account {
   final String? exchangeRateSource;
   final bool isLiquid;
   final bool isDefaultPayment;
+  final String note;
+  final String? archivedAt;
+  bool get isActive => deletedAt == null && archivedAt == null;
   final String? deletedAt;
   final int? serverVersion;
   final String? updatedAt;
@@ -102,6 +107,9 @@ class Account {
     String? exchangeRateSource,
     bool? isLiquid,
     bool? isDefaultPayment,
+    String? note,
+    String? archivedAt,
+    bool clearArchivedAt = false,
     String? deletedAt,
     int? serverVersion,
     String? updatedAt,
@@ -119,6 +127,8 @@ class Account {
       exchangeRateSource: exchangeRateSource ?? this.exchangeRateSource,
       isLiquid: isLiquid ?? this.isLiquid,
       isDefaultPayment: isDefaultPayment ?? this.isDefaultPayment,
+      note: note ?? this.note,
+      archivedAt: clearArchivedAt ? null : archivedAt ?? this.archivedAt,
       deletedAt: deletedAt ?? this.deletedAt,
       serverVersion: serverVersion ?? this.serverVersion,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -138,6 +148,8 @@ class Account {
         'opening_rate_source': exchangeRateSource,
         'is_liquid': isLiquid,
         'is_default_payment': isDefaultPayment,
+        'note': note,
+        'archived_at': archivedAt,
         'deleted_at': deletedAt,
         'server_version': serverVersion,
         'updated_at': updatedAt,
@@ -156,6 +168,8 @@ class Account {
         exchangeRateSource: json['opening_rate_source'] as String?,
         isLiquid: json['is_liquid'] as bool? ?? false,
         isDefaultPayment: json['is_default_payment'] as bool? ?? false,
+        note: json['note'] as String? ?? '',
+        archivedAt: json['archived_at'] as String?,
         deletedAt: json['deleted_at'] as String?,
         serverVersion: (json['server_version'] as num?)?.toInt(),
         updatedAt: json['updated_at'] as String?,
@@ -546,6 +560,8 @@ class FinanceState {
   const FinanceState({
     this.schemaVersion = 1,
     this.currentMonth = '',
+    this.preferredCurrency = 'CNY',
+    this.commonCurrencies = const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],
     this.accounts = const <Account>[],
     this.categories = const <Category>[],
     this.transactions = const <FinanceTransaction>[],
@@ -561,6 +577,8 @@ class FinanceState {
 
   final int schemaVersion;
   final String currentMonth;
+  final String preferredCurrency;
+  final List<String> commonCurrencies;
   final List<Account> accounts;
   final List<Category> categories;
   final List<FinanceTransaction> transactions;
@@ -576,6 +594,8 @@ class FinanceState {
   FinanceState copyWith({
     int? schemaVersion,
     String? currentMonth,
+    String? preferredCurrency,
+    List<String>? commonCurrencies,
     List<Account>? accounts,
     List<Category>? categories,
     List<FinanceTransaction>? transactions,
@@ -591,6 +611,8 @@ class FinanceState {
     return FinanceState(
       schemaVersion: schemaVersion ?? this.schemaVersion,
       currentMonth: currentMonth ?? this.currentMonth,
+      preferredCurrency: preferredCurrency ?? this.preferredCurrency,
+      commonCurrencies: commonCurrencies ?? this.commonCurrencies,
       accounts: accounts ?? this.accounts,
       categories: categories ?? this.categories,
       transactions: transactions ?? this.transactions,
@@ -608,6 +630,8 @@ class FinanceState {
   Map<String, Object?> toJson() => {
         'schema_version': schemaVersion,
         'current_month': currentMonth,
+        'preferred_currency': preferredCurrency,
+        'common_currencies': commonCurrencies,
         'accounts': accounts.map((item) => item.toJson()).toList(),
         'categories': categories.map((item) => item.toJson()).toList(),
         'transactions': transactions.map((item) => item.toJson()).toList(),
@@ -634,6 +658,10 @@ class FinanceState {
   factory FinanceState.fromJson(Map<String, Object?> json) => FinanceState(
         schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 1,
         currentMonth: json['current_month'] as String? ?? '',
+        preferredCurrency: json['preferred_currency'] as String? ?? 'CNY',
+        commonCurrencies:
+            (json['common_currencies'] as List?)?.cast<String>() ??
+                const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],
         accounts: ((json['accounts'] as List<Object?>?) ?? const <Object?>[])
             .map((item) =>
                 Account.fromJson((item! as Map).cast<String, Object?>()))

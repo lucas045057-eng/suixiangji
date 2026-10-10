@@ -55,13 +55,19 @@ class AssetRules {
   static FinanceState setDefaultAccount(FinanceState state, String accountId) {
     final eligible = state.accounts.any((item) =>
         item.id == accountId &&
-        item.deletedAt == null &&
+        item.isActive &&
         item.type == AccountType.asset);
     return eligible ? state.copyWith(defaultAccountId: accountId) : state;
   }
 
   static FinanceState applyExchangeRate(
       FinanceState state, ExchangeRateSnapshot snapshot) {
+    if (!snapshot.rate.isFinite ||
+        snapshot.rate <= 0 ||
+        snapshot.quoteCurrency != 'CNY' ||
+        DateTime.tryParse(snapshot.rateDate) == null) {
+      throw ArgumentError('需要有效的人民币汇率快照');
+    }
     final rates = [
       ...state.exchangeRates.where((item) =>
           item.baseCurrency != snapshot.baseCurrency ||
@@ -69,7 +75,8 @@ class AssetRules {
       snapshot,
     ];
     final accounts = state.accounts.map((account) {
-      if (account.currency.toUpperCase() != snapshot.baseCurrency) {
+      if (!account.isActive ||
+          account.currency.toUpperCase() != snapshot.baseCurrency) {
         return account;
       }
       return account.copyWith(
@@ -87,7 +94,7 @@ class AssetRules {
     List<FinanceTransaction> visibleTransactions,
   ) {
     return state.accounts
-        .where((item) => item.deletedAt == null)
+        .where((item) => item.isActive)
         .map((account) => AccountBalance(
               account: account,
               balance: _accountBalance(account, visibleTransactions),

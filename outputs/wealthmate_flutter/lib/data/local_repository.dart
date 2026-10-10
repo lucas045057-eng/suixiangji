@@ -12,6 +12,10 @@ abstract class KeyValueStore {
   Future<void> write(String key, String value);
 }
 
+abstract interface class AtomicKeyValueStore implements KeyValueStore {
+  Future<void> writeBatch(Map<String, String> values);
+}
+
 class SharedPreferencesKeyValueStore implements KeyValueStore {
   SharedPreferencesKeyValueStore(this.preferences);
 
@@ -26,7 +30,7 @@ class SharedPreferencesKeyValueStore implements KeyValueStore {
   }
 }
 
-class DriftKeyValueStore implements KeyValueStore {
+class DriftKeyValueStore implements AtomicKeyValueStore {
   DriftKeyValueStore(this.database);
 
   final AppDatabase database;
@@ -44,6 +48,14 @@ class DriftKeyValueStore implements KeyValueStore {
     await database.into(database.localMetadata).insertOnConflictUpdate(
         LocalMetadataCompanion.insert(key: key, value: value));
   }
+
+  @override
+  Future<void> writeBatch(Map<String, String> values) =>
+      database.transaction(() async {
+        for (final entry in values.entries) {
+          await write(entry.key, entry.value);
+        }
+      });
 }
 
 class LocalRepository {
@@ -292,5 +304,18 @@ class LocalRepository {
 
   Future<void> saveQueue(SyncQueue queue) async {
     await writeMetadata(queueStorageKey, jsonEncode(queue.toJson()));
+  }
+
+  Future<void> saveStateAndQueue(FinanceState state, SyncQueue queue) async {
+    final values = {
+      await _key(storageKey): jsonEncode(state.toJson()),
+      await _key(queueStorageKey): jsonEncode(queue.toJson())
+    };
+    if (store is AtomicKeyValueStore) {
+      await (store as AtomicKeyValueStore).writeBatch(values);
+    } else {
+      await save(state);
+      await saveQueue(queue);
+    }
   }
 }

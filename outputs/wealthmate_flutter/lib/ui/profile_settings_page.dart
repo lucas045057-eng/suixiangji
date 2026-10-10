@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
 import '../state/finance_store.dart';
+import 'recovery_code_page.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({required this.store, this.auth, super.key});
@@ -122,6 +123,15 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                         color: Color(0xFF4C4A9C), fontSize: 11)),
               ],
               if (!widget.store.isDemoMode) ...[
+                ListTile(
+                    leading: const Icon(Icons.key_outlined),
+                    title: const Text('生成或更换恢复码'),
+                    subtitle: const Text('预先保存，用于忘记密码时找回账号'),
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => RecoveryCodePage(
+                                auth: (widget.auth ??
+                                    widget.store.authStore)!)))),
                 const SizedBox(height: 30),
                 const Divider(),
                 const Text('删除后将永久移除当前账号及其财务数据，其他账号不受影响。'),

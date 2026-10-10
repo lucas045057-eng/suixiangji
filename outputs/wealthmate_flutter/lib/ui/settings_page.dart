@@ -8,9 +8,11 @@ import '../features/auth/state/auth_store.dart';
 import '../features/assets/state/asset_store.dart';
 import '../state/finance_store.dart';
 import 'account_detail_page.dart';
+import 'account_management_page.dart';
 import 'app_update_dialog.dart';
 import 'category_management_page.dart';
 import 'profile_settings_page.dart';
+import 'currency_preferences_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
@@ -56,13 +58,13 @@ class SettingsPage extends StatelessWidget {
                           leading: CircleAvatar(
                               backgroundColor: const Color(0xFFF3B187),
                               child: Text(
-                                  (store.profile?.displayName ?? '林默')
+                                  (store.profile?.displayName ?? '朋友')
                                       .characters
                                       .first,
                                   style: const TextStyle(
                                       color: Color(0xFF56301E),
                                       fontWeight: FontWeight.w800))),
-                          title: Text(store.profile?.displayName ?? '林默',
+                          title: Text(store.profile?.displayName ?? '朋友',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
                           subtitle: Text(
@@ -104,7 +106,11 @@ class SettingsPage extends StatelessWidget {
                       subtitle: const Text('自然语言未写账户时使用'),
                       trailing: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
-                              value: assetStore.state.defaultAccountId,
+                              value: assetStore.activeAccounts.any((a) =>
+                                      a.type == AccountType.asset &&
+                                      a.id == assetStore.state.defaultAccountId)
+                                  ? assetStore.state.defaultAccountId
+                                  : null,
                               items: assetStore.activeAccounts
                                   .where((item) => item.type.name == 'asset')
                                   .map((item) => DropdownMenuItem(
@@ -127,8 +133,9 @@ class SettingsPage extends StatelessWidget {
                     const ListTile(
                         leading: Icon(Icons.account_balance_outlined),
                         title: Text('账户名称与账户配置'),
-                        subtitle: Text('点击账户即可修改配置或校准余额')),
+                        subtitle: Text('点击账户修改用途、配置或校准余额')),
                     ...assetStore.activeAccounts
+                        .take(3)
                         .map((account) => Column(children: [
                               const Divider(height: 1),
                               ListTile(
@@ -136,7 +143,7 @@ class SettingsPage extends StatelessWidget {
                                       Icons.account_balance_wallet_outlined),
                                   title: Text(account.name),
                                   subtitle: Text(
-                                      '${account.currency} · ${account.type == AccountType.asset ? '资产' : '负债'}'),
+                                      '${account.currency} · ${account.type == AccountType.asset ? '资产' : '负债'}${account.note.isEmpty ? '' : ' · ${account.note}'}'),
                                   trailing: const Icon(Icons.chevron_right),
                                   onTap: () => Navigator.of(context).push(
                                       MaterialPageRoute<void>(
@@ -144,6 +151,16 @@ class SettingsPage extends StatelessWidget {
                                               store: store.assets,
                                               account: account))))
                             ])),
+                    const Divider(height: 1),
+                    ListTile(
+                        title: const Text('查看全部账户'),
+                        subtitle: Text(
+                            '${assetStore.activeAccounts.length} 个使用中 · 支持搜索、分组和归档恢复'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                                builder: (_) =>
+                                    AccountManagementPage(store: assetStore)))),
                   ])),
                   const SizedBox(height: 12),
                   Card(
@@ -199,6 +216,16 @@ class SettingsPage extends StatelessWidget {
                         subtitle: const Text('会覆盖当前本地演示数据'),
                         onTap: () => _confirmRestore(context)),
                   ])),
+                  Card(
+                      child: ListTile(
+                          leading: const Icon(Icons.currency_exchange),
+                          title: const Text('记账币种'),
+                          subtitle: Text(
+                              '默认 ${store.ledger.state.preferredCurrency} · 常用币种'),
+                          onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => CurrencyPreferencesPage(
+                                      ledger: store.ledger))))),
                   if (!store.isDemoMode) ...[
                     const SizedBox(height: 12),
                     Card(

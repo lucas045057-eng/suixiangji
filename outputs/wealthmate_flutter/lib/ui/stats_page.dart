@@ -1,17 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../features/insights/state/insights_store.dart';
+import '../features/ledger/state/ledger_store.dart';
+import '../domain/models.dart';
+import '../domain/transaction_query.dart';
+import 'ledger_page.dart';
 import 'widgets/bar_chart.dart';
 import 'widgets/line_chart.dart';
 import 'widgets/pie_chart.dart';
 import 'widgets/ui_helpers.dart';
 
-enum StatsPeriod { day, week, month }
+enum StatsPeriod { day, week, month, custom }
 
 class StatsPage extends StatefulWidget {
-  const StatsPage({required this.insights, super.key});
+  const StatsPage({required this.insights, this.ledger, this.now, super.key});
 
   final InsightsStore insights;
+  final LedgerStore? ledger;
+  final DateTime? now;
 
   @override
   State<StatsPage> createState() => _StatsPageState();
@@ -19,32 +25,56 @@ class StatsPage extends StatefulWidget {
 
 class _StatsPageState extends State<StatsPage> {
   StatsPeriod period = StatsPeriod.month;
+  bool byAccount = false;
+  int chart = 0;
+  DateTimeRange? customRange;
+  DateTime get today => day(widget.now ?? DateTime.now());
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.insights,
       builder: (context, _) {
-        final range = _rangeFor(period, widget.insights.metrics.monthKey);
+        final selectedRange =
+            _rangeFor(period, widget.insights.metrics.monthKey);
+        final range = selectedRange;
         final points = widget.insights.trend(range);
         final categoryTotals = widget.insights.expenseByCategory(range);
         final accountTotals = widget.insights.expenseByAccount(range);
-        final categories = _sortedCategoryItems(categoryTotals);
+        final categories =
+            _sortedCategoryItems(byAccount ? accountTotals : categoryTotals);
         final totalExpense =
             categoryTotals.values.fold<double>(0, (sum, value) => sum + value);
-        final highestCategory =
-            categories.isEmpty ? '暂无' : categories.first.label;
+        final highestCategoryId = categoryTotals.isEmpty
+            ? null
+            : categoryTotals.entries
+                .reduce((a, b) => a.value >= b.value ? a : b)
+                .key;
+        final highestCategory = highestCategoryId == null
+            ? '暂无'
+            : highestCategoryId == 'uncategorized'
+                ? '未分类'
+                : highestCategoryId == 'other'
+                    ? '其他'
+                    : categoryName(widget.insights.state, highestCategoryId);
+        final pendingConversionCount = TransactionQuery(
+                start: range.start, end: range.end)
+            .select(widget.insights.state)
+            .where((row) =>
+                row.type != TransactionType.transfer && cnyAmount(row) == null)
+            .length;
         final highestAccount = accountTotals.isEmpty
             ? '暂无'
             : accountTotals.entries
                 .reduce((a, b) => a.value >= b.value ? a : b)
                 .key;
-        final average = totalExpense == 0
-            ? 0.0
-            : totalExpense /
-                (period == StatsPeriod.day
-                    ? 1.0
-                    : (range.duration.inDays + 1).toDouble());
+        final elapsedExpense = knownTotal(TransactionQuery(
+                start: range.start,
+                end: range.end.isAfter(today) ? today : range.end,
+                type: TransactionType.expense)
+            .select(widget.insights.state));
+        final average = dailyAverage(
+            elapsedExpense, selectedRange.start, selectedRange.end, today);
         return SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -59,114 +89,160 @@ class _StatsPageState extends State<StatsPage> {
                     style: const TextStyle(
                         color: Color(0xFF87958F), fontSize: 11)),
                 const SizedBox(height: 16),
-                SegmentedButton<StatsPeriod>(
+                SegmentedButton<StatsPeriod>(segments: const [
+                  ButtonSegment(value: StatsPeriod.day, label: Text('本日')),
+                  ButtonSegment(value: StatsPeriod.week, label: Text('本周')),
+                  ButtonSegment(value: StatsPeriod.month, label: Text('本月')),
+                  ButtonSegment(value: StatsPeriod.custom, label: Text('自选')),
+                ], selected: {
+                  period
+                }, onSelectionChanged: (value) => _selectPeriod(value.first)),
+                if (period == StatsPeriod.month)
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    IconButton(
+                        tooltip: '上个月',
+                        onPressed: () => _changeMonth(-1),
+                        icon: const Icon(Icons.chevron_left)),
+                    Text(widget.insights.monthKey),
+                    IconButton(
+                        tooltip: '下个月',
+                        onPressed: () => _changeMonth(1),
+                        icon: const Icon(Icons.chevron_right)),
+                  ]),
+                Text(
+                    '日均仅计截至今日的账目，按已过去的 ${averageDays(selectedRange.start, selectedRange.end, today)} 天计算；历史月份按整月计算。',
+                    style: const TextStyle(fontSize: 10)),
+                const SizedBox(height: 10),
+                SegmentedButton<bool>(
                     segments: const [
-                      ButtonSegment(value: StatsPeriod.day, label: Text('本日')),
-                      ButtonSegment(value: StatsPeriod.week, label: Text('本周')),
-                      ButtonSegment(value: StatsPeriod.month, label: Text('本月'))
+                      ButtonSegment(value: false, label: Text('按分类')),
+                      ButtonSegment(value: true, label: Text('按账户'))
                     ],
                     selected: {
-                      period
+                      byAccount
                     },
                     onSelectionChanged: (value) =>
-                        setState(() => period = value.first)),
+                        setState(() => byAccount = value.first)),
                 const SizedBox(height: 14),
                 _summaryGrid(
                     totalExpense, average, highestCategory, highestAccount),
                 const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('支出趋势',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(
-                              '${_formatDate(range.start)} - ${_formatDate(range.end)} · 按${period == StatsPeriod.day ? '小时' : '天'}统计',
-                              style: const TextStyle(
-                                  color: Color(0xFF87958F), fontSize: 10)),
-                          const SizedBox(height: 14),
-                          if (points.every((point) => point.expense == 0))
-                            const Text('当前时段还没有支出',
+                SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 0, label: Text('趋势')),
+                      ButtonSegment(value: 1, label: Text('柱状')),
+                      ButtonSegment(value: 2, label: Text('占比')),
+                    ],
+                    selected: {
+                      chart
+                    },
+                    onSelectionChanged: (value) =>
+                        setState(() => chart = value.first)),
+                const SizedBox(height: 12),
+                if (chart == 0)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('支出趋势',
                                 style: TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 12))
-                          else
-                            WealthLineChart(
-                                values: points
-                                    .map((point) => point.expense)
-                                    .toList()),
-                          if (points.any((point) => point.expense > 0))
-                            _legend(
-                                '支出', totalExpense, const Color(0xFFC77C3E)),
-                        ]),
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            Text(
+                                '${_formatDate(range.start)} - ${_formatDate(range.end)} · 按${period == StatsPeriod.day ? '小时' : '天'}统计',
+                                style: const TextStyle(
+                                    color: Color(0xFF87958F), fontSize: 10)),
+                            const SizedBox(height: 14),
+                            if (points.every((point) => point.expense == 0))
+                              const Text('当前时段还没有支出',
+                                  style: TextStyle(
+                                      color: Color(0xFF87958F), fontSize: 12))
+                            else
+                              WealthLineChart(
+                                  values: points
+                                      .map((point) => point.expense)
+                                      .toList()),
+                            if (points.any((point) => point.expense > 0))
+                              _legend(
+                                  '支出', totalExpense, const Color(0xFFC77C3E)),
+                          ]),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('分类支出柱状图',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          const Text('金额越长，代表本时段占用越多',
-                              style: TextStyle(
-                                  color: Color(0xFF87958F), fontSize: 10)),
-                          const SizedBox(height: 15),
-                          SpendingBarChart(items: categories),
-                        ]),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('分类占比',
-                              style: TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 15),
-                          if (categories.isEmpty)
-                            const Text('当前时段还没有可统计的支出',
+                if (chart == 1)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(byAccount ? '账户支出柱状图' : '分类支出柱状图',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 4),
+                            const Text('金额越长，代表本时段占用越多',
                                 style: TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 12))
-                          else
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ExpensePieChart(
-                                    items: categories
-                                        .map((item) => PieChartItem(
-                                            label: item.label,
-                                            value: item.value,
-                                            color: item.color))
-                                        .toList()),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                    child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                      for (final item in categories)
-                                        _pieLegend(item, totalExpense)
-                                    ])),
-                              ],
-                            ),
-                        ]),
+                                    color: Color(0xFF87958F), fontSize: 10)),
+                            const SizedBox(height: 15),
+                            SpendingBarChart(
+                                items: categories,
+                                onTap: (item) => _drill(item, range)),
+                          ]),
+                    ),
                   ),
-                ),
-                if (widget.insights.metrics.pendingConversionCount > 0) ...[
+                const SizedBox(height: 14),
+                if (chart == 2)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(byAccount ? '账户占比' : '分类占比',
+                                style: const TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 15),
+                            if (categories.isEmpty)
+                              const Text('当前时段还没有可统计的支出',
+                                  style: TextStyle(
+                                      color: Color(0xFF87958F), fontSize: 12))
+                            else
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ExpensePieChart(
+                                      onTap: (index) =>
+                                          _drill(categories[index], range),
+                                      items: categories
+                                          .map((item) => PieChartItem(
+                                              label: item.label,
+                                              value: item.value,
+                                              color: item.color))
+                                          .toList()),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                      child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                        for (final item in categories)
+                                          InkWell(
+                                              onTap: () => _drill(item, range),
+                                              child: _pieLegend(
+                                                  item, totalExpense))
+                                      ])),
+                                ],
+                              ),
+                          ]),
+                    ),
+                  ),
+                if (pendingConversionCount > 0) ...[
                   const SizedBox(height: 12),
-                  const Text('有外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
-                      style: TextStyle(color: Color(0xFFB65B55), fontSize: 11)),
+                  Text('有 $pendingConversionCount 笔外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
+                      style: const TextStyle(
+                          color: Color(0xFFB65B55), fontSize: 11)),
                 ],
               ],
             ),
@@ -249,10 +325,7 @@ class _StatsPageState extends State<StatsPage> {
   List<BarChartItem> _sortedCategoryItems(Map<String, double> values) {
     final entries = values.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final top = entries.take(6).toList();
-    final other =
-        entries.skip(6).fold<double>(0, (sum, item) => sum + item.value);
-    if (other > 0) top.add(MapEntry('other', other));
+    final top = entries;
     const colors = [
       Color(0xFF2F9F7D),
       Color(0xFF6A6CF4),
@@ -265,18 +338,23 @@ class _StatsPageState extends State<StatsPage> {
     return [
       for (var index = 0; index < top.length; index += 1)
         BarChartItem(
-            label: top[index].key == 'uncategorized'
-                ? '未分类'
-                : top[index].key == 'other'
-                    ? '其他'
-                    : categoryName(widget.insights.state, top[index].key),
+            id: top[index].key,
+            label: byAccount
+                ? accountName(widget.insights.state, top[index].key)
+                : top[index].key == 'uncategorized'
+                    ? '未分类'
+                    : top[index].key == 'other'
+                        ? '其他'
+                        : categoryName(widget.insights.state, top[index].key),
             value: top[index].value,
             color: colors[index % colors.length])
     ];
   }
 
   DateTimeRange _rangeFor(StatsPeriod selected, String monthKey) {
-    final now = DateTime.now();
+    final now = today;
+    if (selected == StatsPeriod.custom && customRange != null)
+      return customRange!;
     if (selected == StatsPeriod.day)
       return DateTimeRange(
           start: DateTime(now.year, now.month, now.day),
@@ -296,8 +374,45 @@ class _StatsPageState extends State<StatsPage> {
   String _periodLabel(StatsPeriod value) => switch (value) {
         StatsPeriod.day => '本日',
         StatsPeriod.week => '本周',
-        StatsPeriod.month => '本月'
+        StatsPeriod.month => '本月',
+        StatsPeriod.custom => '自选时段'
       };
+
+  Future<void> _changeMonth(int delta) async {
+    final current = DateTime.parse('${widget.insights.monthKey}-01');
+    final next = DateTime(current.year, current.month + delta, 1);
+    await widget.insights.refresh(
+        month: '${next.year}-${next.month.toString().padLeft(2, '0')}');
+  }
+
+  Future<void> _selectPeriod(StatsPeriod value) async {
+    if (value == StatsPeriod.custom) {
+      final selected = await showDateRangePicker(
+          context: context,
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2100),
+          initialDateRange: customRange);
+      if (selected == null || !mounted) return;
+      customRange = selected;
+    }
+    setState(() => period = value);
+  }
+
+  void _drill(BarChartItem item, DateTimeRange range) {
+    final ledger = widget.ledger;
+    if (ledger == null) return;
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+            appBar: AppBar(title: Text('${item.label} · 支出明细')),
+            body: LedgerPage(
+                ledger: ledger,
+                initialQuery: TransactionQuery(
+                    start: range.start,
+                    end: range.end,
+                    type: TransactionType.expense,
+                    categoryIds: byAccount ? null : {item.id!},
+                    accountId: byAccount ? item.id : null)))));
+  }
 
   String _formatDate(DateTime value) => '${value.month}/${value.day}';
 

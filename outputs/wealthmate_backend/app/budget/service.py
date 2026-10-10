@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import Budget, Category, User
-from .domain import normalise_budget_values
+from .domain import normalise_budget_values, TOTAL_BUDGET_CATEGORY
 from .schemas import BudgetIn, BudgetPatch
 
 
@@ -45,11 +45,16 @@ def save_budget(
     row = db.get(Budget, values["id"])
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
+    existing = budget_with_same_key(db, user, values)
+    if existing and existing.id != values['id']:
+        raise HTTPException(status_code=409, detail='该月份和分类已有预算，请编辑已有预算')
     category_id = values.get("category_id")
-    if category_id:
+    if category_id and category_id != TOTAL_BUDGET_CATEGORY:
         category = db.get(Category, category_id)
         if not category or category.user_id != user.id:
             raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
+        if category.kind != 'expense':
+            raise HTTPException(status_code=422, detail='预算仅支持支出分类')
     data = normalise_budget_values({
         "month": values["month"],
         "category_id": values["category_id"],
@@ -69,6 +74,15 @@ def save_budget(
     return row
 
 
+def budget_with_same_key(db: Session, user: User, values: dict) -> Budget | None:
+    # Tombstones also retain the database's natural key; reuse their identity.
+    return db.query(Budget).filter(
+        Budget.user_id == user.id,
+        Budget.month == values.get('month'),
+        Budget.category_id == values.get('category_id'),
+    ).first()
+
+
 def list_budgets(db: Session, user: User, month: str | None = None) -> dict:
     query = db.query(Budget).filter(
         Budget.user_id == user.id,
@@ -84,12 +98,7 @@ def list_budgets(db: Session, user: User, month: str | None = None) -> dict:
 def create_budget(db: Session, user: User, payload: BudgetIn) -> dict:
     values = payload.model_dump()
     values["id"] = values.get("id") or str(uuid4())
-    existing = db.query(Budget).filter(
-        Budget.user_id == user.id,
-        Budget.month == values["month"],
-        Budget.category_id == values["category_id"],
-        Budget.deleted_at.is_(None),
-    ).first()
+    existing = budget_with_same_key(db, user, values)
     if existing and not payload.id:
         values["id"] = existing.id
     user.sync_version += 1

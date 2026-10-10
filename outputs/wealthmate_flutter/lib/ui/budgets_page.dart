@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../features/budget/state/budget_store.dart';
+import '../features/budget/domain/budget_rules.dart';
 import 'widgets/progress_row.dart';
 import 'widgets/ui_helpers.dart';
 
@@ -44,9 +45,39 @@ class _BudgetsPageState extends State<BudgetsPage> {
                   style:
                       const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
               const SizedBox(height: 12),
+              FilledButton.tonal(
+                  onPressed: () => _openBudgetEditor(context, total: true),
+                  child: const Text('设置月度总预算')),
+              TextButton(
+                  onPressed: () async {
+                    final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                                title: const Text('平均分配总预算'),
+                                content: const Text(
+                                    '将总额度平均分配到支出分类，覆盖本月已有分类额度。之后可逐项手动调整。'),
+                                actions: [
+                                  TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
+                                      child: const Text('取消')),
+                                  FilledButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text('分配'))
+                                ]));
+                    if (confirmed != true) return;
+                    try {
+                      await widget.store
+                          .allocateTotal(widget.store.state.currentMonth);
+                    } catch (error) {
+                      if (context.mounted)
+                        ScaffoldMessenger.of(context)
+                            .showSnackBar(SnackBar(content: Text('$error')));
+                    }
+                  },
+                  child: const Text('平均分配到分类')),
               for (final item in alerts)
-                _alertBanner(item,
-                    categoryName(widget.store.state, item.budget.categoryId)),
+                _alertBanner(item, _budgetLabel(item.budget)),
               if (alerts.isNotEmpty) const SizedBox(height: 6),
               Card(
                 child: Padding(
@@ -60,8 +91,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
                       for (final item in progress)
                         ProgressRow(
                             progress: item,
-                            category: categoryName(
-                                widget.store.state, item.budget.categoryId),
+                            category: _budgetLabel(item.budget),
                             onTap: () => _openBudgetEditor(context,
                                 existing: item.budget)),
                     ],
@@ -72,6 +102,8 @@ class _BudgetsPageState extends State<BudgetsPage> {
               const Text('预算可以随时调整月份、分类和额度。转账不会影响预算。',
                   style: TextStyle(
                       color: Color(0xFF87958F), fontSize: 10, height: 1.5)),
+              const Text('总预算统计全部支出，分类预算用于分配额度，两者不会相加。缺少汇率的账目暂不计入。',
+                  style: TextStyle(fontSize: 10)),
             ],
           );
         },
@@ -123,10 +155,18 @@ class _BudgetsPageState extends State<BudgetsPage> {
   }
 
   Future<void> _openBudgetEditor(BuildContext context,
-      {Budget? existing}) async {
+      {Budget? existing, bool total = false}) async {
+    if (total)
+      existing = widget.store.budgets
+          .where((b) =>
+              b.deletedAt == null &&
+              b.month == widget.store.state.currentMonth &&
+              b.categoryId == totalBudgetCategory)
+          .firstOrNull;
     final categoryId = ValueNotifier<String>(existing?.categoryId ??
-        widget.store.activeCategories.firstOrNull?.id ??
-        '');
+        (total
+            ? totalBudgetCategory
+            : widget.store.activeCategories.firstOrNull?.id ?? ''));
     final monthController = TextEditingController(
         text: existing?.month ?? widget.store.state.currentMonth);
     final limitController = TextEditingController(
@@ -148,10 +188,13 @@ class _BudgetsPageState extends State<BudgetsPage> {
                 builder: (_, value, __) => DropdownButtonFormField<String>(
                     initialValue: value.isEmpty ? null : value,
                     decoration: const InputDecoration(labelText: '分类'),
-                    items: widget.store.activeCategories
-                        .map((item) => DropdownMenuItem(
-                            value: item.id, child: Text(item.name)))
-                        .toList(),
+                    items: [
+                      const DropdownMenuItem(
+                          value: totalBudgetCategory, child: Text('月度总预算')),
+                      ...widget.store.activeCategories.map((item) =>
+                          DropdownMenuItem(
+                              value: item.id, child: Text(item.name)))
+                    ],
                     onChanged: (next) => categoryId.value = next ?? value)),
             const SizedBox(height: 12),
             TextField(
@@ -173,7 +216,8 @@ class _BudgetsPageState extends State<BudgetsPage> {
                 if (categoryId.value.isNotEmpty &&
                     limit != null &&
                     limit > 0 &&
-                    RegExp(r'^\d{4}-\d{2}$').hasMatch(month))
+                    limit.isFinite &&
+                    RegExp(r'^\d{4}-(0[1-9]|1[0-2])$').hasMatch(month))
                   Navigator.pop(dialogContext, true);
               },
               child: const Text('保存')),
@@ -190,4 +234,8 @@ class _BudgetsPageState extends State<BudgetsPage> {
     monthController.dispose();
     limitController.dispose();
   }
+
+  String _budgetLabel(Budget budget) => budget.categoryId == totalBudgetCategory
+      ? '月度总预算'
+      : categoryName(widget.store.state, budget.categoryId);
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import '../../../core/database/local_state_session.dart';
 import '../../../core/network/api_session.dart';
@@ -20,16 +21,24 @@ class BudgetRepository {
 
   Future<FinanceState> saveBudget(Budget budget, {FinanceState? baseState}) {
     return session.write(
-      (current) => current.copyWith(
-        budgets: [
-          ...current.budgets.where((item) => item.id != budget.id),
-          budget,
-        ],
-      ),
+      (current) {
+        if (current.budgets.any((item) =>
+            item.id != budget.id &&
+            item.month == budget.month &&
+            item.categoryId == budget.categoryId)) {
+          throw StateError('该月份和分类已有预算，请编辑已有预算');
+        }
+        return current.copyWith(
+          budgets: [
+            ...current.budgets.where((item) => item.id != budget.id),
+            budget,
+          ],
+        );
+      },
       appendOperations: [
         SyncOperation(
           clientOpId:
-              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}',
+              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}:${Random.secure().nextInt(1 << 32)}',
           entity: 'budgets',
           entityId: budget.id,
           type: SyncOperationType.upsert,

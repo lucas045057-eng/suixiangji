@@ -65,12 +65,12 @@ try {
     $fakeBin = Join-Path $testRoot 'fake-bin'
     $fakeSdk = Join-Path $testRoot 'fake-sdk'
     $signingProperties = Join-Path $flutterProject 'android\signing.properties'
-    $outputPath = Join-Path $testRoot 'outputs\suixiangji-v1.0.4-build7.apk'
+    $outputPath = Join-Path $testRoot 'outputs\suixiangji-v1.0.5-build9.apk'
     $fakeFlutterLog = Join-Path $testRoot 'fake-flutter-args.txt'
 
     Set-Content -LiteralPath (Join-Path $flutterProject 'pubspec.yaml') -Value @'
 name: wealthmate_flutter
-version: 1.0.4+7
+version: 1.0.5+9
 '@ -Encoding utf8
     Set-Content -LiteralPath (Join-Path $flutterProject 'android\app\build.gradle.kts') -Value @'
 android {
@@ -107,8 +107,8 @@ exit /b 0
     Set-Content -LiteralPath (Join-Path $fakeSdk 'cmdline-tools\latest\bin\apkanalyzer.bat') -Value @'
 @echo off
 if "%2"=="application-id" echo com.example.wealthmate_flutter
-if "%2"=="version-name" echo 1.0.4
-if "%2"=="version-code" echo 7
+if "%2"=="version-name" echo 1.0.5
+if "%2"=="version-code" echo 9
 exit /b 0
 '@ -Encoding ascii
     Set-Content -LiteralPath (Join-Path $fakeSdk 'build-tools\36.0.0\apksigner.bat') -Value @'
@@ -130,8 +130,8 @@ exit /b 0
         SigningPropertiesPath = $signingProperties
         Environment = 'production'
         ApiBaseUrl = 'https://api.suixiangji.icu'
-        VersionName = '1.0.4'
-        VersionCode = 7
+        VersionName = '1.0.5'
+        VersionCode = 9
         CronetHttpNoPlay = $true
     }
 
@@ -153,11 +153,11 @@ exit /b 0
 
     $case = $baseArguments.Clone()
     $case.VersionName = '1.0.3'
-    Assert-GuardRejects -Name 'rejects wrong version name' -Arguments $case -ExpectedMessage '1.0.4'
+    Assert-GuardRejects -Name 'rejects wrong version name' -Arguments $case -ExpectedMessage '1.0.5'
 
     $case = $baseArguments.Clone()
     $case.VersionCode = 6
-    Assert-GuardRejects -Name 'rejects wrong version code' -Arguments $case -ExpectedMessage '7'
+    Assert-GuardRejects -Name 'rejects wrong version code' -Arguments $case -ExpectedMessage '9'
 
     $case = $baseArguments.Clone()
     $case.SigningPropertiesPath = Join-Path $testRoot 'missing-signing.properties'

@@ -8,6 +8,7 @@ import '../../state/finance_store.dart';
 import 'draft_confirmation_card.dart';
 import 'draft_editor.dart';
 import 'ui_helpers.dart';
+import 'currency_input.dart';
 
 class TransactionForm extends StatefulWidget {
   TransactionForm(
@@ -55,13 +56,16 @@ class _TransactionFormState extends State<TransactionForm> {
     final transactionType = initial?.type ?? TransactionType.expense;
     categoryId = LedgerRules.validCategoryIdForType(
         widget.ledger.state, transactionType, initial?.categoryId);
+    final active =
+        widget.ledger.state.accounts.where((a) => a.isActive).toList();
     accountId = initial?.accountId ??
-        widget.ledger.state.defaultAccountId ??
-        widget.ledger.state.accounts.firstOrNull?.id ??
+        (active.any((a) => a.id == widget.ledger.state.defaultAccountId)
+            ? widget.ledger.state.defaultAccountId
+            : active.firstOrNull?.id) ??
         '';
     date = initial?.date ?? _dateKey(DateTime.now());
     occurredAt = initial?.occurredAt ?? '${date}T00:00:00';
-    currency = initial?.currency ?? 'CNY';
+    currency = initial?.currency ?? widget.ledger.state.preferredCurrency;
   }
 
   @override
@@ -167,6 +171,10 @@ class _TransactionFormState extends State<TransactionForm> {
       TextFormField(
         controller: smartController,
         maxLines: 4,
+        keyboardType: TextInputType.multiline,
+        enableSuggestions: true,
+        hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+        autocorrect: false,
         decoration: const InputDecoration(
             labelText: '刚刚发生了什么？', hintText: '例如：今天中午外卖 32 元，支付宝'),
         validator: (value) =>
@@ -192,7 +200,7 @@ class _TransactionFormState extends State<TransactionForm> {
 
   Widget _buildManualComposer(BuildContext context) {
     final accounts = widget.ledger.state.accounts
-        .where((item) => item.deletedAt == null)
+        .where((item) => item.isActive || item.id == widget.initial?.accountId)
         .toList();
     final transactionType =
         type == 'income' ? TransactionType.income : TransactionType.expense;
@@ -228,13 +236,10 @@ class _TransactionFormState extends State<TransactionForm> {
                   ? '请输入大于 0 的金额'
                   : null),
       const SizedBox(height: 12),
-      TextFormField(
-          initialValue: currency,
-          decoration: const InputDecoration(labelText: '原始币种', hintText: 'CNY'),
-          onChanged: (value) => currency = value.trim().toUpperCase(),
-          validator: (value) => value == null || value.trim().length < 3
-              ? '请输入币种代码，例如 CNY'
-              : null),
+      CurrencyInput(
+          value: currency,
+          common: widget.ledger.state.commonCurrencies,
+          onChanged: (value) => currency = value),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
           key: ValueKey('category-$type-$categoryId'),
@@ -281,6 +286,10 @@ class _TransactionFormState extends State<TransactionForm> {
       const SizedBox(height: 12),
       TextFormField(
           controller: noteController,
+          keyboardType: TextInputType.multiline,
+          enableSuggestions: true,
+          hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+          autocorrect: false,
           decoration:
               const InputDecoration(labelText: '备注', hintText: '例如：午餐、通勤或房租')),
       const SizedBox(height: 20),
@@ -305,7 +314,12 @@ class _TransactionFormState extends State<TransactionForm> {
     final normalizedCurrency =
         (currency.isEmpty ? 'CNY' : currency).trim().toUpperCase();
     final isCny = normalizedCurrency == 'CNY';
-    final exchangeRate = isCny ? 1.0 : existing?.exchangeRate;
+    final sameCurrency = existing?.currency == normalizedCurrency;
+    final exchangeRate = isCny
+        ? 1.0
+        : sameCurrency
+            ? existing?.exchangeRate
+            : null;
     final convertedAmount = isCny
         ? amount
         : exchangeRate != null && exchangeRate > 0

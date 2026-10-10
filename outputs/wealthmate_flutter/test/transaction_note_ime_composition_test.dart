@@ -70,6 +70,7 @@ void main() {
 
     final fields = find.byType(TextFormField);
     expect(fields, findsNWidgets(4));
+    await tester.ensureVisible(fields.at(3));
     await tester.tap(fields.at(3));
     final editable = tester.widget<EditableText>(
         find.descendant(of: fields.at(3), matching: find.byType(EditableText)));

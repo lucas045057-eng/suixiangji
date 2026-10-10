@@ -115,29 +115,43 @@ class LocalStateSession {
   Future<FinanceState> write(
     StateMutation mutation, {
     Iterable<SyncOperation> appendOperations = const [],
+    Iterable<SyncOperation> Function(FinanceState current, FinanceState next)?
+        deriveOperations,
     FinanceState? initialState,
   }) {
     return _withCurrentContext((context) async {
       await _ensureLoaded(context);
-      final next = mutation(context.hasPersistedState
+      final current = context.hasPersistedState
           ? context.state ?? const FinanceState()
-          : initialState ?? context.state ?? const FinanceState());
-      for (final operation in appendOperations) {
-        context.queue.enqueue(operation);
+          : initialState ?? context.state ?? const FinanceState();
+      final previousOperations = context.queue.pending();
+      try {
+        final next = mutation(current);
+        final nextQueue = SyncQueue(context.queue.pending());
+        for (final operation in [
+          ...appendOperations,
+          ...?deriveOperations?.call(current, next),
+        ]) {
+          nextQueue.enqueue(operation);
+        }
+        await context.local.saveStateAndQueue(next, nextQueue);
+        context.queue.replace(nextQueue.pending());
+        context.state = next;
+        context.hasPersistedState = true;
+        return next;
+      } catch (_) {
+        // A sync mutation may change receipts before persistence fails.
+        // Restore the captured context, even if another user has rebound.
+        context.queue.replace(previousOperations);
+        rethrow;
       }
-      await context.local.save(next);
-      await context.local.saveQueue(context.queue);
-      context.state = next;
-      context.hasPersistedState = true;
-      return next;
     });
   }
 
   Future<FinanceState> replaceState(FinanceState next) {
     return _withCurrentContext((context) async {
       await _ensureLoaded(context);
-      await context.local.save(next);
-      await context.local.saveQueue(context.queue);
+      await context.local.saveStateAndQueue(next, context.queue);
       context.state = next;
       context.hasPersistedState = true;
       return next;
@@ -147,8 +161,10 @@ class LocalStateSession {
   Future<void> mutateQueue(void Function(SyncQueue queue) mutation) =>
       _withCurrentContext((context) async {
         await _ensureLoaded(context);
-        mutation(context.queue);
-        await context.local.saveQueue(context.queue);
+        final next = SyncQueue(context.queue.pending());
+        mutation(next);
+        await context.local.saveQueue(next);
+        context.queue.replace(next.pending());
       });
 
   Future<List<SyncOperation>> pendingOperations() =>

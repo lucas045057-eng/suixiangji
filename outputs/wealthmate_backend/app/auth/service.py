@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
+import secrets
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -21,7 +22,12 @@ from ..models import (
 )
 from ..core.security import create_token, decode_token, hash_password, verify_password
 from .registration import consume_invite, create_user
-from .schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn
+from .schemas import DeleteUserIn, LoginIn, PasswordChange, ProfilePatch, RegisterIn, RecoveryCodeIn, PasswordRecoverIn
+
+_DUMMY_RECOVERY_HASH = hash_password(secrets.token_hex(24))
+
+def _normalized_recovery_code(value: str) -> str:
+    return ''.join(value.upper().split()).replace('-','')
 
 
 def profile_json(user: User, *, include_token: bool = False) -> dict:
@@ -30,6 +36,7 @@ def profile_json(user: User, *, include_token: bool = False) -> dict:
         "username": user.username,
         "display_name": user.display_name or user.username,
         "quick_memories": user.quick_memories or [],
+        "recovery_configured": bool(user.recovery_code_hash),
     }
     if include_token:
         result["access_token"] = create_token(
@@ -102,12 +109,15 @@ def login(db: Session, payload: LoginIn) -> dict:
     }
 
 
-def get_current_user(db: Session, token: str) -> User:
+def get_current_user(db: Session, token: str, *, for_update: bool = False) -> User:
     try:
         claims = decode_token(token)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail="登录已失效") from exc
-    found = db.get(User, claims.get("sub"))
+    query = db.query(User).filter(User.id == claims.get('sub')).populate_existing()
+    if for_update:
+        query = query.with_for_update()
+    found = query.first()
     if not found:
         raise HTTPException(status_code=401, detail="用户不存在")
     if claims["auth_version"] != (found.auth_version or 0):
@@ -159,6 +169,33 @@ def change_password(db: Session, user: User, payload: PasswordChange) -> dict:
     db.commit()
     return profile_json(user, include_token=True)
 
+
+def generate_recovery_code(db: Session, user: User, payload: RecoveryCodeIn) -> dict:
+    user=_lock_auth_user(db,user)
+    if not verify_password(payload.current_password,user.password_hash):
+        raise HTTPException(status_code=401,detail='当前密码错误')
+    raw=secrets.token_hex(24).upper()
+    user.recovery_code_hash=hash_password(raw)
+    db.commit()
+    return {'recovery_code':'-'.join(raw[i:i+8] for i in range(0,len(raw),8))}
+
+def recover_password(db: Session, payload: PasswordRecoverIn) -> dict:
+    username=payload.username.strip().lower()
+    user=db.query(User).filter(func.lower(func.trim(User.username))==username).populate_existing().with_for_update().first()
+    valid=verify_password(_normalized_recovery_code(payload.recovery_code),
+        user.recovery_code_hash if user and user.recovery_code_hash else _DUMMY_RECOVERY_HASH)
+    if not valid or user is None or not user.recovery_code_hash:
+        db.rollback()
+        raise HTTPException(status_code=400,detail='用户名或恢复码无效，请检查已保存的恢复码')
+    try:
+        user.password_hash=hash_password(payload.new_password)
+        user.recovery_code_hash=None
+        user.auth_version=(user.auth_version or 0)+1
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {'reset':True}
 
 def delete_user(db: Session, user: User, payload: DeleteUserIn) -> dict:
     user = _lock_auth_user(db, user)

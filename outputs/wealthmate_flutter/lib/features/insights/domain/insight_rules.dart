@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../../domain/transaction_query.dart' as finance;
 import '../../assets/domain/asset_rules.dart';
 import '../../budget/domain/budget_rules.dart' as budget_rules;
 
@@ -54,8 +55,9 @@ class InsightRules {
     }
     final expenses = List<double>.filled(points.length, 0);
     final incomes = List<double>.filled(points.length, 0);
-    for (final transaction in state.transactions.where((item) =>
-        item.deletedAt == null && item.type != TransactionType.transfer)) {
+    for (final transaction in finance.TransactionQuery(start: start, end: end)
+        .select(state)
+        .where((item) => item.type != TransactionType.transfer)) {
       final occurred = _occurredDate(transaction);
       if (occurred == null) continue;
       final date = DateTime(occurred.year, occurred.month, occurred.day);
@@ -88,8 +90,9 @@ class InsightRules {
         DateTime(range.start.year, range.start.month, range.start.day);
     final end = DateTime(range.end.year, range.end.month, range.end.day);
     final totals = <String, double>{};
-    for (final transaction in state.transactions.where((item) =>
-        item.deletedAt == null && item.type == TransactionType.expense)) {
+    for (final transaction in finance.TransactionQuery(
+            start: start, end: end, type: TransactionType.expense)
+        .select(state)) {
       final occurred = _occurredDate(transaction);
       final amount = _cnyAmount(transaction);
       if (occurred == null || amount == null) continue;
@@ -107,8 +110,9 @@ class InsightRules {
         DateTime(range.start.year, range.start.month, range.start.day);
     final end = DateTime(range.end.year, range.end.month, range.end.day);
     final totals = <String, double>{};
-    for (final transaction in state.transactions.where((item) =>
-        item.deletedAt == null && item.type == TransactionType.expense)) {
+    for (final transaction in finance.TransactionQuery(
+            start: start, end: end, type: TransactionType.expense)
+        .select(state)) {
       final occurred = _occurredDate(transaction);
       final amount = _cnyAmount(transaction);
       if (occurred == null || amount == null) continue;
@@ -123,11 +127,15 @@ class InsightRules {
   static FinanceMetrics deriveMetrics(FinanceState state, String monthKey) {
     final visibleTransactions =
         state.transactions.where((item) => item.deletedAt == null).toList();
-    final monthTransactions = visibleTransactions
-        .where((item) => item.date.startsWith(monthKey))
-        .toList();
+    final first = DateTime.parse('$monthKey-01');
+    final monthTransactions = finance.TransactionQuery(
+            start: first, end: DateTime(first.year, first.month + 1, 0))
+        .select(state);
     final pendingConversionCount = monthTransactions
-        .where((item) => _cnyAmount(item) == null && item.currency != 'CNY')
+        .where((item) =>
+            item.type != TransactionType.transfer &&
+            _cnyAmount(item) == null &&
+            item.currency != 'CNY')
         .length;
     final income = _round(monthTransactions
         .where((item) => item.type == TransactionType.income)
@@ -190,18 +198,17 @@ class InsightRules {
   }
 
   static double? _cnyAmount(FinanceTransaction transaction) {
-    if (transaction.currency == 'CNY') {
-      return transaction.cnyAmount ?? transaction.amount;
-    }
-    return transaction.cnyAmount;
+    return finance.cnyAmount(transaction);
   }
 
   static DateTime? _occurredDate(FinanceTransaction transaction) {
-    final raw = transaction.occurredAt ?? transaction.date;
-    if (raw.length >= 19 && raw[10] == 'T') {
-      return DateTime.tryParse(raw.substring(0, 19));
-    }
-    return DateTime.tryParse(raw);
+    final date = finance.businessDate(transaction);
+    if (date == null) return null;
+    final raw = transaction.occurredAt ?? '';
+    final stamp =
+        DateTime.tryParse(raw.length >= 19 ? raw.substring(0, 19) : raw);
+    return DateTime(
+        date.year, date.month, date.day, stamp?.hour ?? 0, stamp?.minute ?? 0);
   }
 
   static double _round(double value, [int digits = 2]) {

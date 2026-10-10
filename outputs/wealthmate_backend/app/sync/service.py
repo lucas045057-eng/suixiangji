@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,6 +10,7 @@ from ..assets.service import account_json as _account_json
 from ..assets.service import save_account as _save_account
 from ..budget.service import budget_json as _budget_json
 from ..budget.service import save_budget as _save_budget
+from ..budget.service import budget_with_same_key
 from ..ledger.service import _attach_latest_rate
 from ..ledger.service import _category_json
 from ..ledger.service import _normalise_tx_payload
@@ -28,7 +30,9 @@ def _lock_current_user(db: Session, user_id: str) -> User:
         .where(User.id == user_id)
         .with_for_update()
         .execution_options(populate_existing=True)
-    ).scalar_one()
+    ).scalar_one_or_none()
+    if locked is None:
+        raise HTTPException(status_code=401, detail='登录已失效，请重新登录')
     # The authentication dependency may already have populated this identity
     # in the Session before the row lock was acquired. Refresh explicitly so
     # version allocation starts from the value observed after lock wait.
@@ -51,6 +55,7 @@ def _current_entity(db: Session, entity: str, entity_id: str, user_id: str):
 
 
 def push(payload: SyncPushIn, db: Session, user: User) -> dict:
+    verified_auth_version = user.auth_version or 0
     accepted = []
     conflicts = []
     ordered_operations = order_operations(payload.operations)
@@ -59,6 +64,8 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
         db.begin()
     try:
         locked_user = _lock_current_user(db, user.id)
+        if (locked_user.auth_version or 0) != verified_auth_version:
+            raise HTTPException(status_code=401, detail='登录已失效，请重新登录')
         for operation in ordered_operations:
             # The lookup happens after the User lock, so a retry that waited
             # behind another push observes its committed receipt/version.
@@ -84,6 +91,16 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
             existing = _current_entity(
                 db, operation.entity, operation.entity_id, locked_user.id
             )
+            if operation.entity == 'budgets':
+                canonical = budget_with_same_key(db, locked_user, operation.payload)
+                if canonical and canonical.id != operation.entity_id:
+                    conflicts.append({
+                        'client_op_id': operation.client_op_id,
+                        'entity_id': operation.entity_id,
+                        'canonical_entity_id': canonical.id,
+                        'reason': 'month/category budget already exists',
+                    })
+                    continue
             if has_newer_server_version(existing, locked_user, raw_version):
                 conflicts.append(
                     {

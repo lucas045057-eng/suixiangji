@@ -13,6 +13,8 @@ class AuthModuleBoundaryTest(unittest.TestCase):
                 "/auth/login",
                 "/auth/me",
                 "/auth/password",
+                "/auth/recovery-code",
+                "/auth/recover",
             },
         )
 

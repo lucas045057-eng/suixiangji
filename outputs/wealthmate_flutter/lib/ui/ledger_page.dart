@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
+import '../domain/transaction_query.dart';
 import '../state/finance_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import 'widgets/transaction_form.dart';
@@ -8,10 +9,15 @@ import 'widgets/ui_helpers.dart';
 import 'transaction_detail_page.dart';
 
 class LedgerPage extends StatefulWidget {
-  LedgerPage({LedgerStore? ledger, FinanceStore? store, super.key})
+  LedgerPage(
+      {LedgerStore? ledger,
+      FinanceStore? store,
+      this.initialQuery = const TransactionQuery(),
+      super.key})
       : ledger = ledger ?? store!.ledger;
 
   final LedgerStore ledger;
+  final TransactionQuery initialQuery;
 
   @override
   State<LedgerPage> createState() => _LedgerPageState();
@@ -20,23 +26,33 @@ class LedgerPage extends StatefulWidget {
 class _LedgerPageState extends State<LedgerPage> {
   String query = '';
   TransactionType? filter;
+  String? category;
+
+  @override
+  void initState() {
+    super.initState();
+    filter = widget.initialQuery.type;
+    query = widget.initialQuery.search;
+    category = widget.initialQuery.categoryIds?.length == 1
+        ? widget.initialQuery.categoryIds!.single
+        : null;
+  }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: widget.ledger,
       builder: (context, _) {
-        final transactions = widget.ledger.transactions
-            .where((item) {
-              if (item.deletedAt != null ||
-                  (filter != null && item.type != filter)) return false;
-              final haystack =
-                  '${item.note} ${categoryName(widget.ledger.state, item.categoryId)} ${accountName(widget.ledger.state, item.accountId)}';
-              return haystack.contains(query);
-            })
-            .toList()
-            .reversed
-            .toList();
+        final transactions = TransactionQuery(
+                start: widget.initialQuery.start,
+                end: widget.initialQuery.end,
+                type: filter,
+                search: query,
+                accountId: widget.initialQuery.accountId,
+                categoryIds: category == null
+                    ? widget.initialQuery.categoryIds
+                    : {category!})
+            .select(widget.ledger.state);
         return SafeArea(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -73,7 +89,10 @@ class _LedgerPageState extends State<LedgerPage> {
                 FilterChip(
                     label: const Text('全部'),
                     selected: filter == null,
-                    onSelected: (_) => setState(() => filter = null)),
+                    onSelected: (_) => setState(() {
+                          filter = null;
+                          category = null;
+                        })),
                 const SizedBox(width: 8),
                 FilterChip(
                     label: const Text('支出'),
@@ -87,6 +106,25 @@ class _LedgerPageState extends State<LedgerPage> {
                     onSelected: (_) =>
                         setState(() => filter = TransactionType.income)),
               ])),
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 22),
+              child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: category,
+                  hint: const Text('筛选分类'),
+                  items: [
+                    const DropdownMenuItem(
+                        value: 'uncategorized', child: Text('未分类')),
+                    for (final item in widget.ledger.state.categories)
+                      DropdownMenuItem(value: item.id, child: Text(item.name)),
+                  ],
+                  onChanged: (value) => setState(() => category = value))),
+          if (widget.initialQuery.start != null)
+            Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 22),
+                child: Text(
+                    '${widget.initialQuery.start!.toIso8601String().substring(0, 10)} 至 ${widget.initialQuery.end!.toIso8601String().substring(0, 10)} · ${transactions.length} 笔',
+                    style: const TextStyle(fontSize: 11))),
           Expanded(
               child: transactions.isEmpty
                   ? const Center(

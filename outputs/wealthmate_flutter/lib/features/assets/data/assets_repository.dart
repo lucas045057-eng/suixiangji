@@ -46,6 +46,19 @@ class AssetsRepository {
       {FinanceState? baseState}) {
     return session.write(
       (current) => AssetRules.applyExchangeRate(current, snapshot),
+      deriveOperations: (current, next) => next.accounts
+          .where((account) =>
+              account.isActive &&
+              account.currency.toUpperCase() == snapshot.baseCurrency &&
+              snapshot.quoteCurrency == 'CNY')
+          .map((account) => SyncOperation(
+              clientOpId:
+                  'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
+              entity: 'accounts',
+              entityId: account.id,
+              type: SyncOperationType.upsert,
+              payload: account.toJson(),
+              createdAt: DateTime.now().toIso8601String())),
       initialState: baseState,
     );
   }

@@ -104,8 +104,8 @@ class AuthRemoteDataSource {
   Future<UserProfile> changePassword(
       String currentPassword, String newPassword) async {
     final generation = api.sessionGeneration;
-    final json = await requestMapWithSession(api, 'POST', '/auth/password',
-        body: {
+    final json =
+        await requestMapWithSession(api, 'POST', '/auth/password', body: {
       'current_password': currentPassword,
       'new_password': newPassword,
     });
@@ -118,4 +118,27 @@ class AuthRemoteDataSource {
   }
 
   Future<void> logout() => api.logout();
+
+  Future<String> generateRecoveryCode(String currentPassword) async {
+    final result = await requestMapWithSession(
+        api, 'POST', '/auth/recovery-code',
+        body: {'current_password': currentPassword});
+    final code = result['recovery_code'] as String?;
+    if (code == null || code.isEmpty)
+      throw const ApiFailure(ApiFailureKind.server, '未收到恢复码，请重试');
+    return code;
+  }
+
+  Future<void> recoverPassword(
+      String username, String code, String password) async {
+    final result = await requestMapWithSession(api, 'POST', '/auth/recover',
+        includeAuth: false,
+        body: {
+          'username': username.trim(),
+          'recovery_code': code.trim(),
+          'new_password': password
+        });
+    if (result['reset'] != true)
+      throw const ApiFailure(ApiFailureKind.server, '未能确认密码重置，请重试');
+  }
 }

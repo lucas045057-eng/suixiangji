@@ -25,6 +25,8 @@ class DashboardPage extends StatelessWidget {
     this.draft,
     required this.isDemoMode,
     this.message,
+    this.displayName = '朋友',
+    this.now,
     this.onSync,
     this.onViewAllTransactions,
     this.onUpdateDraft,
@@ -45,6 +47,8 @@ class DashboardPage extends StatelessWidget {
   final AgentDraft? draft;
   final bool isDemoMode;
   final String? message;
+  final String displayName;
+  final DateTime? now;
   final Future<void> Function()? onSync;
   final VoidCallback? onViewAllTransactions;
   final ValueChanged<AgentDraft>? onUpdateDraft;
@@ -105,9 +109,10 @@ class DashboardPage extends StatelessWidget {
                       fontWeight: FontWeight.w700)),
               const SizedBox(height: 5),
               Row(children: [
-                const Expanded(
-                    child: Text('早上好，林默 👋',
-                        style: TextStyle(
+                Expanded(
+                    child: Text(
+                        '${greeting(now ?? DateTime.now())}，${displayName.trim().isEmpty ? '朋友' : displayName} 👋',
+                        style: const TextStyle(
                             fontSize: 27,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -.7))),
@@ -273,6 +278,14 @@ class DashboardPage extends StatelessWidget {
       },
     );
   }
+
+  static String greeting(DateTime value) => value.hour < 6
+      ? '夜深了'
+      : value.hour < 12
+          ? '早上好'
+          : value.hour < 18
+              ? '下午好'
+              : '晚上好';
 
   Widget _sectionCard(
       {required String title, required Widget child, Widget? trailing}) {

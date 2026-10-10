@@ -88,6 +88,7 @@ class FinanceRules {
     if (accountId == null) missingFacts.add('请选择支付账户');
     final complete = base.amount > 0 && categoryId != null && accountId != null;
     return base.copyWith(
+      currency: currencyFromText(text) ?? state.preferredCurrency,
       categoryId: categoryId,
       accountId: accountId,
       confidence: complete ? .98 : .55,
@@ -122,8 +123,24 @@ class FinanceRules {
         return category.id;
     }
     if (base.categoryId != null &&
-        active.any((item) => item.id == base.categoryId))
+        active.any(
+            (item) => item.id == base.categoryId && item.type == base.type))
       return base.categoryId;
+    const names = {
+      'food': ['餐饮', '饮食', '餐饮美食'],
+      'transport': ['交通', '出行'],
+      'shopping': ['购物', '日用品'],
+      'home': ['居住', '住房'],
+      'entertainment': ['娱乐'],
+      'health': ['医疗', '健康'],
+      'salary': ['工资', '收入']
+    };
+    final matching = active
+        .where((c) =>
+            c.type == base.type &&
+            (names[base.categoryId] ?? const <String>[]).contains(c.name))
+        .toList();
+    if (matching.length == 1) return matching.single.id;
     for (final memory in state.quickMemories.reversed) {
       if (memory.categoryId == null || !text.contains(memory.key)) continue;
       final category = active.where((item) => item.id == memory.categoryId);
@@ -135,9 +152,8 @@ class FinanceRules {
 
   static String? _resolveAccount(
       String text, String? categoryId, FinanceState state) {
-    final active = state.accounts
-        .where((item) => item.deletedAt == null)
-        .toList(growable: false);
+    final active =
+        state.accounts.where((item) => item.isActive).toList(growable: false);
     for (final account in active) {
       if (account.name.trim().isNotEmpty && text.contains(account.name))
         return account.id;
@@ -173,6 +189,24 @@ class FinanceRules {
     final defaultId = state.defaultAccountId;
     if (defaultId != null && active.any((item) => item.id == defaultId))
       return defaultId;
+    final defaults = active.where((a) => a.isDefaultPayment).toList();
+    return defaults.length == 1 ? defaults.single.id : null;
+  }
+
+  static String? currencyFromText(String text) {
+    final upper = text.toUpperCase();
+    const names = {
+      'USD': '美元',
+      'HKD': '港币',
+      'CNY': '人民币',
+      'EUR': '欧元',
+      'JPY': '日元',
+      'GBP': '英镑'
+    };
+    for (final pair in names.entries) {
+      if (upper.contains(pair.key) || text.contains(pair.value))
+        return pair.key;
+    }
     return null;
   }
 

@@ -3,18 +3,21 @@ import 'package:flutter/material.dart';
 class BarChartItem {
   const BarChartItem(
       {required this.label,
+      this.id,
       required this.value,
       this.color = const Color(0xFF2F9F7D)});
 
   final String label;
+  final String? id;
   final double value;
   final Color color;
 }
 
 class SpendingBarChart extends StatelessWidget {
-  const SpendingBarChart({required this.items, super.key});
+  const SpendingBarChart({required this.items, this.onTap, super.key});
 
   final List<BarChartItem> items;
+  final ValueChanged<BarChartItem>? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -29,37 +32,39 @@ class SpendingBarChart extends StatelessWidget {
       child: Column(
         children: [
           for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  SizedBox(
-                      width: 64,
-                      child: Text(item.label,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w700))),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: LinearProgressIndicator(
-                          value: item.value / maxValue,
-                          minHeight: 12,
-                          color: item.color,
-                          backgroundColor: const Color(0xFFEDF2EE)),
-                    ),
+            InkWell(
+                onTap: onTap == null ? null : () => onTap!(item),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                          width: 64,
+                          child: Text(item.label,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700))),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: LinearProgressIndicator(
+                              value: item.value / maxValue,
+                              minHeight: 12,
+                              color: item.color,
+                              backgroundColor: const Color(0xFFEDF2EE)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                          width: 62,
+                          child: Text('¥${item.value.toStringAsFixed(0)}',
+                              textAlign: TextAlign.right,
+                              style: const TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w800))),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                      width: 62,
-                      child: Text('¥${item.value.toStringAsFixed(0)}',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(
-                              fontSize: 10, fontWeight: FontWeight.w800))),
-                ],
-              ),
-            ),
+                )),
         ],
       ),
     );

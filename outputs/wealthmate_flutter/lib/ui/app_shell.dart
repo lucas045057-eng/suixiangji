@@ -129,6 +129,9 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             quickEntry: widget.store.quickEntry,
             isDemoMode: widget.store.isDemoMode,
             message: widget.store.message,
+            displayName: widget.auth?.profile?.displayName ??
+                widget.store.profile?.displayName ??
+                '朋友',
             onSync: widget.store.sync,
             onViewAllTransactions: () => _selectPage(1),
             openComposer: _openComposer,
@@ -136,7 +139,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           ),
         ),
       1 => LedgerPage(store: widget.store),
-      2 => StatsPage(insights: widget.store.insights),
+      2 =>
+        StatsPage(insights: widget.store.insights, ledger: widget.store.ledger),
       3 => WealthPage(store: widget.store.assets, ledger: widget.store.ledger),
       _ => SettingsPage(
           store: widget.store,
@@ -237,22 +241,25 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 ),
               ),
               const Divider(color: Color(0x334A665B)),
-              const ListTile(
+              ListTile(
                 contentPadding: EdgeInsets.symmetric(horizontal: 12),
                 leading: CircleAvatar(
                     radius: 16,
                     backgroundColor: Color(0xFFF3B187),
-                    child: Text('林',
-                        style: TextStyle(
+                    child: Text(
+                        (widget.store.profile?.displayName ?? '朋友')
+                            .characters
+                            .first,
+                        style: const TextStyle(
                             color: Color(0xFF56301E),
                             fontSize: 12,
                             fontWeight: FontWeight.w800))),
-                title: Text('林默',
-                    style: TextStyle(
+                title: Text(widget.store.profile?.displayName ?? '朋友',
+                    style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w700)),
-                subtitle: Text('本地模式',
+                subtitle: const Text('本地模式',
                     style: TextStyle(color: Color(0xFF8B9C95), fontSize: 10)),
               ),
             ],

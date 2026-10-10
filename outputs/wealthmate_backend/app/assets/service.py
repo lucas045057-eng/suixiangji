@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Account, ExchangeRate, Transaction, User
 from ..services.exchange import fetch_frankfurter_rate
-from .domain import date_value, json_value, money
+from .domain import date_value, json_value, money, cny_value
 from .schemas import AccountIn, RateIn
 
 
@@ -16,6 +16,8 @@ def account_json(row: Account) -> dict:
         {
             "id": row.id,
             "name": row.name,
+            "note": row.note,
+            "archived_at": row.archived_at,
             "type": row.kind,
             "kind": row.kind,
             "account_kind": row.account_kind,
@@ -105,6 +107,19 @@ def save_account(
         "is_liquid": bool(values.get("is_liquid", False)),
         "is_default_payment": bool(values.get("is_default_payment", False)),
     }
+    # Missing fields from older clients must not erase newly stored metadata.
+    if 'note' in values:
+        note = str(values['note'] or '').strip()
+        if len(note) > 256:
+            raise HTTPException(status_code=422, detail='账户用途最多256字')
+        data['note'] = note
+    if 'archived_at' in values:
+        raw_archived = values['archived_at']
+        try:
+            data['archived_at'] = (datetime.fromisoformat(raw_archived.replace('Z','+00:00'))
+                if isinstance(raw_archived,str) else raw_archived)
+        except ValueError:
+            raise HTTPException(status_code=422, detail='归档时间无效') from None
     if not row:
         row = Account(id=values["id"], user_id=user.id, **data)
         db.add(row)
@@ -129,7 +144,7 @@ def list_accounts(db: Session, user: User) -> dict:
 
 
 def create_account(db: Session, user: User, payload: AccountIn) -> dict:
-    values = payload.model_dump()
+    values = payload.model_dump(exclude_unset=True)
     values["id"] = values.get("id") or str(uuid4())
     user.sync_version += 1
     row = save_account(db, user, values, server_version=user.sync_version)
@@ -148,7 +163,7 @@ def update_account(
     existing = db.get(Account, account_id)
     if not existing or existing.user_id != user.id:
         raise HTTPException(status_code=404, detail="账户不存在")
-    values = payload.model_dump()
+    values = payload.model_dump(exclude_unset=True)
     values["id"] = account_id
     user.sync_version += 1
     row = save_account(db, user, values, server_version=user.sync_version)
@@ -174,7 +189,7 @@ def delete_account(db: Session, user: User, account_id: str) -> dict:
 def wealth(db: Session, user: User) -> dict:
     accounts = (
         db.query(Account)
-        .filter(Account.user_id == user.id, Account.deleted_at.is_(None))
+        .filter(Account.user_id == user.id, Account.deleted_at.is_(None), Account.archived_at.is_(None))
         .all()
     )
     rows = (
@@ -197,7 +212,8 @@ def wealth(db: Session, user: User) -> dict:
         if account_pending:
             pending += 1
         for row in rows:
-            if row.cny_amount is None:
+            value = cny_value(row.amount, row.currency, row.cny_amount)
+            if value is None:
                 if (
                     row.account_id == account.id
                     or row.from_account_id == account.id
@@ -206,7 +222,6 @@ def wealth(db: Session, user: User) -> dict:
                     pending += 1
                     account_pending = True
                 continue
-            value = row.cny_amount
             if row.kind == "transfer":
                 if row.from_account_id == account.id:
                     balance -= value
@@ -252,6 +267,14 @@ async def exchange_rate(
     try:
         values = await fetch_frankfurter_rate(base, quote)
     except Exception:
+        cached = (db.query(ExchangeRate).filter(
+            ExchangeRate.base_currency == base, ExchangeRate.quote_currency == quote,
+            ExchangeRate.rate > 0).order_by(ExchangeRate.rate_date.desc(),
+            ExchangeRate.fetched_at.desc()).first())
+        if cached is not None:
+            return json_value(dict(base_currency=base,quote_currency=quote,
+                rate=cached.rate,rate_date=cached.rate_date,source=cached.source,
+                updated_at=cached.fetched_at,stale=True))
         raise HTTPException(status_code=502, detail="汇率服务暂不可用，请稍后再试") from None
     row = (
         db.query(ExchangeRate)
@@ -278,6 +301,7 @@ async def exchange_rate(
             "rate_date": row.rate_date,
             "source": row.source,
             "updated_at": row.fetched_at,
+            "stale": False,
         }
     )
 

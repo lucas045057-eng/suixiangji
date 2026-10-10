@@ -58,7 +58,7 @@ class _DraftEditorDialogState extends State<DraftEditorDialog> {
     final categories = LedgerRules.categoryCandidates(widget.state, type,
         selectedCategoryId: categoryId);
     final accounts = widget.state.accounts
-        .where((item) => item.deletedAt == null)
+        .where((item) => item.isActive)
         .toList(growable: false);
     return AlertDialog(
       title: const Text('修改快捷记'),

@@ -12,17 +12,36 @@ class PieChartItem {
 }
 
 class ExpensePieChart extends StatelessWidget {
-  const ExpensePieChart({required this.items, super.key});
+  const ExpensePieChart({required this.items, this.onTap, super.key});
 
   final List<PieChartItem> items;
+  final ValueChanged<int>? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-        child: SizedBox(
-            width: 150,
-            height: 150,
-            child: CustomPaint(painter: _PiePainter(items))));
+    return GestureDetector(
+        onTapUp: onTap == null
+            ? null
+            : (details) {
+                final point = details.localPosition - const Offset(75, 75);
+                var angle = (math.atan2(point.dy, point.dx) + math.pi / 2) %
+                    (math.pi * 2);
+                final total = items.fold<double>(0, (s, i) => s + i.value);
+                if (total <= 0) return;
+                for (var i = 0; i < items.length; i++) {
+                  final sweep = items[i].value / total * math.pi * 2;
+                  if (angle <= sweep) {
+                    onTap!(i);
+                    return;
+                  }
+                  angle -= sweep;
+                }
+              },
+        child: RepaintBoundary(
+            child: SizedBox(
+                width: 150,
+                height: 150,
+                child: CustomPaint(painter: _PiePainter(items)))));
   }
 }
 
