@@ -1,4 +1,4 @@
-# 随想记 V1.2 验收状态
+# 随想记 V1.2 验收状态（历史存档：当前版本状态以 docs/v1.0.5/progress.md 为准）
 
 源码打包文件：`suixiangji-v1.2-source-20260904-clean.zip`。
 

@@ -8,7 +8,7 @@
 - [Web/PWA 使用说明](WEB-DELIVERY.md)
 - [随想记 Flutter Android/Windows 源码](outputs/wealthmate_flutter/README.md)
 - [Flutter 交付状态](FLUTTER-DELIVERY.md)
-- [双轨设计规格](docs/superpowers/specs/2026-09-03-wealthmate-dual-track-design.md)
+- （双轨设计规格文档已在 2026-10 瘦身清理中移除）
 
 ## 状态总览
 
