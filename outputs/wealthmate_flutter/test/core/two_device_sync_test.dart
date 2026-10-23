@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:wealthmate_flutter/core/sync/sync_coordinator.dart';
 import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/finance_repository.dart';
 import 'package:wealthmate_flutter/data/local_repository.dart';
@@ -474,7 +475,12 @@ void main() {
           limit: 200,
           serverVersion: 4),
     ]);
-    final merged = a.repository.mergePulledBudgets(current, [
+    final coordinator = SyncCoordinator(
+      session: a.repository.session,
+      api: null,
+      isLocalOwnerBound: () => true,
+    );
+    final merged = coordinator.mergePulledBudgets(current, [
       const Budget(
           id: 'budget',
           month: '2026-09',

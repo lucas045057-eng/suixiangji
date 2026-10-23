@@ -155,29 +155,6 @@ class InsightRules {
         .fold<double>(0, (sum, item) => sum + item.balance));
     final netWorth = _round(assetTotal - liabilityTotal);
     final budgetProgress = budget_rules.progressForMonth(state, monthKey);
-    final goal = state.goals.isEmpty ? null : state.goals.first;
-    final liquidAssets = accountBalances.where((item) {
-      if (item.account.type != AccountType.asset || !item.account.isLiquid) {
-        return false;
-      }
-      return goal == null ||
-          goal.liquidAccountIds.isEmpty ||
-          goal.liquidAccountIds.contains(item.account.id);
-    }).toList();
-    final selectedGoalIds = goal?.liquidAccountIds ?? const <String>[];
-    final invalidGoalSelection = selectedGoalIds.any((id) => state.accounts.any(
-        (account) =>
-            account.id == id && account.type == AccountType.liability));
-    final emergencyFund =
-        _round(liquidAssets.fold<double>(0, (sum, item) => sum + item.balance));
-    final goalProgress = goal == null || goal.target <= 0
-        ? 0.0
-        : (emergencyFund / goal.target).clamp(0, 1).toDouble();
-    final remainingMonths =
-        goal != null && savings > 0 && emergencyFund < goal.target
-            ? ((goal.target - emergencyFund) / savings).ceil()
-            : 0;
-
     return FinanceMetrics(
       monthKey: monthKey,
       income: income,
@@ -189,10 +166,6 @@ class InsightRules {
       liabilityTotal: liabilityTotal,
       netWorth: netWorth,
       budgetProgress: budgetProgress,
-      emergencyFund: emergencyFund,
-      goalProgress: goalProgress,
-      remainingMonths: remainingMonths,
-      emergencyFundError: invalidGoalSelection ? '应急金账户必须是资产账户' : null,
       pendingConversionCount: pendingConversionCount,
     );
   }

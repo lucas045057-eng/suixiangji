@@ -23,13 +23,6 @@ FinanceState storeState() => FinanceState(
             id: 'alipay', name: '支付宝', type: AccountType.asset, isLiquid: true)
       ],
       categories: const [Category(id: 'food', name: '餐饮')],
-      goals: const [
-        Goal(
-            id: 'emergency',
-            name: '应急金',
-            target: 1000,
-            liquidAccountIds: ['alipay'])
-      ],
     );
 
 FinanceRepository storeRepository() => FinanceRepository(

@@ -662,7 +662,6 @@ class SyncCoordinator {
         state.transactions.isEmpty &&
         state.budgets.isEmpty &&
         state.exchangeRates.isEmpty &&
-        state.goals.isEmpty &&
         state.reports.isEmpty &&
         state.conflicts.isEmpty &&
         state.quickMemories.isEmpty &&
@@ -687,8 +686,6 @@ class SyncCoordinator {
           current.exchangeRates,
           requested.exchangeRates,
           (item) => '${item.baseCurrency}:${item.quoteCurrency}'),
-      goals:
-          _appendMissingById(current.goals, requested.goals, (item) => item.id),
       reports: _appendMissingById(
           current.reports, requested.reports, (item) => item.id),
       conflicts: [

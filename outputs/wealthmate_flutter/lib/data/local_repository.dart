@@ -1,7 +1,5 @@
 import 'dart:convert';
 
-import 'package:shared_preferences/shared_preferences.dart';
-
 import '../domain/models.dart';
 import 'drift_database.dart';
 import 'sync_queue.dart';
@@ -14,20 +12,6 @@ abstract class KeyValueStore {
 
 abstract interface class AtomicKeyValueStore implements KeyValueStore {
   Future<void> writeBatch(Map<String, String> values);
-}
-
-class SharedPreferencesKeyValueStore implements KeyValueStore {
-  SharedPreferencesKeyValueStore(this.preferences);
-
-  final SharedPreferences preferences;
-
-  @override
-  Future<String?> read(String key) async => preferences.getString(key);
-
-  @override
-  Future<void> write(String key, String value) async {
-    await preferences.setString(key, value);
-  }
 }
 
 class DriftKeyValueStore implements AtomicKeyValueStore {
@@ -193,11 +177,6 @@ class LocalRepository {
 
   Future<List<String>> loadPendingAccountCleanupUserIds() async =>
       _readPendingAccountCleanupUserIds();
-
-  Future<String?> loadPendingAccountCleanupUserId() async {
-    final userIds = await loadPendingAccountCleanupUserIds();
-    return userIds.isEmpty ? null : userIds.first;
-  }
 
   Future<void> markPendingAccountCleanup(String userId) async {
     final normalizedUserId = userId.trim();

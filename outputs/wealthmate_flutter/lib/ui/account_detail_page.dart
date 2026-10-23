@@ -23,7 +23,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   late Account _account;
   late AccountType type;
   late AccountKind accountKind;
-  late bool isLiquid;
   late bool isDefaultPayment;
 
   @override
@@ -38,7 +37,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         TextEditingController(text: account.openingBalance.toString());
     type = account.type;
     accountKind = account.accountKind;
-    isLiquid = account.isLiquid;
     isDefaultPayment = account.isDefaultPayment;
   }
 
@@ -135,12 +133,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   decoration: const InputDecoration(labelText: '初始余额')),
               SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('计入流动资产'),
-                  subtitle: const Text('应急金计算会使用此开关'),
-                  value: isLiquid,
-                  onChanged: (value) => setState(() => isLiquid = value)),
-              SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
                   title: const Text('默认支付账户'),
                   value: isDefaultPayment,
                   onChanged: (value) =>
@@ -181,7 +173,6 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         accountKind: accountKind,
         currency: currency,
         openingBalance: opening,
-        isLiquid: isLiquid,
         isDefaultPayment: isDefaultPayment);
     await widget.store.updateAccount(updated);
     if (widget.store.message == '账户名称不能重复') {

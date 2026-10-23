@@ -1,6 +1,7 @@
 import '../../../core/database/local_state_session.dart';
 import '../../../core/network/api_session.dart';
 import '../../../core/network/api_transport.dart';
+import '../../../domain/finance_rules.dart';
 import '../../../domain/models.dart';
 import '../domain/quick_entry_rules.dart';
 import 'quick_entry_remote_data_source.dart';
@@ -28,7 +29,7 @@ class QuickEntryRepository {
     DateTime? now,
   }) async {
     remoteFallbackUsed = false;
-    final localDraft = QuickEntryRules.completeNaturalLanguageDraft(
+    final localDraft = FinanceRules.completeNaturalLanguageDraft(
       text,
       now: now ?? DateTime.now(),
       state: context,
@@ -68,7 +69,7 @@ class QuickEntryRepository {
     AgentDraft draft, {
     FinanceState? initialState,
   }) async {
-    final key = QuickEntryRules.quickMemoryKey(sourceText);
+    final key = FinanceRules.quickMemoryKey(sourceText);
     if (key.isEmpty || draft.categoryId == null || draft.accountId == null) {
       return;
     }

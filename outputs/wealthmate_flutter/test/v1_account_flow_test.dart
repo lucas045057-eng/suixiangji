@@ -185,14 +185,14 @@ void main() {
           expect(request.headers['authorization'], 'Bearer new-token');
           return http.Response(jsonEncode(profile('new-user')), 200);
         }));
-    await api.register(
+    await api.authDataSource.register(
         username: 'alice',
         password: 'Password123!',
         displayName: 'Alice',
         inviteCode: 'invite-A');
     expect(tokens.token, 'new-token');
     expect(api.lastVerifiedUserId, isNull);
-    expect((await api.fetchProfile()).id, 'new-user');
+    expect((await api.authDataSource.fetchProfile()).id, 'new-user');
     expect(tokens.lastVerifiedUserId, 'new-user');
     expect(requests.map((r) => r.url.path), ['/auth/register', '/auth/me']);
     expect(jsonDecode(requests.first.body), {
@@ -215,7 +215,7 @@ void main() {
           client: MockClient((_) async =>
               http.Response('{"detail":"private database trace"}', status)));
       await expectLater(
-          api.register(
+          api.authDataSource.register(
               username: 'alice',
               password: 'Password123!',
               displayName: 'A',

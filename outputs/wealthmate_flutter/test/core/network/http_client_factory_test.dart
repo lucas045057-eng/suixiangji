@@ -42,7 +42,6 @@ void main() {
       },
     );
 
-    expect(factory.transportKind, HttpTransportKind.cronet);
     expect(factory.create(), same(cronetClient));
     expect(factory.create(), same(cronetClient));
     expect(cronetBuilds, 1);
@@ -67,7 +66,6 @@ void main() {
       },
     );
 
-    expect(factory.transportKind, HttpTransportKind.packageHttp);
     expect(factory.create(), same(packageHttpClient));
     expect(factory.create(), same(packageHttpClient));
     expect(cronetBuilds, 0);

@@ -14,12 +14,10 @@ PlatformHttpClientFactory createPlatformHttpClientFactory({
   final useCronet = isAndroid ?? Platform.isAndroid;
   if (!useCronet) {
     return PlatformHttpClientFactory(
-      transportKind: HttpTransportKind.packageHttp,
       clientBuilder: packageHttpClientBuilder ?? http.Client.new,
     );
   }
   return PlatformHttpClientFactory(
-    transportKind: HttpTransportKind.cronet,
     clientBuilder: cronetClientBuilder ?? _buildCronetClient,
   );
 }

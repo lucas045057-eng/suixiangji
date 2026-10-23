@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:wealthmate_flutter/core/sync/sync_coordinator.dart';
 import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/finance_repository.dart';
 import 'package:wealthmate_flutter/data/drift_database.dart';
@@ -178,7 +179,7 @@ void main() {
     var state = const FinanceState(currentMonth: '2026-09');
 
     for (var index = 1; index <= 10; index++) {
-      state = await repository.applyLocal(
+      state = await repository.applyLocalTransaction(
           state,
           FinanceTransaction(
             id: 'offline-tx-$index',
@@ -467,10 +468,15 @@ void main() {
       serverVersion: 3,
     );
 
-    final merged = repository.mergePulledBudgets(
-        repository.mergePulledCategories(
-            repository.mergePulledAccounts(
-                repository.mergePulled(empty, [transaction]), [account]),
+    final coordinator = SyncCoordinator(
+      session: repository.session,
+      api: null,
+      isLocalOwnerBound: () => true,
+    );
+    final merged = coordinator.mergePulledBudgets(
+        coordinator.mergePulledCategories(
+            coordinator.mergePulledAccounts(
+                coordinator.mergePulled(empty, [transaction]), [account]),
             [category]),
         [budget]);
 
@@ -489,7 +495,12 @@ void main() {
     );
     final remote = repositoryTransaction(serverVersion: 3, note: '远端修改');
 
-    final merged = repository.mergePulled(local, [remote]);
+    final coordinator = SyncCoordinator(
+      session: repository.session,
+      api: null,
+      isLocalOwnerBound: () => true,
+    );
+    final merged = coordinator.mergePulled(local, [remote]);
 
     expect(merged.transactions.single.note, '午餐');
     expect(merged.conflicts, contains('transactions:tx-1'));

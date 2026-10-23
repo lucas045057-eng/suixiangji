@@ -24,14 +24,12 @@ FinanceState insightState({
   List<Account> accounts = const <Account>[],
   List<FinanceTransaction> transactions = const <FinanceTransaction>[],
   List<Budget> budgets = const <Budget>[],
-  List<Goal> goals = const <Goal>[],
 }) {
   return FinanceState(
     currentMonth: '2026-09',
     accounts: accounts,
     transactions: transactions,
     budgets: budgets,
-    goals: goals,
     categories: const <Category>[
       Category(id: 'food', name: '餐饮'),
       Category(id: 'transport', name: '交通'),
@@ -188,9 +186,6 @@ void main() {
       budgets: const <Budget>[
         Budget(id: 'food-budget', month: '2026-09', categoryId: 'food', limit: 250),
       ],
-      goals: const <Goal>[
-        Goal(id: 'emergency', name: '应急金', target: 1000, liquidAccountIds: <String>['asset']),
-      ],
     );
 
     final metrics = InsightRules.deriveMetrics(state, '2026-09');
@@ -203,8 +198,6 @@ void main() {
     expect(metrics.assetTotal, 1100);
     expect(metrics.liabilityTotal, 400);
     expect(metrics.netWorth, 700);
-    expect(metrics.emergencyFund, 1100);
-    expect(metrics.goalProgress, 1);
     expect(metrics.pendingConversionCount, 1);
   });
 

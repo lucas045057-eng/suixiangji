@@ -8,7 +8,6 @@ PlatformHttpClientFactory createPlatformHttpClientFactory({
   HttpClientBuilder? packageHttpClientBuilder,
 }) {
   return PlatformHttpClientFactory(
-    transportKind: HttpTransportKind.packageHttp,
     clientBuilder: packageHttpClientBuilder ?? http.Client.new,
   );
 }

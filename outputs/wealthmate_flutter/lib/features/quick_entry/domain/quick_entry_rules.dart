@@ -2,21 +2,6 @@ import '../../../domain/finance_rules.dart';
 import '../../../domain/models.dart';
 
 class QuickEntryRules {
-  static const double confirmationThreshold =
-      FinanceRules.confirmationThreshold;
-
-  static AgentDraft completeNaturalLanguageDraft(
-    String text, {
-    required DateTime now,
-    required FinanceState state,
-  }) {
-    return FinanceRules.completeNaturalLanguageDraft(
-      text,
-      now: now,
-      state: state,
-    );
-  }
-
   static AgentDraft mergeRemoteDraft(
       AgentDraft localDraft, AgentDraft remoteDraft) {
     return localDraft.copyWith(
@@ -42,8 +27,4 @@ class QuickEntryRules {
     );
   }
 
-  static bool canPost(AgentDraft draft) => FinanceRules.canPostDraft(draft);
-
-  static String quickMemoryKey(String text) =>
-      FinanceRules.quickMemoryKey(text);
 }

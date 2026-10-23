@@ -55,7 +55,7 @@ void main() {
     expect(sessionSource, contains('Future<FinanceState> write('));
   });
 
-  test('ApiClient keeps compatibility methods but no endpoint implementations',
+  test('ApiClient keeps sync compatibility methods but no endpoint implementations',
       () {
     final source = File(
       '${_packageRoot().path}/lib/data/api_client.dart',
@@ -113,7 +113,6 @@ void main() {
     }
 
     for (final fileName in <String>[
-      'http_client_factory_web.dart',
       'http_client_factory_stub.dart',
     ]) {
       final source = File(

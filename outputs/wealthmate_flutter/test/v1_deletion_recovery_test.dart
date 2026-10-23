@@ -111,7 +111,8 @@ void main() {
             }),
             200)));
 
-    await expectLater(api.fetchProfile(), throwsA(isA<ApiFailure>()));
+    await expectLater(
+        api.authDataSource.fetchProfile(), throwsA(isA<ApiFailure>()));
 
     expect(api.token, isNull);
     expect(api.lastVerifiedUserId, isNull);

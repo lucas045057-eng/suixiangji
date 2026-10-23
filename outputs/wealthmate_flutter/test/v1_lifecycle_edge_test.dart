@@ -100,7 +100,7 @@ void main() {
     await storage.started.future;
     await h.logout();
     await h.api.saveToken('B');
-    await h.api.fetchProfile();
+    await h.api.authDataSource.fetchProfile();
     await repository.loadForUser('B');
     const pendingB = SyncOperation(
         clientOpId: 'B-op',
@@ -186,7 +186,7 @@ void main() {
     await h.logout();
     // Identity was verified, but the app stopped before local initialization.
     await h.api.saveToken('A');
-    await h.api.fetchProfile();
+    await h.api.authDataSource.fetchProfile();
     final api = ApiClient(
         baseUrl: 'http://v1.test',
         tokenStore: h.tokens,
@@ -232,10 +232,10 @@ void main() {
                   : {'access_token': 'A'}),
               200)));
       final Future<Object?> pending = switch (operation) {
-        'login' => api.login('A', 'password123'),
-        'register' => api.register(
+        'login' => api.authDataSource.login('A', 'password123'),
+        'register' => api.authDataSource.register(
             username: 'Alice', password: 'password123', inviteCode: 'invite'),
-        _ => api.fetchProfile(),
+        _ => api.authDataSource.fetchProfile(),
       };
       final outcome =
           pending.then<Object?>((_) => 'completed', onError: (Object e) => e);
@@ -244,7 +244,7 @@ void main() {
       final newLogin = api.saveToken('B');
       tokens.release.complete();
       await Future.wait([logout, newLogin]);
-      await api.fetchProfile();
+      await api.authDataSource.fetchProfile();
       expect(await outcome, isA<ApiFailure>());
       expect(api.token, 'B');
       expect(tokens.token, 'B');

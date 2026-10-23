@@ -6,10 +6,8 @@ import '../core/network/api_session.dart';
 import '../core/network/api_transport.dart';
 import '../core/network/http_client_factory.dart';
 import '../core/sync/sync_remote_data_source.dart';
-import '../domain/models.dart';
 import '../features/assets/data/assets_remote_data_source.dart';
 import '../features/auth/data/auth_remote_data_source.dart';
-import '../features/backup/data/backup_remote_data_source.dart';
 import '../features/budget/data/budget_remote_data_source.dart';
 import '../features/insights/data/insights_remote_data_source.dart';
 import '../features/ledger/data/ledger_remote_data_source.dart';
@@ -45,7 +43,6 @@ class ApiClient implements ApiSession {
     );
     authDataSource = AuthRemoteDataSource(api: this);
     assetsDataSource = AssetsRemoteDataSource(api: this);
-    backupDataSource = BackupRemoteDataSource(api: this);
     budgetDataSource = BudgetRemoteDataSource(api: this);
     insightsDataSource = InsightsRemoteDataSource(api: this);
     ledgerDataSource = LedgerRemoteDataSource(api: this);
@@ -67,7 +64,6 @@ class ApiClient implements ApiSession {
 
   late final AuthRemoteDataSource authDataSource;
   late final AssetsRemoteDataSource assetsDataSource;
-  late final BackupRemoteDataSource backupDataSource;
   late final BudgetRemoteDataSource budgetDataSource;
   late final InsightsRemoteDataSource insightsDataSource;
   late final LedgerRemoteDataSource ledgerDataSource;
@@ -207,110 +203,9 @@ class ApiClient implements ApiSession {
     }
   }
 
-  // Legacy compatibility delegates. Feature implementations are owned by
-  // the RemoteDataSource classes constructed above.
-  Future<Map<String, Object?>> login(String username, String password) =>
-      authDataSource.login(username, password);
-
-  Future<UserProfile> fetchProfile() => authDataSource.fetchProfile();
-
-  Future<Map<String, Object?>> register({
-    required String username,
-    required String password,
-    String? displayName,
-    required String inviteCode,
-  }) =>
-      authDataSource.register(
-        username: username,
-        password: password,
-        displayName: displayName,
-        inviteCode: inviteCode,
-      );
-
-  Future<void> deleteAccount(String currentPassword) =>
-      authDataSource.deleteAccount(currentPassword);
-
-  Future<UserProfile> updateProfile({
-    String? displayName,
-    String? username,
-    List<QuickMemory>? quickMemories,
-  }) =>
-      authDataSource.updateProfile(
-        displayName: displayName,
-        username: username,
-        quickMemories: quickMemories,
-      );
-
-  Future<UserProfile> changePassword(
-          String currentPassword, String newPassword) =>
-      authDataSource.changePassword(currentPassword, newPassword);
-
-  Future<List<Account>> fetchAccounts() => assetsDataSource.fetchAccounts();
-
-  Future<List<Category>> fetchCategories() =>
-      ledgerDataSource.fetchCategories();
-
-  Future<Category> createCategory(
-          {required String name, required TransactionType type}) =>
-      ledgerDataSource.createCategory(name: name, type: type);
-
-  Future<Category> updateCategory(String categoryId,
-          {required String name, required bool active}) =>
-      ledgerDataSource.updateCategory(
-        categoryId,
-        name: name,
-        active: active,
-      );
-
-  Future<Account> updateAccount(Account account) =>
-      assetsDataSource.updateAccount(account);
-
-  Future<List<FinanceTransaction>> fetchTransactions() =>
-      ledgerDataSource.fetchTransactions();
-
-  Future<Map<String, Object?>> fetchStats(String monthKey) =>
-      insightsDataSource.fetchStats(monthKey);
-
-  Future<Map<String, Object?>> fetchWealth() => assetsDataSource.fetchWealth();
-
-  Future<Map<String, Object?>> fetchMonthlyReport(String monthKey,
-          {bool force = false}) =>
-      insightsDataSource.fetchMonthlyReport(monthKey, force: force);
-
-  Future<Map<String, Object?>> fetchExchangeRate(String base,
-          {String quote = 'CNY'}) =>
-      assetsDataSource.fetchExchangeRate(base, quote: quote);
-
-  Future<Map<String, Object?>> saveExchangeRate(Map<String, Object?> rate) =>
-      assetsDataSource.saveExchangeRate(rate);
-
-  Future<Map<String, Object?>> exportBackup() =>
-      backupDataSource.exportBackup();
-
-  Future<Map<String, Object?>> restoreBackup(Map<String, Object?> backup) =>
-      backupDataSource.restoreBackup(backup);
-
-  Future<List<Budget>> fetchBudgets({String? month}) =>
-      budgetDataSource.fetchBudgets(month: month);
-
-  Future<Budget> createBudget(Budget budget) =>
-      budgetDataSource.createBudget(budget);
-
-  Future<Budget> updateBudget(String budgetId, Map<String, Object?> changes) =>
-      budgetDataSource.updateBudget(budgetId, changes);
-
-  Future<void> deleteBudget(String budgetId) =>
-      budgetDataSource.deleteBudget(budgetId);
-
-  Future<AgentDraft> postAgentDraft(String text) =>
-      quickEntryDataSource.createDraft(text);
-
   Future<Map<String, Object?>> push(List<SyncOperation> operations) =>
       syncDataSource.push(operations);
 
   Future<PullResult> pullChanges(int sinceVersion) =>
       syncDataSource.pullChanges(sinceVersion);
-
-  Future<List<FinanceTransaction>> pull(int sinceVersion) async =>
-      (await pullChanges(sinceVersion)).transactions;
 }

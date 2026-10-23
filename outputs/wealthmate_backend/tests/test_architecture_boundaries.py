@@ -29,7 +29,6 @@ def test_legacy_domain_module_is_only_compatibility_exports():
     for definition in (
         "def calculate_cny",
         "def classify_natural_language",
-        "def push_idempotent",
         "def monthly_metrics",
         "def period_metrics",
     ):

@@ -27,7 +27,6 @@ class AssetStore extends ChangeNotifier {
       _state.accounts.where((item) => item.isActive).toList(growable: false);
   List<ExchangeRateSnapshot> get exchangeRates =>
       List.unmodifiable(_state.exchangeRates);
-  List<Goal> get goals => List.unmodifiable(_state.goals);
   String? get message => _message;
   bool get isDemoMode => repository.api == null;
 

@@ -18,7 +18,3 @@ String accountName(FinanceState state, String? id) {
           .firstOrNull ??
       '请选择账户';
 }
-
-extension FirstOrNullExtension<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
-}

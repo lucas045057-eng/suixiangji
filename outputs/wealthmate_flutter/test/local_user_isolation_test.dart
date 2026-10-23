@@ -415,7 +415,8 @@ void main() {
 
       final store = FinanceStore(repository: repository);
       api.onAuthExpired = store.clearAuthenticatedSession;
-      await expectLater(api.fetchProfile(), throwsA(isA<ApiFailure>()));
+      await expectLater(
+          api.authDataSource.fetchProfile(), throwsA(isA<ApiFailure>()));
       final restored = await repository.loadForUser('user-a');
 
       expect(

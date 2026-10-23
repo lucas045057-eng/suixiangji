@@ -204,11 +204,6 @@ class FinanceRepository {
     await session.mutateQueue((pending) => pending.replace(const []));
   }
 
-  Future<FinanceState> applyLocal(
-      FinanceState state, FinanceTransaction transaction) async {
-    return applyLocalTransaction(state, transaction);
-  }
-
   Future<FinanceState> applyLocalTransaction(
       FinanceState state, FinanceTransaction transaction) async {
     await _ownerBindingTail;
@@ -267,19 +262,4 @@ class FinanceRepository {
         isCurrent: () => sessionIdentity == started);
   }
 
-  FinanceState mergePulled(FinanceState localState,
-          List<FinanceTransaction> remoteTransactions) =>
-      _syncCoordinator.mergePulled(localState, remoteTransactions);
-
-  FinanceState mergePulledAccounts(
-          FinanceState localState, List<Account> remoteAccounts) =>
-      _syncCoordinator.mergePulledAccounts(localState, remoteAccounts);
-
-  FinanceState mergePulledCategories(
-          FinanceState localState, List<Category> remoteCategories) =>
-      _syncCoordinator.mergePulledCategories(localState, remoteCategories);
-
-  FinanceState mergePulledBudgets(
-          FinanceState localState, List<Budget> remoteBudgets) =>
-      _syncCoordinator.mergePulledBudgets(localState, remoteBudgets);
 }

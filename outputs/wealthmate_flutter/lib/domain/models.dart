@@ -424,40 +424,6 @@ class ExchangeRateSnapshot {
           updatedAt: json['updated_at'] as String?);
 }
 
-class Goal {
-  const Goal({
-    required this.id,
-    required this.name,
-    required this.target,
-    this.liquidAccountIds = const <String>[],
-    this.deadline,
-  });
-
-  final String id;
-  final String name;
-  final double target;
-  final List<String> liquidAccountIds;
-  final String? deadline;
-
-  Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'target': target,
-        'liquid_account_ids': liquidAccountIds,
-        'deadline': deadline,
-      };
-
-  factory Goal.fromJson(Map<String, Object?> json) => Goal(
-        id: json['id']! as String,
-        name: json['name']! as String,
-        target: (json['target'] as num?)?.toDouble() ?? 0,
-        liquidAccountIds:
-            (json['liquid_account_ids'] as List<Object?>?)?.cast<String>() ??
-                const <String>[],
-        deadline: json['deadline'] as String?,
-      );
-}
-
 class Report {
   const Report(
       {required this.id,
@@ -567,7 +533,6 @@ class FinanceState {
     this.transactions = const <FinanceTransaction>[],
     this.budgets = const <Budget>[],
     this.exchangeRates = const <ExchangeRateSnapshot>[],
-    this.goals = const <Goal>[],
     this.reports = const <Report>[],
     this.conflicts = const <String>[],
     this.quickMemories = const <QuickMemory>[],
@@ -584,7 +549,6 @@ class FinanceState {
   final List<FinanceTransaction> transactions;
   final List<Budget> budgets;
   final List<ExchangeRateSnapshot> exchangeRates;
-  final List<Goal> goals;
   final List<Report> reports;
   final List<String> conflicts;
   final List<QuickMemory> quickMemories;
@@ -601,7 +565,6 @@ class FinanceState {
     List<FinanceTransaction>? transactions,
     List<Budget>? budgets,
     List<ExchangeRateSnapshot>? exchangeRates,
-    List<Goal>? goals,
     List<Report>? reports,
     List<String>? conflicts,
     List<QuickMemory>? quickMemories,
@@ -618,7 +581,6 @@ class FinanceState {
       transactions: transactions ?? this.transactions,
       budgets: budgets ?? this.budgets,
       exchangeRates: exchangeRates ?? this.exchangeRates,
-      goals: goals ?? this.goals,
       reports: reports ?? this.reports,
       conflicts: conflicts ?? this.conflicts,
       quickMemories: quickMemories ?? this.quickMemories,
@@ -637,7 +599,6 @@ class FinanceState {
         'transactions': transactions.map((item) => item.toJson()).toList(),
         'budgets': budgets.map((item) => item.toJson()).toList(),
         'exchange_rates': exchangeRates.map((item) => item.toJson()).toList(),
-        'goals': goals.map((item) => item.toJson()).toList(),
         'reports': reports.map((item) => item.toJson()).toList(),
         'conflicts': conflicts,
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
@@ -685,10 +646,6 @@ class FinanceState {
                 .map((item) => ExchangeRateSnapshot.fromJson(
                     (item! as Map).cast<String, Object?>()))
                 .toList(),
-        goals: ((json['goals'] as List<Object?>?) ?? const <Object?>[])
-            .map(
-                (item) => Goal.fromJson((item! as Map).cast<String, Object?>()))
-            .toList(),
         reports: ((json['reports'] as List<Object?>?) ?? const <Object?>[])
             .map((item) =>
                 Report.fromJson((item! as Map).cast<String, Object?>()))
@@ -841,11 +798,7 @@ class FinanceMetrics {
     required this.liabilityTotal,
     required this.netWorth,
     required this.budgetProgress,
-    required this.emergencyFund,
-    required this.goalProgress,
-    required this.remainingMonths,
     this.pendingConversionCount = 0,
-    this.emergencyFundError,
   });
 
   final String monthKey;
@@ -858,11 +811,7 @@ class FinanceMetrics {
   final double liabilityTotal;
   final double netWorth;
   final List<BudgetProgress> budgetProgress;
-  final double emergencyFund;
-  final double goalProgress;
-  final int remainingMonths;
   final int pendingConversionCount;
-  final String? emergencyFundError;
 
   /// Backward-compatible alias for consumers that used the original name.
   double get liabilities => liabilityTotal;

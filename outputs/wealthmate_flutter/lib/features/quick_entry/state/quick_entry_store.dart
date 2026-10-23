@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
+import '../../../domain/finance_rules.dart';
 import '../../../domain/models.dart';
 import '../data/quick_entry_repository.dart';
 import '../domain/quick_entry_rules.dart';
@@ -71,7 +72,7 @@ class QuickEntryStore extends ChangeNotifier {
     if (_confirming || _lastConfirmedFingerprint == _fingerprint(draft)) {
       return false;
     }
-    if (!QuickEntryRules.canPost(draft)) {
+    if (!FinanceRules.canPostDraft(draft)) {
       _message = draft.missingFacts.isEmpty
           ? '这笔记录仍需确认关键字段'
           : draft.missingFacts.join('、');

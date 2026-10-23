@@ -46,18 +46,23 @@ void main() {
       baseUrl: baseUrl,
       tokenStore: IntegrationTokenStore(),
     );
-    final login = await api.login(username, password);
+    final login = await api.authDataSource.login(username, password);
     expect(login['username'], username);
     expect(api.token, isNotEmpty);
 
-    final profile = await api.fetchProfile();
+    final profile = await api.authDataSource.fetchProfile();
     expect(profile.username, username);
-    expect((await api.fetchAccounts()).any((item) => item.id == accountId),
+    expect(
+        (await api.assetsDataSource.fetchAccounts())
+            .any((item) => item.id == accountId),
         isTrue);
-    expect((await api.fetchCategories()).any((item) => item.id == categoryId),
+    expect(
+        (await api.ledgerDataSource.fetchCategories())
+            .any((item) => item.id == categoryId),
         isTrue);
-    expect((await api.fetchTransactions()), isNotEmpty);
-    expect((await api.fetchBudgets(month: '2026-09')), isNotEmpty);
+    expect((await api.ledgerDataSource.fetchTransactions()), isNotEmpty);
+    expect((await api.budgetDataSource.fetchBudgets(month: '2026-09')),
+        isNotEmpty);
 
     final suffix = DateTime.now().microsecondsSinceEpoch;
     final transactionId = 'flutter-api-integration-$suffix';

@@ -8,7 +8,6 @@ from app.domain import (
     calculate_cny,
     classify_natural_language,
     monthly_metrics,
-    push_idempotent,
 )
 from app.assets.domain import calculate_cny as calculate_asset_cny
 
@@ -61,18 +60,6 @@ class DomainRulesTest(unittest.TestCase):
         metrics = monthly_metrics(rows, "2026-09")
         self.assertEqual(metrics["pending_conversion_count"], 1)
         self.assertEqual(metrics["expense"], Decimal("0"))
-
-    def test_sync_retry_with_same_client_operation_is_idempotent(self):
-        store = {}
-        existing_ops = {}
-        row = {"client_op_id": "device-1:1", "id": "tx-1", "kind": "expense"}
-        first = push_idempotent(store, existing_ops, row, server_version=0)
-        second = push_idempotent(store, existing_ops, row, server_version=first["server_version"])
-        self.assertTrue(first["created"])
-        self.assertFalse(second["created"])
-        self.assertEqual(first["server_version"], second["server_version"])
-        self.assertEqual(len(store), 1)
-
 
 if __name__ == "__main__":
     unittest.main()

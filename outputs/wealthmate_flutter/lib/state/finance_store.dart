@@ -206,7 +206,6 @@ class FinanceStore extends ChangeNotifier {
       (_sessionGeneration, repository.sessionIdentity.$2);
   List<BudgetAlert> get budgetAlerts => budget.alerts;
   bool get isDemoMode => repository.api == null;
-  bool get isSyncActive => _syncScheduler.isActive;
   List<Category> get activeCategories =>
       _state.categories.where((item) => item.active).toList(growable: false);
   FinanceMetrics get metrics => insights.metrics;
@@ -679,11 +678,6 @@ class FinanceStore extends ChangeNotifier {
     _message = '演示数据已恢复';
     await repository.clearPendingOperations();
     await repository.save(_state);
-    notifyListeners();
-  }
-
-  void clearMessage() {
-    _message = null;
     notifyListeners();
   }
 

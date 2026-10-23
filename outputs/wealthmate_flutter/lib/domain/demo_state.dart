@@ -175,13 +175,6 @@ class DemoData {
               categoryId: budget.categoryId,
               limit: budget.limit))
           .toList(),
-      goals: const [
-        Goal(
-            id: 'goal-emergency',
-            name: '应急金',
-            target: 30000,
-            liquidAccountIds: ['cash', 'bank', 'alipay', 'wechat']),
-      ],
       reports: [
         Report(
             id: 'report-$month',

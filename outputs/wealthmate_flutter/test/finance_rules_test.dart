@@ -8,7 +8,6 @@ FinanceState stateWith({
   List<Account> accounts = const [],
   List<FinanceTransaction> transactions = const [],
   List<Budget> budgets = const [],
-  List<Goal> goals = const [],
 }) {
   return FinanceState(
     accounts: accounts,
@@ -19,7 +18,6 @@ FinanceState stateWith({
     ],
     transactions: transactions,
     budgets: budgets,
-    goals: goals,
     currentMonth: '2026-09',
   );
 }

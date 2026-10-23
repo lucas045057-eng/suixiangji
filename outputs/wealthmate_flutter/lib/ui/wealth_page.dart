@@ -25,7 +25,6 @@ class WealthPage extends StatelessWidget {
           final liabilities = metrics.accountBalances
               .where((item) => item.account.type == AccountType.liability)
               .toList();
-          final goal = store.goals.firstOrNull;
           return SafeArea(
               child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -87,65 +86,6 @@ class WealthPage extends StatelessWidget {
                                         ExchangeRatesPage(store: store))),
                             icon: const Icon(Icons.currency_exchange),
                             label: const Text('管理汇率')),
-                        if (goal != null) ...[
-                          const SizedBox(height: 16),
-                          Card(
-                              color: const Color(0xFFFFF0E5),
-                              child: Padding(
-                                  padding: const EdgeInsets.all(20),
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(children: [
-                                          const Expanded(
-                                            child: Text('应急金',
-                                                style: TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight:
-                                                        FontWeight.w800)),
-                                          ),
-                                          Text(
-                                              '${(metrics.goalProgress * 100).round()}%',
-                                              style: const TextStyle(
-                                                  color: Color(0xFFBD7245),
-                                                  fontSize: 23,
-                                                  fontWeight: FontWeight.w800))
-                                        ]),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                            '目标 ${money(goal.target)} · 当前口径为已选流动资产',
-                                            style: const TextStyle(
-                                                color: Color(0xFFA77B5C),
-                                                fontSize: 10)),
-                                        const SizedBox(height: 16),
-                                        ClipRRect(
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                            child: LinearProgressIndicator(
-                                                value: metrics.goalProgress,
-                                                minHeight: 9,
-                                                color: const Color(0xFFE79E6C),
-                                                backgroundColor:
-                                                    Colors.white54)),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                            metrics.emergencyFundError ??
-                                                (metrics.remainingMonths > 0
-                                                    ? '按本月结余速度，预计还需 ${metrics.remainingMonths} 个月。'
-                                                    : '当前已达到目标。'),
-                                            style: TextStyle(
-                                                color:
-                                                    metrics.emergencyFundError ==
-                                                            null
-                                                        ? const Color(
-                                                            0xFFA77B5C)
-                                                        : const Color(
-                                                            0xFFB65B55),
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700)),
-                                      ]))),
-                        ],
                       ])));
         });
   }
@@ -198,7 +138,7 @@ class WealthPage extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 12, fontWeight: FontWeight.w700)),
                     subtitle: Text(
-                        '${item.account.currency} · ${item.account.isLiquid ? '流动资产 · 应急金口径' : '可编辑配置或校准余额'}',
+                        '${item.account.currency} · 可编辑配置或校准余额',
                         style: const TextStyle(fontSize: 10)),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       Text(money(item.balance),

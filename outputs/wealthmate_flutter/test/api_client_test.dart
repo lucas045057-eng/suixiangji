@@ -65,7 +65,6 @@ void main() {
   test('ApiClient closes an internally created client exactly once', () {
     final client = CloseTrackingClient();
     final factory = PlatformHttpClientFactory(
-      transportKind: HttpTransportKind.packageHttp,
       clientBuilder: () => client,
     );
     final api = ApiClient(
@@ -100,7 +99,7 @@ void main() {
       client: ResponseClient(200, jsonEncode({'access_token': 'jwt-1'})),
     );
 
-    await api.login('demo', 'password');
+    await api.authDataSource.login('demo', 'password');
     expect(api.token, 'jwt-1');
     expect(tokenStore.value, 'jwt-1');
 
@@ -125,7 +124,8 @@ void main() {
       onAuthExpired: () async => expired = true,
     );
 
-    await expectLater(api.fetchProfile(), throwsA(isA<ApiFailure>()));
+    await expectLater(
+        api.authDataSource.fetchProfile(), throwsA(isA<ApiFailure>()));
 
     expect(api.token, isNull);
     expect(tokenStore.value, isNull);

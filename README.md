@@ -38,7 +38,7 @@
 
 - `outputs/wealthmate_flutter/`：Android + Windows Flutter 客户端源码。
 - `outputs/wealthmate_backend/`：FastAPI、PostgreSQL 和 Docker Compose 服务端。
-- `outputs/wealthmate/`：无需后端即可预览的 Web/PWA 版本。
+- `outputs/wealthmate/`：无需后端即可预览的 Web/PWA 版本；此目录为无后端本地演示版（demo），非维护路径，正式功能在 Flutter 客户端。
 - `docs/`：产品规格和实施计划。
 - `tests/`：Web/PWA 测试。
 

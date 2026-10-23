@@ -8,7 +8,6 @@ from .insights.domain import (
     period_metrics,
 )
 from .quick_entry.domain import classify_natural_language
-from .sync.idempotency import push_idempotent
 
 
 __all__ = [
@@ -20,5 +19,4 @@ __all__ = [
     "money",
     "monthly_metrics",
     "period_metrics",
-    "push_idempotent",
 ]

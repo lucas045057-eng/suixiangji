@@ -360,7 +360,8 @@ void main() {
       client: UnauthorizedClient(),
     );
 
-    await expectLater(api.fetchProfile(), throwsA(isA<ApiFailure>()));
+    await expectLater(
+        api.authDataSource.fetchProfile(), throwsA(isA<ApiFailure>()));
 
     final local = LocalRepository(storage);
     expect(api.token, isNull);

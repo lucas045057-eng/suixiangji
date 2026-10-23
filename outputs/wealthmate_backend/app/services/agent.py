@@ -6,7 +6,6 @@ from typing import Any, Protocol
 import httpx
 
 from ..config import get_settings
-from ..quick_entry.domain import classify_natural_language
 
 
 class ModelAdapter(Protocol):
@@ -47,14 +46,6 @@ def configured_model() -> ModelAdapter:
 
 
 async def make_draft(text: str, model: ModelAdapter | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
-    from .agent_workflow import build_draft_graph
+    from .agent_workflow import run_draft_workflow
 
-    state = await build_draft_graph(model or configured_model()).ainvoke({"text": text})
-    return state["draft"], state.get("meta", {"status": "rules", "model": "rules"})
-
-
-def deterministic_report_text(metrics: dict[str, Any], previous: dict[str, Any] | None) -> str:
-    """Compatibility façade for callers that have not moved to Insights yet."""
-    from ..insights.service import deterministic_report_text as build_report_text
-
-    return build_report_text(metrics, previous)
+    return await run_draft_workflow(text, model or configured_model())
