@@ -14,7 +14,7 @@ def upgrade(url):
 
 
 def legacy_user(connection, username="Legacy-User", identifier="legacy"):
-    from app.security import hash_password
+    from app.core.security import hash_password
     connection.execute(text("CREATE TABLE IF NOT EXISTS users (id VARCHAR(64) PRIMARY KEY, username VARCHAR(128) NOT NULL UNIQUE, password_hash VARCHAR(256) NOT NULL, sync_version INTEGER NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"))
     connection.execute(text("INSERT INTO users (id, username, password_hash, sync_version) VALUES (:id,:name,:hash,42)"), {"id": identifier, "name": username, "hash": hash_password("legacy-test-password")})
 
@@ -32,7 +32,7 @@ def test_empty_database_initializes_via_migration(tmp_path):
 def test_legacy_upgrade_retains_login_finances_and_sync_versions(tmp_path):
     from app.models import Account, Transaction
     from app.db import Base
-    from app.security import verify_password
+    from app.core.security import verify_password
     from sqlalchemy.orm import Session
     from app.models import User
     url = f"sqlite:///{tmp_path / 'legacy.db'}"

@@ -20,7 +20,7 @@ class Sc08PayloadContractTest(unittest.TestCase):
             from app.main import app
             from app.db import SessionLocal, ensure_schema
             from app.models import Account, Category, SyncOperation, Transaction, User
-            from app.security import create_token, hash_password
+            from app.core.security import create_token, hash_password
 
             ensure_schema()
             owner_id = "sc08-current-owner"

@@ -22,21 +22,64 @@ def test_http_routers_do_not_commit_or_define_domain_calculations():
         assert "def period_metrics" not in source, path
 
 
-def test_legacy_domain_module_is_only_compatibility_exports():
-    source = (Path(__file__).parents[1] / "app" / "domain.py").read_text(
-        encoding="utf-8"
-    )
-    for definition in (
-        "def calculate_cny",
-        "def classify_natural_language",
-        "def monthly_metrics",
-        "def period_metrics",
-    ):
-        assert definition not in source
+def test_legacy_compatibility_modules_are_removed():
+    backend = Path(__file__).parents[1] / "app"
+    for name in ("domain.py", "schemas.py", "security.py"):
+        assert not (backend / name).exists(), name
 
-
-def test_legacy_schema_module_is_only_compatibility_exports():
-    source = (Path(__file__).parents[1] / "app" / "schemas.py").read_text(
-        encoding="utf-8"
+    from app.assets.domain import calculate_cny, iso_date, money
+    from app.assets.schemas import AccountIn, RateIn
+    from app.auth.schemas import (
+        DeleteUserIn,
+        LoginIn,
+        PasswordChange,
+        ProfilePatch,
+        RegisterIn,
     )
-    assert "class " not in source
+    from app.backup.schemas import RestoreIn
+    from app.budget.schemas import BudgetIn, BudgetPatch
+    from app.core.security import create_token, decode_token, hash_password, verify_password
+    from app.insights.domain import (
+        AccountRecord,
+        TransactionRecord,
+        monthly_metrics,
+        period_metrics,
+    )
+    from app.ledger.schemas import CategoryIn, CategoryPatch, TransactionIn
+    from app.quick_entry.domain import classify_natural_language
+    from app.quick_entry.schemas import DraftIn
+    from app.sync.schemas import SyncOperationIn, SyncPushIn
+
+    assert all(
+        value is not None
+        for value in (
+            AccountIn,
+            AccountRecord,
+            BudgetIn,
+            BudgetPatch,
+            CategoryIn,
+            CategoryPatch,
+            DeleteUserIn,
+            DraftIn,
+            LoginIn,
+            PasswordChange,
+            ProfilePatch,
+            RateIn,
+            RegisterIn,
+            RestoreIn,
+            SyncOperationIn,
+            SyncPushIn,
+            TransactionIn,
+            TransactionRecord,
+            calculate_cny,
+            classify_natural_language,
+            create_token,
+            decode_token,
+            hash_password,
+            iso_date,
+            money,
+            monthly_metrics,
+            period_metrics,
+            verify_password,
+        )
+    )

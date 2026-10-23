@@ -67,7 +67,7 @@ def test_demo_is_disabled_by_default(api):
 
 def test_register_normalized_login_hash_profile_and_seed_versions(api):
     from app.models import User, Category, InviteCode
-    from app.security import verify_password
+    from app.core.security import verify_password
     client, sessions = api
     invite(sessions)
     response = register(client, " Alice ", display_name=" Alice's ledger ")
@@ -123,7 +123,7 @@ def test_duplicate_registration_rolls_back_invite_consumption(api):
 
 def test_username_unique_constraint_is_case_insensitive(api):
     from app.models import User
-    from app.security import hash_password
+    from app.core.security import hash_password
     from sqlalchemy.exc import IntegrityError
     _, sessions = api
     with sessions.begin() as db:
@@ -303,8 +303,8 @@ def test_stale_auth_request_cannot_overwrite_completed_password_change(api, late
     from fastapi import HTTPException
     from app.auth.router import change_password, delete_user, update_profile
     from app.models import User
-    from app.schemas import DeleteUserIn, PasswordChange, ProfilePatch
-    from app.security import verify_password
+    from app.auth.schemas import DeleteUserIn, PasswordChange, ProfilePatch
+    from app.core.security import verify_password
     client, sessions = api
     invite(sessions)
     uid = register(client).json()["user_id"]

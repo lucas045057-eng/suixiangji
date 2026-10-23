@@ -2,7 +2,7 @@ class SyncAcceptanceMixin:
     def _prepare_sync_fixtures(self):
         from app.db import SessionLocal
         from app.models import User
-        from app.security import create_token, hash_password
+        from app.core.security import create_token, hash_password
 
         db = SessionLocal()
         try:
@@ -463,7 +463,7 @@ class SyncAcceptanceMixin:
     def test_sync_rejects_budget_using_another_users_category(self):
         from app.db import SessionLocal
         from app.models import Budget, Category, User
-        from app.security import hash_password
+        from app.core.security import hash_password
 
         self._prepare_sync_fixtures()
         budget_id = "sync-foreign-budget-category-001"
@@ -754,7 +754,7 @@ class SyncAcceptanceMixin:
     def test_sync_rejects_transaction_using_another_users_category(self):
         from app.db import SessionLocal
         from app.models import Category, Transaction, User
-        from app.security import hash_password
+        from app.core.security import hash_password
 
         self._prepare_sync_fixtures()
         category_id = "foreign-category"

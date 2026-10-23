@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.config import get_settings
 from app.db import Base, SessionLocal
 from app.models import Account, AgentLog, Budget, Category, ExchangeRate, InviteCode, MonthlyReport, NetWorthSnapshot, SyncOperation, Transaction, User
-from app.security import hash_password
+from app.core.security import hash_password
 
 
 def isolated_postgres_engine(database_url: str, *, create_tables: bool = False):

@@ -2,14 +2,9 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from app.domain import (
-    AccountRecord,
-    TransactionRecord,
-    calculate_cny,
-    classify_natural_language,
-    monthly_metrics,
-)
-from app.assets.domain import calculate_cny as calculate_asset_cny
+from app.assets.domain import calculate_cny
+from app.insights.domain import AccountRecord, TransactionRecord, monthly_metrics
+from app.quick_entry.domain import classify_natural_language
 
 
 class DomainRulesTest(unittest.TestCase):
@@ -29,7 +24,7 @@ class DomainRulesTest(unittest.TestCase):
         self.assertIsNone(converted["exchange_rate"])
         self.assertEqual(converted["conversion_status"], "pending")
 
-        asset_converted = calculate_asset_cny(
+        asset_converted = calculate_cny(
             Decimal("100"),
             "USD",
             Decimal("7.25"),

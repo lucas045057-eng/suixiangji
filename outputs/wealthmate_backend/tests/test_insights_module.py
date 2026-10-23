@@ -2,9 +2,8 @@ import unittest
 from datetime import date
 from decimal import Decimal
 
-from app.insights.domain import monthly_stats, period_stats
+from app.insights.domain import TransactionRecord, monthly_stats, period_stats
 from app.insights.service import deterministic_report
-from app.domain import TransactionRecord
 
 
 class InsightsDomainTest(unittest.TestCase):
