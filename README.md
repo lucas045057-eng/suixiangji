@@ -4,8 +4,8 @@
 
 ## 当前版本
 
-- 当前线上版本：V1.0.5（部署、验收与遗留项见 `docs/v1.0.5/progress.md`）
-- Flutter：`1.0.5+9`
+- 当前线上版本：V1.0.6（部署、验收与遗留项见 `docs/v1.0.5/progress.md`）
+- Flutter：`1.0.6+10`
 - 最低支持版本：`1.0.0+3`
 - Android 网络层继续使用 V1.0.1 Embedded Cronet，并保留 `cronetHttpNoPlay=true` 构建参数。
 
@@ -18,7 +18,7 @@
 - 手机与电脑通过同一个 FastAPI + PostgreSQL 服务同步，支持离线队列和去重。
 - 预算提醒、周期统计、资产/负债、汇率快照和月度分析。
 
-## V1.0.5 增量
+## V1.0.6 增量
 
 - 账户用途、归档/恢复和可搜索的账户管理；汇率转换快照进入原同步队列。
 - 默认/常用币种本机设置，中文输入提示，发生日期排序和分类查询。
@@ -30,9 +30,9 @@
 
 生产服务器业务代码为提交 `b5f8fabb2af85c1ae8adaa5253a6dcc6180a53de`，增量迁移至 `0004_v105_recovery`。2026-10-09 的备份实际恢复、7项核心接口冒烟及原数据核验通过，维护约12秒，数据库容器和数据卷保留。
 
-2026-10-10 的 Android build9 修复启动更新弹窗的页面上下文，并让 APK 下载复用 Android Embedded Cronet；快速预算编辑的同步操作编号增加随机后缀，避免同一时刻的编辑复用编号。本轮 Flutter 399、构建守卫 18、后端发布信息 4 和静态分析通过。旧版 V1.0.4 的启动弹窗错误需要完成一次手动升级才能修复；在“我的 → 检查更新”重新获取更新信息后下载。[Android 1.0.5/build9 下载](https://github.com/lucas045057-eng/suixiangji/releases/download/v1.0.5/suixiangji-v1.0.5-build9.apk)。本轮下载与部署证据见 [修复报告](docs/v1.0.5/09_更新提示与下载修复报告.md)。
+2026-10-10 的 Android build10 修复启动更新弹窗的页面上下文，并让 APK 下载复用 Android Embedded Cronet；快速预算编辑的同步操作编号增加随机后缀，避免同一时刻的编辑复用编号。本轮 Flutter 399、构建守卫 18、后端发布信息 4 和静态分析通过。旧版 V1.0.4 的启动弹窗错误需要完成一次手动升级才能修复；在“我的 → 检查更新”重新获取更新信息后下载。[Android 1.0.5/build10 下载](https://github.com/lucas045057-eng/suixiangji/releases/download/v1.0.5/suixiangji-v1.0.5-build10.apk)。本轮下载与部署证据见 [修复报告](docs/v1.0.5/09_更新提示与下载修复报告.md)。
 
-原始记录18/18、工程要求12/12、工作包5/6通过。2026-10-10 用户确认第二台手机下载安装通过，见 [真机验收记录](docs/v1.0.5/10_第二台手机升级验收记录.md)；完整Windows人工流程、第二台手机其他业务核验及后续自动更新提示仍待验证。当前 Windows 电脑也已完成 GitHub 修复包的整包下载和摘要核验。[PR #2](https://github.com/lucas045057-eng/suixiangji/pull/2) 已合并到 main，标签 `V1.0.5` 指向合并提交；GitHub 现有下载页保留为公开预发布。build9 在主线合并前补充独立代码审查，未发现阻断问题；build8 的历史独立审查结论保留原适用范围。完整历史记录见 [部署报告](docs/v1.0.5/08_服务器部署报告.md) 和 `docs/v1.0.5/requirements-matrix.json`。
+原始记录18/18、工程要求12/12、工作包5/6通过。2026-10-10 用户确认第二台手机下载安装通过，见 [真机验收记录](docs/v1.0.5/10_第二台手机升级验收记录.md)；完整Windows人工流程、第二台手机其他业务核验及后续自动更新提示仍待验证。当前 Windows 电脑也已完成 GitHub 修复包的整包下载和摘要核验。[PR #2](https://github.com/lucas045057-eng/suixiangji/pull/2) 已合并到 main，标签 `V1.0.6` 指向合并提交；GitHub 现有下载页保留为公开预发布。build10 在主线合并前补充独立代码审查，未发现阻断问题；build8 的历史独立审查结论保留原适用范围。完整历史记录见 [部署报告](docs/v1.0.5/08_服务器部署报告.md) 和 `docs/v1.0.5/requirements-matrix.json`。
 
 ## 目录
 
