@@ -10,8 +10,8 @@ export const siteConfig = {
   release: {
     tag: "v1.0.6",
     url: "https://github.com/lucas045057-eng/suixiangji/releases/tag/v1.0.6",
-    checkedAt: "2026-10-09",
-    sourceHead: "6a87b0ef694ae87ad5e8780839f5d568692ea09a",
+    checkedAt: "2026-10-26",
+    sourceHead: "d3c6db6",
   },
   downloads: {
     android: {
@@ -21,9 +21,9 @@ export const siteConfig = {
       build: 10,
       url: "https://download.suixiangji.icu/app/suixiangji-v1.0.6-build10.apk",
       file: "suixiangji-v1.0.6-build10.apk",
-      size: "80.14 MB",
-      sizeBytes: 80143658,
-      sha256: "93acc15e02095d06480ab6806a3d564de55bfab93e3d6ef11587257a75f2f3bd",
+      size: "75.8 MB",
+      sizeBytes: 79445000,
+      sha256: "5e10fcffe4746033e9c94fc27d9dc8659e3703c8c24bae4263b9e8cc13021b51",
     },
     windows: {
       enabled: false,
