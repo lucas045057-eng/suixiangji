@@ -91,10 +91,12 @@ export function verifiedDownload(platform, config = siteConfig) {
   const repository = safeHttpsUrl(config.github);
   const releaseBase =
     repository && `${repository.replace(/\/$/, "")}/releases/download/${config.release.tag}/`;
+  const selfHosted = url.startsWith("https://download.suixiangji.icu/app/");
   if (
-    !releaseBase ||
-    !url.startsWith(releaseBase) ||
-    decodeURIComponent(parsed.pathname.split("/").pop()) !== item.file
+    !selfHosted &&
+    (!releaseBase ||
+      !url.startsWith(releaseBase) ||
+      decodeURIComponent(parsed.pathname.split("/").pop()) !== item.file)
   )
     return null;
   if (platform === "android" && !/\.apk$/i.test(item.file)) return null;

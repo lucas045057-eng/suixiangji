@@ -60,7 +60,7 @@ for (const platform of ["android", "windows"]) {
       }
       const card = slot.closest(".download-card");
       card.querySelector(".availability").textContent = "现在开始";
-      card.querySelector(".download-subnote").textContent = "来自 GitHub Release 的安装包";
+      card.querySelector(".download-subnote").textContent = "官方直链安装包（download.suixiangji.icu）";
     } else {
       document.querySelector('[data-download-version="android"]').textContent =
         `${item.version} · Build ${item.build}`;
