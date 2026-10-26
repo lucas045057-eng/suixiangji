@@ -23,7 +23,12 @@ from .ordering import order_operations
 from .schemas import SyncPushIn
 
 
-def _lock_current_user(db: Session, user_id: str) -> User:
+def _lock_current_user(
+    db: Session,
+    user_id: str,
+    *,
+    verified_auth_version: int | None = None,
+) -> User:
     """Lock and refresh the authoritative User row for one push batch."""
     locked = db.execute(
         select(User)
@@ -37,6 +42,11 @@ def _lock_current_user(db: Session, user_id: str) -> User:
     # in the Session before the row lock was acquired. Refresh explicitly so
     # version allocation starts from the value observed after lock wait.
     db.refresh(locked)
+    if (
+        verified_auth_version is not None
+        and (locked.auth_version or 0) != verified_auth_version
+    ):
+        raise HTTPException(status_code=401, detail='鐧诲綍宸插け鏁堬紝璇烽噸鏂扮櫥褰?')
     return locked
 
 
