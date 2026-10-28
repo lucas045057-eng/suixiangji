@@ -7,6 +7,7 @@ import '../features/quick_entry/state/quick_entry_store.dart';
 import '../domain/models.dart';
 import 'widgets/draft_confirmation_card.dart';
 import 'widgets/draft_editor.dart';
+import 'widgets/quick_entry_batch_panel.dart';
 import 'widgets/metric_card.dart';
 import 'widgets/progress_row.dart';
 import 'widgets/ui_helpers.dart';
@@ -217,7 +218,10 @@ class DashboardPage extends StatelessWidget {
                 ]);
               }),
               const SizedBox(height: 16),
-              if (currentDraft != null) ...[
+              if (quickEntry?.batch != null) ...[
+                QuickEntryBatchPanel(store: quickEntry!, state: state),
+                const SizedBox(height: 16),
+              ] else if (currentDraft != null) ...[
                 DraftConfirmationCard(
                     draft: currentDraft,
                     state: state,

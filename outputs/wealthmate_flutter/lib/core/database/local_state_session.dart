@@ -31,6 +31,11 @@ class LocalStateSession {
 
   LocalRepository get local => _current.local;
 
+  /// Whether the bound partition persists state and queue in one transaction.
+  /// Batch confirmation requires this: a single [write] must not degrade into
+  /// two independent key writes.
+  bool get supportsAtomicWrites => local.store is AtomicKeyValueStore;
+
   Future<T> _serial<T>(_SessionContext context, Future<T> Function() action) {
     final run = context.tail.then((_) => action());
     context.tail = run.then<void>((_) {}, onError: (_, __) {});

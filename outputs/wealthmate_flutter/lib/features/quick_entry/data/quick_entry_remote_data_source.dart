@@ -6,6 +6,15 @@ class QuickEntryRemoteDataSource {
 
   final ApiSession? api;
 
+  /// Multi-card parse. The response is returned raw on purpose: only the
+  /// client-side whitelist may turn it into candidate cards.
+  Future<Map<String, Object?>> createDrafts(
+      Map<String, Object?> body) async {
+    final session = api;
+    if (session == null) throw StateError('同步服务未配置');
+    return requestMapWithSession(session, 'POST', '/agent/drafts', body: body);
+  }
+
   Future<AgentDraft> createDraft(String text) async {
     final session = api;
     if (session == null) throw StateError('同步服务未配置');

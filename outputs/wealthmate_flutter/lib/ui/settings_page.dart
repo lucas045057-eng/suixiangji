@@ -39,7 +39,11 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assetStore = assets ?? store.assets;
-    final listenables = <Listenable>[store, if (updates != null) updates!];
+    final listenables = <Listenable>[
+      store,
+      store.quickEntry,
+      if (updates != null) updates!,
+    ];
     return ListenableBuilder(
         listenable: Listenable.merge(listenables),
         builder: (context, _) => SafeArea(
@@ -122,10 +126,18 @@ class SettingsPage extends StatelessWidget {
                               })),
                     ),
                     const Divider(height: 1),
-                    const ListTile(
-                        leading: Icon(Icons.lock_outline),
-                        title: Text('隐私边界'),
-                        subtitle: Text('备注不写入 Agent 日志；未配置外部服务时不会发送数据。')),
+                    ListTile(
+                      leading: const Icon(Icons.lock_outline),
+                      title: const Text('隐私边界'),
+                      subtitle: Text(store.quickEntry.cloudParsingEnabled
+                          ? '备注不写入 Agent 日志。云端 AI 解析已开启：原话与昨日/今日汇总（不含明细）会发给云端。'
+                          : '备注不写入 Agent 日志。云端 AI 解析已关闭：只在本机解析，零网络请求。'),
+                      trailing: Switch(
+                        value: store.quickEntry.cloudParsingEnabled,
+                        onChanged: (value) =>
+                            store.quickEntry.setCloudParsingEnabled(value),
+                      ),
+                    ),
                   ])),
                   const SizedBox(height: 12),
                   Card(

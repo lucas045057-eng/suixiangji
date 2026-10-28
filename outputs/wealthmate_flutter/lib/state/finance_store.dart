@@ -98,6 +98,7 @@ class FinanceStore extends ChangeNotifier {
       // persistence. QuickEntry must not create a second request here.
       postConfirm: null,
     );
+    unawaited(quickEntry.loadCloudPreference());
     if (!identical(budget.repository.session, repository.session)) {
       throw ArgumentError.value(
         budgetStore,
@@ -155,6 +156,12 @@ class FinanceStore extends ChangeNotifier {
     ledger.onLocalMutation = _publishLocalMutation;
     assets.onLocalMutation = _publishLocalMutation;
     budget.onLocalMutation = _publishLocalMutation;
+    quickEntry.onLocalMutation = (reason) {
+      _publishLocalMutation(reason);
+      // A batch bypasses FinanceStore.addTransaction, so re-run the same
+      // post-save budget check the single-entry path performs.
+      unawaited(checkBudgetAlerts());
+    };
     _syncScheduler = SyncScheduler(
       runPipeline: _runSyncPipeline,
       canRun: () => repository.api == null || repository.isLocalOwnerBound,

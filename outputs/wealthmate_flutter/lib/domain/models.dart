@@ -666,6 +666,121 @@ class FinanceState {
       );
 }
 
+/// Where a candidate card came from. Inferred cards are ledger-based推算 and
+/// must stay unselected until the user explicitly ticks them.
+enum AgentDraftSource { explicit, inferred }
+
+AgentDraftSource agentDraftSourceFromJson(Object? value) =>
+    value == 'inferred' ? AgentDraftSource.inferred : AgentDraftSource.explicit;
+
+String agentDraftSourceToJson(AgentDraftSource value) => value.name;
+
+/// The bounded spoken range behind an approximate amount ("40多块" -> [40, 50)).
+class DraftAmountRange {
+  const DraftAmountRange({
+    required this.lower,
+    required this.upper,
+    this.lowerInclusive = true,
+    this.upperInclusive = false,
+  });
+
+  final double lower;
+  final double upper;
+  final bool lowerInclusive;
+  final bool upperInclusive;
+
+  bool get isOrdered =>
+      lower < upper ||
+      (lower == upper && lowerInclusive && upperInclusive);
+
+  bool contains(double value) =>
+      (lowerInclusive ? value >= lower : value > lower) &&
+      (upperInclusive ? value <= upper : value < upper);
+}
+
+enum DraftEvidenceKind { sourceText, ledgerContext }
+
+DraftEvidenceKind draftEvidenceKindFromJson(Object? value) =>
+    value == 'ledger_context'
+        ? DraftEvidenceKind.ledgerContext
+        : DraftEvidenceKind.sourceText;
+
+String draftEvidenceKindToJson(DraftEvidenceKind value) =>
+    value == DraftEvidenceKind.ledgerContext ? 'ledger_context' : 'source_text';
+
+/// A single traceable basis for a card: a verbatim slice of the user's text
+/// (code point offsets, end exclusive) or a named ledger aggregate.
+class DraftEvidence {
+  const DraftEvidence({
+    required this.kind,
+    this.quote,
+    this.start,
+    this.end,
+    this.contextPath,
+    this.referenceDate,
+  });
+
+  final DraftEvidenceKind kind;
+  final String? quote;
+  final int? start;
+  final int? end;
+  final String? contextPath;
+  final String? referenceDate;
+
+  DraftEvidence copyWith({
+    DraftEvidenceKind? kind,
+    String? quote,
+    int? start,
+    int? end,
+    String? contextPath,
+    String? referenceDate,
+  }) =>
+      DraftEvidence(
+        kind: kind ?? this.kind,
+        quote: quote ?? this.quote,
+        start: start ?? this.start,
+        end: end ?? this.end,
+        contextPath: contextPath ?? this.contextPath,
+        referenceDate: referenceDate ?? this.referenceDate,
+      );
+}
+
+class DraftOperand {
+  const DraftOperand({
+    required this.key,
+    required this.label,
+    required this.amount,
+    this.isApproximate = false,
+  });
+
+  final String key;
+  final String label;
+  final double amount;
+  final bool isApproximate;
+}
+
+/// The auditable arithmetic behind an inferred card. Kept on the session-level
+/// draft only; it is never persisted, synced or backed up.
+class DraftDerivation {
+  const DraftDerivation({
+    required this.kind,
+    required this.referenceDate,
+    required this.targetDate,
+    required this.operands,
+    required this.formula,
+    required this.result,
+    required this.contextFingerprint,
+  });
+
+  final String kind;
+  final String referenceDate;
+  final String targetDate;
+  final List<DraftOperand> operands;
+  final String formula;
+  final double result;
+  final String contextFingerprint;
+}
+
 class AgentDraft {
   const AgentDraft({
     required this.amount,
@@ -679,6 +794,11 @@ class AgentDraft {
     this.toAccountId,
     this.currency = 'CNY',
     this.missingFacts = const <String>[],
+    this.source = AgentDraftSource.explicit,
+    this.isApproximate = false,
+    this.amountRange,
+    this.evidence = const <DraftEvidence>[],
+    this.derivation,
   });
 
   final double amount;
@@ -692,6 +812,24 @@ class AgentDraft {
   final String? toAccountId;
   final String currency;
   final List<String> missingFacts;
+  final AgentDraftSource source;
+  final bool isApproximate;
+  final DraftAmountRange? amountRange;
+  final List<DraftEvidence> evidence;
+  final DraftDerivation? derivation;
+
+  bool get isInferred => source == AgentDraftSource.inferred;
+
+  /// The first verbatim phrase this card rests on, if any.
+  String? get primaryQuote {
+    for (final item in evidence) {
+      if (item.kind == DraftEvidenceKind.sourceText) {
+        final quote = item.quote;
+        if (quote != null && quote.isNotEmpty) return quote;
+      }
+    }
+    return null;
+  }
 
   AgentDraft copyWith({
     double? amount,
@@ -705,12 +843,21 @@ class AgentDraft {
     String? toAccountId,
     String? currency,
     List<String>? missingFacts,
+    AgentDraftSource? source,
+    bool? isApproximate,
+    DraftAmountRange? amountRange,
+    List<DraftEvidence>? evidence,
+    DraftDerivation? derivation,
+    bool clearCategoryId = false,
+    bool clearAccountId = false,
+    bool clearAmountRange = false,
+    bool clearDerivation = false,
   }) {
     return AgentDraft(
       amount: amount ?? this.amount,
       type: type ?? this.type,
-      categoryId: categoryId ?? this.categoryId,
-      accountId: accountId ?? this.accountId,
+      categoryId: clearCategoryId ? null : categoryId ?? this.categoryId,
+      accountId: clearAccountId ? null : accountId ?? this.accountId,
       date: date ?? this.date,
       note: note ?? this.note,
       confidence: confidence ?? this.confidence,
@@ -718,6 +865,12 @@ class AgentDraft {
       toAccountId: toAccountId ?? this.toAccountId,
       currency: currency ?? this.currency,
       missingFacts: missingFacts ?? this.missingFacts,
+      source: source ?? this.source,
+      isApproximate: isApproximate ?? this.isApproximate,
+      amountRange:
+          clearAmountRange ? null : amountRange ?? this.amountRange,
+      evidence: evidence ?? this.evidence,
+      derivation: clearDerivation ? null : derivation ?? this.derivation,
     );
   }
 }

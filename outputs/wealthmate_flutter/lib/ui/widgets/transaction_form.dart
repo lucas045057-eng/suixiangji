@@ -7,6 +7,7 @@ import '../../features/ledger/domain/ledger_rules.dart';
 import '../../state/finance_store.dart';
 import 'draft_confirmation_card.dart';
 import 'draft_editor.dart';
+import 'quick_entry_batch_panel.dart';
 import 'ui_helpers.dart';
 import 'currency_input.dart';
 
@@ -99,6 +100,21 @@ class _TransactionFormState extends State<TransactionForm> {
     final financeStore = widget.financeStore;
     final quickEntry = widget.quickEntry;
     final activeDraft = quickEntry?.draft ?? financeStore?.draft;
+    final batch = quickEntry?.batch;
+    if (widget.smartMode && quickEntry != null && batch != null) {
+      return SingleChildScrollView(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _sheetHeader(context, '确认这次的账单', 'AI 只整理候选卡，勾选确认后才入账。'),
+        QuickEntryBatchPanel(
+          store: quickEntry,
+          state: widget.ledger.state,
+          onConfirmed: () {
+            if (context.mounted) Navigator.pop(context);
+          },
+        ),
+      ]));
+    }
     if (widget.smartMode && activeDraft != null) {
       return SingleChildScrollView(
           child:
@@ -188,9 +204,14 @@ class _TransactionFormState extends State<TransactionForm> {
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: () async {
-              if (formKey.currentState!.validate())
-                await (widget.quickEntry?.createDraft(smartController.text) ??
-                    widget.financeStore?.createDraft(smartController.text));
+              if (!formKey.currentState!.validate()) return;
+              final quickEntry = widget.quickEntry;
+              if (quickEntry != null && quickEntry.batchSupported) {
+                await quickEntry.createBatch(smartController.text);
+                return;
+              }
+              await (quickEntry?.createDraft(smartController.text) ??
+                  widget.financeStore?.createDraft(smartController.text));
             },
             icon: const Icon(Icons.auto_awesome, size: 17),
             label: const Text('生成待确认草稿'),

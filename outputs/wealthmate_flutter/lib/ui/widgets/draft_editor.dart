@@ -140,6 +140,7 @@ class _DraftEditorDialogState extends State<DraftEditorDialog> {
     if (categoryId == null) missingFacts.add('请选择分类');
     if (accountId == null) missingFacts.add('请选择支付账户');
     if (date.length != 10) missingFacts.add('请输入正确日期');
+    final amountChanged = amount != widget.draft.amount;
     Navigator.pop(
         context,
         AgentDraft(
@@ -154,6 +155,11 @@ class _DraftEditorDialogState extends State<DraftEditorDialog> {
           missingFacts: missingFacts,
           fromAccountId: widget.draft.fromAccountId,
           toAccountId: widget.draft.toAccountId,
+          source: widget.draft.source,
+          isApproximate: amountChanged ? false : widget.draft.isApproximate,
+          amountRange: amountChanged ? null : widget.draft.amountRange,
+          evidence: widget.draft.evidence,
+          derivation: widget.draft.derivation,
         ));
   }
 }
