@@ -19,3 +19,17 @@ def get_current_user(
     return resolve_current_user(
         db, token, for_update=request.method not in {'GET', 'HEAD', 'OPTIONS'}
     )
+
+
+def get_current_user_readonly(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    from ..auth.service import get_current_user as resolve_current_user
+
+    try:
+        user = resolve_current_user(db, token, for_update=False)
+        db.expunge(user)
+        return user
+    finally:
+        db.rollback()

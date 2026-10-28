@@ -6,6 +6,7 @@ from ..db import get_db
 from ..models import User
 from . import service as quick_entry_service
 from .schemas import DraftIn
+from .batch_router import router as batch_router
 
 
 router = APIRouter()
@@ -18,3 +19,6 @@ async def agent_draft(
     user: User = Depends(get_current_user),
 ) -> dict:
     return await quick_entry_service.make_draft(db, user, payload)
+
+
+router.include_router(batch_router)
