@@ -171,7 +171,9 @@ def validate_plan(plan: SemanticPlan, payload: DraftsIn) -> None:
         item_amount(item)
         for previous in plan.items[:index]:
             if max(previous.start, item.start) < min(previous.end, item.end):
+                # Sharing one span is only licensed by "各" in the overlap
+                # (§6.2 #6). Two fully identical items are legitimate there:
+                # "两杯咖啡各18元" has no field that could distinguish them, so
+                # field equality must not be read as a forged duplicate.
                 if "各" not in payload.text[max(previous.start, item.start):min(previous.end, item.end)]:
-                    raise BatchError("llm_bad_response")
-                if previous == item:
                     raise BatchError("llm_bad_response")

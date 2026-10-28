@@ -246,6 +246,39 @@ def test_common_total_is_one_card_and_each_allows_shared_evidence():
         calculate(body(common), invalid)
 
 
+def test_identical_items_sharing_one_each_span_stay_two_cards():
+    # Pi D-1 repro: "两杯咖啡各18元" has no field that distinguishes the two
+    # items, and one span may be shared under "各" (§6.2 #6). Field equality
+    # alone must not be read as a forged duplicate.
+    text = "两杯咖啡各18元"
+    semantic = simple_plan(text, "两杯咖啡各18元", amount="18")
+    semantic["items"].append(item(text, "两杯咖啡各18元", amount="18"))
+    result = calculate(body(text), semantic)
+    assert [draft["amount"] for draft in result["drafts"]] == ["18.00", "18.00"]
+    assert [draft["evidence"][0]["quote"] for draft in result["drafts"]] == [
+        "两杯咖啡各18元", "两杯咖啡各18元",
+    ]
+
+
+def test_identical_fields_with_distinct_spans_are_allowed():
+    text = "咖啡18元，另一杯也是18元"
+    semantic = {
+        "items": [item(text, "咖啡18元", amount="18"), item(text, "也是18元", amount="18")],
+        "reference": None, "has_more_than_8_items": False, "unresolved": [],
+    }
+    assert [draft["amount"] for draft in calculate(body(text), semantic)["drafts"]] == [
+        "18.00", "18.00",
+    ]
+
+
+def test_the_same_span_repeated_without_each_is_still_rejected():
+    text = "午饭20元"
+    semantic = simple_plan(text, "午饭20元")
+    semantic["items"].append(item(text, "午饭20元"))
+    with pytest.raises(BatchError, match="llm_bad_response"):
+        calculate(body(text), semantic)
+
+
 def test_emoji_offsets_are_code_points_and_bad_offsets_fail_whole_batch():
     text = "😀午饭20元，地铁6元"
     semantic = simple_plan(text, "午饭20元")

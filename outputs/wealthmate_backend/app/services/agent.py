@@ -1,12 +1,34 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any, Protocol
 
 import httpx
 
 from ..config import get_settings
 from .llm_headers import extra_headers
+
+
+def _json_safe(value: Any) -> Any:
+    """Converts workflow leaf values so ``json.dumps`` cannot fail on them.
+
+    Only the types this workflow produces are converted: ``Decimal`` becomes an
+    exact decimal string (never a float, so 25.00 cannot drift) and dates use
+    ISO 8601. A blanket ``default=str`` would stringify any unexpected object
+    and hide the defect that produced it, which is exactly why the Decimal
+    failure could go unnoticed; unknown types must still raise.
+    """
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 class ModelAdapter(Protocol):
@@ -34,7 +56,7 @@ class OpenAICompatibleModel:
             response = await client.post(
                 f"{settings.llm_base_url.rstrip('/')}/chat/completions",
                 headers=headers,
-                json={"model": settings.llm_model, "temperature": 0.1, "messages": [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]},
+                json={"model": settings.llm_model, "temperature": 0.1, "messages": [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(_json_safe(payload), ensure_ascii=False)}]},
             )
             response.raise_for_status()
             data = response.json()
