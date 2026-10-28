@@ -325,8 +325,35 @@ class QuickEntryRepository {
     return RegExp(r'^[A-Z]{3}$').hasMatch(preferred) ? preferred : 'CNY';
   }
 
+  /// §5.4: the error contract's machine code decides what the user is told.
+  /// Every branch still degrades to a local explicit card and never retries.
   static String _degradationFor(ApiFailure failure) {
-    return switch (failure.kind) {
+    const local = '本次已改用本地解析';
+    const tooLarge = '文本过长，请缩短后重试';
+    const rateLimited = '请求过于频繁，请稍后再试';
+    switch (failure.code) {
+      case 'text_too_large':
+        return '$tooLarge（$local）';
+      case 'rate_limited':
+        return '${_rateLimitedText(rateLimited, failure.retryAfter)}（$local）';
+      case 'invalid_context':
+        return '解析上下文有误，修正后请主动重试（$local）';
+      case 'validation_error':
+        return '提交内容未通过云端校验（$local）';
+      case 'llm_bad_response':
+        return '云端返回内容不可信（$local）';
+      case 'llm_unavailable':
+        return '云端解析暂时不可用（$local）';
+      case 'llm_timeout':
+        return '云端解析超时（$local）';
+      case 'internal_error':
+        return '云端解析出现未预期错误（$local）';
+    }
+    if (failure.statusCode == 413) return '$tooLarge（$local）';
+    if (failure.statusCode == 429) {
+      return '${_rateLimitedText(rateLimited, failure.retryAfter)}（$local）';
+    }
+    final fallback = switch (failure.kind) {
       ApiFailureKind.network => '暂时无法连接云端解析，已使用本地解析',
       ApiFailureKind.unauthorized => '登录状态已失效，已使用本地解析',
       ApiFailureKind.configuration => '未配置云端解析，已使用本地解析',
@@ -337,5 +364,14 @@ class QuickEntryRepository {
         '云端解析暂时不可用，已使用本地解析',
       ApiFailureKind.cancelled => '云端解析已取消，已使用本地解析',
     };
+    final detail = failure.detail;
+    if (failure.code != null || detail == null) return fallback;
+    return '$fallback（$detail）';
+  }
+
+  static String _rateLimitedText(String base, Duration? retryAfter) {
+    final seconds = retryAfter?.inSeconds;
+    if (seconds == null || seconds <= 0) return base;
+    return '$base（约 $seconds 秒）';
   }
 }

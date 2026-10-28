@@ -14,10 +14,29 @@ enum ApiFailureKind {
 }
 
 class ApiFailure implements Exception {
-  const ApiFailure(this.kind, this.message);
+  const ApiFailure(
+    this.kind,
+    this.message, {
+    this.statusCode,
+    this.code,
+    this.detail,
+    this.retryAfter,
+  });
 
   final ApiFailureKind kind;
   final String message;
+
+  /// HTTP status when the failure came from a response (never a detail leak).
+  final int? statusCode;
+
+  /// Machine code from the `{"detail": ..., "code": ...}` error contract.
+  final String? code;
+
+  /// Sanitized, display-safe `detail` text. Only ever shown as plain text.
+  final String? detail;
+
+  /// Parsed `Retry-After` header, when the server sent a usable value.
+  final Duration? retryAfter;
 
   @override
   String toString() => message;
@@ -77,7 +96,12 @@ class ApiTransport {
         _ => await client.get(uri, headers: headers),
       };
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        final failure = _failureForStatus(response.statusCode, path);
+        final failure = _failureForStatus(
+          response.statusCode,
+          path,
+          error: _errorBody(response.body),
+          retryAfter: _retryAfter(response.headers),
+        );
         if (response.statusCode == 401 &&
             includeAuth &&
             token != null &&
@@ -98,7 +122,24 @@ class ApiTransport {
     }
   }
 
-  ApiFailure _failureForStatus(int statusCode, String path) {
+  ApiFailure _failureForStatus(
+    int statusCode,
+    String path, {
+    ({String? code, String? detail})? error,
+    Duration? retryAfter,
+  }) {
+    final base = _baseFailureForStatus(statusCode, path);
+    return ApiFailure(
+      base.kind,
+      base.message,
+      statusCode: statusCode,
+      code: error?.code,
+      detail: error?.detail,
+      retryAfter: retryAfter,
+    );
+  }
+
+  ApiFailure _baseFailureForStatus(int statusCode, String path) {
     if (statusCode == 400 && path == '/auth/register') {
       return const ApiFailure(
           ApiFailureKind.validation, '邀请码无效、已过期或已用完，请联系邀请人');
@@ -130,5 +171,46 @@ class ApiTransport {
       return const ApiFailure(ApiFailureKind.validation, '提交的数据需要修正');
     }
     return const ApiFailure(ApiFailureKind.server, '同步服务暂时不可用');
+  }
+
+  /// Reads the machine code and display detail from a `{"detail","code"}` body.
+  /// Anything unparseable is ignored: no raw body text ever reaches the UI.
+  static ({String? code, String? detail}) _errorBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return (code: null, detail: null);
+      final code = decoded['code'];
+      final detail = decoded['detail'];
+      return (
+        code: _safeCode(code),
+        detail: detail is String ? _safeDetail(detail) : null,
+      );
+    } on FormatException {
+      return (code: null, detail: null);
+    }
+  }
+
+  static String? _safeCode(Object? value) {
+    if (value is! String) return null;
+    final code = value.trim();
+    if (code.isEmpty || code.length > 64) return null;
+    return RegExp(r'^[a-z][a-z0-9_]*$').hasMatch(code) ? code : null;
+  }
+
+  static String? _safeDetail(String value) {
+    final collapsed = value
+        .replaceAll(RegExp(r'[\u0000-\u001f\u007f]+'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (collapsed.isEmpty) return null;
+    return collapsed.length <= 120 ? collapsed : '${collapsed.substring(0, 120)}…';
+  }
+
+  static Duration? _retryAfter(Map<String, String> headers) {
+    final raw = headers['retry-after']?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final seconds = int.tryParse(raw);
+    if (seconds == null || seconds < 0 || seconds > 86400) return null;
+    return Duration(seconds: seconds);
   }
 }

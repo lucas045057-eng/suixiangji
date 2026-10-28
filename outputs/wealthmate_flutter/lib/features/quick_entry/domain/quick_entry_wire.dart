@@ -15,6 +15,20 @@ String moneyText(double value) {
   return safe.toStringAsFixed(2);
 }
 
+/// Exact value of a wire money string, scaled by 10^6 (the finest fraction the
+/// contract allows). Null when the text is not a wire money string.
+///
+/// The contract requires Decimal semantics (`132.50 - 0.00 - 45.00` must equal
+/// `87.50` exactly), so arithmetic never goes through `double`.
+BigInt? moneyUnits(Object? value) {
+  if (value is! String || !_moneyPattern.hasMatch(value)) return null;
+  final dot = value.indexOf('.');
+  final whole = dot < 0 ? value : value.substring(0, dot);
+  final fraction = dot < 0 ? '' : value.substring(dot + 1);
+  return BigInt.parse(whole) * BigInt.from(1000000) +
+      BigInt.parse(fraction.padRight(6, '0'));
+}
+
 bool isIsoDate(Object? value) {
   if (value is! String || !_isoDatePattern.hasMatch(value)) return false;
   return DateTime.tryParse(value) != null;

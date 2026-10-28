@@ -32,6 +32,16 @@ class QuickEntryResponseValidator {
   static const int maxDrafts = 8;
   static const int maxEvidence = 16;
 
+  /// §6.4 fixes one residual formula for this version; a different formula is
+  /// a different computation, not a formatting variant.
+  static const String derivationFormula =
+      'reference_expense - target_recorded - explicit_candidates';
+  static const Set<String> derivationOperandKeys = {
+    'reference_expense',
+    'target_recorded',
+    'explicit_candidates',
+  };
+
   static QuickEntryValidatedResponse validate(
     Map<String, Object?> json, {
     required String requestId,
@@ -243,7 +253,9 @@ class QuickEntryResponseValidator {
     _check(map['target_date'] == targetDate, 'derivation.target_date');
     final formula =
         _string(map['formula'], 'derivation.formula', maxLength: 256);
-    final parsedResult = _optionalMoney(map['result'], 'derivation.result');
+    _check(formula == derivationFormula, 'derivation.formula');
+    final rawResult = map['result'];
+    final parsedResult = _optionalMoney(rawResult, 'derivation.result');
     _check(parsedResult != null, 'derivation.result');
     _check(amount != null && parsedResult == amount,
         'derivation.result!=amount');
@@ -254,18 +266,39 @@ class QuickEntryResponseValidator {
     _check(contextFingerprint != null && fingerprint == contextFingerprint,
         'derivation fingerprint mismatch');
     final operands = <DraftOperand>[];
+    final rawOperands = <String, Object?>{};
     for (final item in _list(map['operands'], 'derivation.operands')) {
       final entry = _map(item, 'operand');
+      final key = _string(entry['key'], 'operand.key', maxLength: 64);
+      _check(derivationOperandKeys.contains(key), 'operand.key');
+      _check(!rawOperands.containsKey(key), 'duplicate operand key');
       final operandAmount = _optionalMoney(entry['amount'], 'operand.amount');
       _check(operandAmount != null, 'operand.amount');
+      rawOperands[key] = entry['amount'];
       operands.add(DraftOperand(
-        key: _string(entry['key'], 'operand.key', maxLength: 64),
+        key: key,
         label: _string(entry['label'], 'operand.label', maxLength: 64),
         amount: operandAmount!,
         isApproximate: _bool(entry['is_approximate'], 'operand.is_approximate'),
       ));
     }
-    _check(operands.isNotEmpty, 'derivation.operands empty');
+    _check(operands.length == derivationOperandKeys.length, 'operand keys');
+    // §6.4/§8.1.2/§10.3: the client recomputes the residual itself. Exact
+    // decimal comparison only — a tolerance must never accept a different
+    // formula's result.
+    final referenceUnits = moneyUnits(rawOperands['reference_expense']);
+    final recordedUnits = moneyUnits(rawOperands['target_recorded']);
+    final explicitUnits = moneyUnits(rawOperands['explicit_candidates']);
+    final resultUnits = moneyUnits(rawResult);
+    _check(
+        referenceUnits != null &&
+            recordedUnits != null &&
+            explicitUnits != null &&
+            resultUnits != null,
+        'derivation arithmetic');
+    _check(
+        referenceUnits! - recordedUnits! - explicitUnits! == resultUnits,
+        'derivation arithmetic');
     return DraftDerivation(
       kind: kind,
       referenceDate: referenceDate,

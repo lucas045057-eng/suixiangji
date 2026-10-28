@@ -117,6 +117,65 @@ Map<String, Object?> _inferredJson({String? fingerprint = _fingerprint}) => {
       },
     };
 
+/// An inferred card whose operands and result are chosen independently, so a
+/// test can break exactly one part of the §6.4 arithmetic.
+Map<String, Object?> _inferredArithmetic({
+  String reference = '132.50',
+  String recorded = '0.00',
+  String explicit = '45.00',
+  String result = '87.50',
+  String? amount = '87.50',
+  String formula = 'reference_expense - target_recorded - explicit_candidates',
+  bool includeRecorded = true,
+  bool includeExtra = false,
+  bool duplicateRecorded = false,
+}) {
+  final draft = _inferredJson();
+  draft['amount'] = amount;
+  final derivation = (draft['derivation'] as Map).cast<String, Object?>();
+  draft['derivation'] = {
+    ...derivation,
+    'operands': [
+      {
+        'key': 'reference_expense',
+        'label': '昨日已记消费',
+        'amount': reference,
+        'is_approximate': false,
+      },
+      if (includeRecorded)
+        {
+          'key': 'target_recorded',
+          'label': '今日已记消费',
+          'amount': recorded,
+          'is_approximate': false,
+        },
+      if (duplicateRecorded)
+        {
+          'key': 'target_recorded',
+          'label': '今日已记消费',
+          'amount': recorded,
+          'is_approximate': false,
+        },
+      {
+        'key': 'explicit_candidates',
+        'label': '本次明确卡合计',
+        'amount': explicit,
+        'is_approximate': true,
+      },
+      if (includeExtra)
+        {
+          'key': 'bogus_operand',
+          'label': '多余操作数',
+          'amount': '0.00',
+          'is_approximate': false,
+        },
+    ],
+    'formula': formula,
+    'result': result,
+  };
+  return draft;
+}
+
 Map<String, Object?> _response({
   List<Map<String, Object?>>? drafts,
   List<Map<String, Object?>> notices = const [],
@@ -279,6 +338,75 @@ void main() {
       _expectInvalid(_response(drafts: [
         _draftJson(),
         _inferredJson(fingerprint: 'fnv1a64:ffffffffffffffff'),
+      ]));
+    });
+
+    // Regression for D-01 (Pi report §3.3 #9): the client must recompute the
+    // §6.4 residual instead of trusting the server's `result`.
+    test('rejects an inferred derivation whose operands do not add up', () {
+      // 132.50 - 0.00 - 10.00 = 122.50, but the card claims 87.50.
+      _expectInvalid(_response(drafts: [
+        _draftJson(),
+        _inferredArithmetic(explicit: '10.00'),
+      ]));
+    });
+
+    test('accepts the same operands once the result matches exactly', () {
+      final result = _validate(_response(drafts: [
+        _draftJson(amount: '45.00'),
+        _inferredArithmetic(
+          explicit: '10.00',
+          result: '122.50',
+          amount: '122.50',
+        ),
+      ]));
+
+      expect(result.drafts.last.draft.amount, 122.5);
+      expect(result.drafts.last.draft.derivation?.result, 122.5);
+    });
+
+    test('compares decimal money exactly instead of with float tolerance', () {
+      // 0.30 - 0.00 - 0.10 = 0.20 exactly; binary doubles give 0.199999...
+      final accepted = _validate(_response(drafts: [
+        _inferredArithmetic(
+          reference: '0.30',
+          explicit: '0.10',
+          result: '0.20',
+          amount: '0.20',
+        ),
+      ]));
+      expect(accepted.drafts.single.draft.amount, 0.2);
+
+      _expectInvalid(_response(drafts: [
+        _inferredArithmetic(
+          reference: '0.30',
+          explicit: '0.10',
+          result: '0.19',
+          amount: '0.19',
+        ),
+      ]));
+    });
+
+    test('rejects a missing, duplicated or unknown operand key', () {
+      _expectInvalid(_response(drafts: [
+        _inferredArithmetic(includeRecorded: false),
+      ]));
+      _expectInvalid(_response(drafts: [
+        _inferredArithmetic(duplicateRecorded: true),
+      ]));
+      _expectInvalid(_response(drafts: [
+        _inferredArithmetic(includeExtra: true),
+      ]));
+    });
+
+    test('rejects a formula other than the §6.4 residual formula', () {
+      _expectInvalid(_response(drafts: [
+        _inferredArithmetic(
+          explicit: '10.00',
+          result: '122.50',
+          amount: '122.50',
+          formula: 'reference_expense - target_recorded + explicit_candidates',
+        ),
       ]));
     });
 
