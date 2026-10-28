@@ -6,6 +6,7 @@ from typing import Any, Protocol
 import httpx
 
 from ..config import get_settings
+from .llm_headers import extra_headers
 
 
 class ModelAdapter(Protocol):
@@ -25,6 +26,7 @@ class OpenAICompatibleModel:
         headers = {"content-type": "application/json"}
         if settings.llm_api_key:
             headers["authorization"] = f"Bearer {settings.llm_api_key}"
+        headers.update(extra_headers(settings.llm_extra_headers))
         system = "你是个人记账助手。只根据输入数据回答，不编造金额。记账只生成草稿，不能声称已经入账。"
         if task == "monthly_report":
             system = "你是个人财务分析助手。只解释给定结构化统计，不重新计算或添加不存在的金额；数据不足时明确说明。"

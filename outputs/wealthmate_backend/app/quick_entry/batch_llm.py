@@ -7,6 +7,7 @@ import httpx
 from pydantic import ValidationError
 
 from ..config import get_settings
+from ..services.llm_headers import extra_headers
 from .batch_schemas import BatchError, SemanticPlan
 
 
@@ -60,6 +61,7 @@ class BatchModel:
         headers = {"content-type": "application/json"}
         if settings.llm_api_key:
             headers["authorization"] = f"Bearer {settings.llm_api_key}"
+        headers.update(extra_headers(settings.llm_extra_headers))
         try:
             async with httpx.AsyncClient(timeout=45) as client:
                 response = await client.post(

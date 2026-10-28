@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_base_url: str = ""
     llm_api_key: str = ""
+    # JSON object of extra provider request headers (e.g. vendor session ids).
+    llm_extra_headers: str = ""
     frankfurter_base_url: str = "https://api.frankfurter.dev/v2"
     cors_origins: str = "*"
     app_latest_version: str = "1.0.5"
