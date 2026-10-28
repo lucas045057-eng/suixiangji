@@ -4,18 +4,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wealthmate_flutter/core/config/app_config.dart';
 
 void main() {
-  test('ships Flutter runtime version 1.0.5 build 9', () {
-    expect(kProductVersion, '1.0.5');
-    expect(kProductBuild, 9);
+  test('ships Flutter runtime version 1.0.6 build 10', () {
+    expect(kProductVersion, '1.0.6');
+    expect(kProductBuild, 10);
   });
 
   test('publishes matching package and Windows fallback metadata', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final runnerRc = File('windows/runner/Runner.rc').readAsStringSync();
 
-    expect(pubspec, contains('version: 1.0.5+9'));
-    expect(runnerRc, contains('#define VERSION_AS_NUMBER 1,0,5,9'));
-    expect(runnerRc, contains('#define VERSION_AS_STRING "1.0.5"'));
+    expect(pubspec, contains('version: 1.0.6+10'));
+    expect(runnerRc, contains('#define VERSION_AS_NUMBER 1,0,6,10'));
+    expect(runnerRc, contains('#define VERSION_AS_STRING "1.0.6"'));
   });
 
   test('retains the V1.0.1 Embedded Cronet delivery contract', () {
