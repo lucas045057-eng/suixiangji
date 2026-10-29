@@ -17,7 +17,15 @@ class DemoData {
         Category(id: 'home', name: '住房'),
         Category(id: 'entertainment', name: '娱乐'),
         Category(id: 'health', name: '健康'),
-        Category(id: 'salary', name: '工资'),
+        Category(id: 'mobile', name: '话费'),
+        Category(id: 'utilities', name: '水电'),
+        Category(id: 'medical', name: '药品'),
+        Category(id: 'snacks', name: '零食'),
+        Category(id: 'social', name: '人情往来'),
+        Category(id: 'salary', name: '工资', type: TransactionType.income),
+        Category(id: 'royalty', name: '稿费', type: TransactionType.income),
+        // 其他 = demo 独有：后端默认集故意不含兜底分类
+        //（设计原则：清单里没有合适的分类时必须给 null，由用户手选）。
         Category(id: 'other', name: '其他'),
       ],
       accounts: const [

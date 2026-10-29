@@ -21,6 +21,11 @@ const demoCategoryIds = <String>{
   'home',
   'entertainment',
   'health',
+  'mobile',
+  'utilities',
+  'medical',
+  'snacks',
+  'social',
   'salary',
   'other',
 };

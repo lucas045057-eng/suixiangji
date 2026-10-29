@@ -133,6 +133,11 @@ class FinanceRules {
       'home': ['居住', '住房'],
       'entertainment': ['娱乐'],
       'health': ['医疗', '健康'],
+      'medical': ['药品', '医疗'],
+      'mobile': ['话费', '通讯'],
+      'utilities': ['水电', '水电煤'],
+      'snacks': ['零食'],
+      'social': ['人情往来', '人情'],
       'salary': ['工资', '收入']
     };
     final matching = active
@@ -214,10 +219,17 @@ class FinanceRules {
     const rules = <String, List<String>>{
       'food': ['外卖', '吃', '餐', '饭', '咖啡', '星巴克', '奶茶', '火锅', '日料', '美团'],
       'transport': ['打车', '滴滴', '地铁', '公交', '交通', '加油', '出行'],
+      // Specific defaults come before 'shopping' so 买药/买零食 do not fall
+      // into the generic 买 rule.
+      'medical': ['药', '医院', '看病'],
+      'mobile': ['话费', '流量', '宽带'],
+      'utilities': ['水电', '电费', '水费', '燃气'],
+      'snacks': ['零食', '小吃'],
+      'social': ['随礼', '份子钱', '红包'],
       'shopping': ['购物', '淘宝', '京东', '超市', '盒马', '买', '日用品'],
-      'home': ['房租', '房贷', '水电', '物业', '燃气'],
+      'home': ['房租', '房贷', '物业'],
       'entertainment': ['电影', '游戏', '娱乐', '演唱会'],
-      'health': ['医院', '看病', '药', '健身'],
+      'health': ['健身'],
       'salary': ['工资', '薪资', '奖金', '报销', '到账', '收入'],
     };
     for (final entry in rules.entries) {
