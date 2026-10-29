@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 
 from test_user_system import headers, invite, register
+from app.auth.registration import DEFAULT_CATEGORIES
 
 
 pytest_plugins = ["test_user_system"]
@@ -275,7 +276,7 @@ def test_restore_rejects_foreign_owner_and_unknown_sections_without_writes(api):
     assert client.post("/backup/restore", headers=auth, json=unknown).status_code == 422
     with sessions() as db:
         from app.models import Account, User
-        assert db.get(User, uid).sync_version == 5
+        assert db.get(User, uid).sync_version == len(DEFAULT_CATEGORIES)
         assert db.scalar(select(Account).where(Account.id == "restore-account")) is None
 
 
@@ -295,13 +296,13 @@ def test_profile_only_restore_has_a_replayable_receipt_without_advancing_sync(ap
     }
     first = client.post("/backup/restore", headers=auth, json=payload)
     assert first.status_code == 200, first.text
-    assert first.json()["server_version"] == 5
+    assert first.json()["server_version"] == len(DEFAULT_CATEGORIES)
     assert client.get("/auth/me", headers=auth).json()["display_name"] == "Profile only"
     replay = client.post("/backup/restore", headers=auth, json=payload)
     assert replay.status_code == 200 and replay.json()["replayed"] is True
     with sessions() as db:
         from app.models import SyncOperation, User
-        assert db.get(User, uid).sync_version == 5
+        assert db.get(User, uid).sync_version == len(DEFAULT_CATEGORIES)
         assert len(db.scalars(select(SyncOperation).where(SyncOperation.user_id == uid)).all()) == 1
 
 

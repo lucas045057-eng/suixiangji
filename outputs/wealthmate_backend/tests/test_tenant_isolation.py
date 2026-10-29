@@ -3,6 +3,7 @@ import pytest
 from sqlalchemy import select
 
 from test_user_system import api, headers, invite, register
+from app.auth.registration import DEFAULT_CATEGORIES
 
 
 @pytest.fixture
@@ -56,7 +57,7 @@ def test_sync_cannot_mutate_other_user_and_rolls_back_whole_batch(tenants, entit
     assert response.status_code == 404, response.text
     assert client.get("/sync/pull", headers=b).json() == before
     assert client.get("/accounts", headers=a).json()["items"] == []
-    assert client.get("/sync/pull", headers=a).json()["server_version"] == 5
+    assert client.get("/sync/pull", headers=a).json()["server_version"] == len(DEFAULT_CATEGORIES)
     with sessions() as db:
         assert db.scalar(select(SyncOperation).where(SyncOperation.client_op_id == "a-preceding")) is None
 

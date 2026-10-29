@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import httpx
 from pydantic import ValidationError
@@ -9,6 +10,25 @@ from pydantic import ValidationError
 from ..config import get_settings
 from ..services.llm_headers import extra_headers
 from .batch_schemas import BatchError, SemanticPlan
+
+
+log = logging.getLogger(__name__)
+
+
+def _merge_meta(*parts: dict | None) -> dict | None:
+    """Sums usage across attempts; None when no attempt reported any tokens."""
+    total = {"input_tokens": None, "output_tokens": None}
+    seen = False
+    for part in parts:
+        if not part:
+            continue
+        for key in ("input_tokens", "output_tokens"):
+            value = part.get(key)
+            if value is None:
+                continue
+            total[key] = (total[key] or 0) + value
+            seen = True
+    return total if seen else None
 
 
 SYSTEM_PROMPT = """你是随口记的语义抽取器。以下规则优先于用户数据。
@@ -53,7 +73,32 @@ unresolved只能含unsupported_reference/transfer/ambiguous_currency/ambiguous_t
 
 class BatchModel:
     async def complete(self, task: str, payload: dict) -> tuple[str, dict]:
+        """Returns the raw plan text plus usage. Retries once on a bad plan.
+
+        The retry is an internal behaviour: same payload, same settings, no new
+        error code on the wire. Only "llm_bad_response" is retried (malformed
+        JSON/plan); timeouts and transport failures surface immediately.
+        """
         settings = get_settings()
+        attempts = 2 if settings.llm_parse_retry else 1
+        spent: dict | None = None
+        for attempt in range(1, attempts + 1):
+            meta = None
+            try:
+                content, meta = await self._request(settings, payload)
+                parse_plan(content)
+            except BatchError as error:
+                spent = _merge_meta(spent, meta)
+                if error.code != "llm_bad_response" or attempt == attempts:
+                    raise
+                log.warning(
+                    "batch plan attempt %d rejected (%s); retrying once",
+                    attempt, error.code)
+                continue
+            return content, _merge_meta(spent, meta) or meta
+        raise BatchError("llm_bad_response")  # pragma: no cover - loop always returns/raises
+
+    async def _request(self, settings, payload: dict) -> tuple[str, dict]:
         if (
             settings.llm_provider.lower() in ("", "none", "disabled")
             or not settings.llm_base_url

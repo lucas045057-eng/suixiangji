@@ -175,13 +175,14 @@ def test_batch_model_used_by_agent_drafts_sends_extra_headers(monkeypatch):
         llm_extra_headers=json.dumps({"x-opencode-session": "sess-batch"}),
     )
     captured = []
-    _patch_client(monkeypatch, captured, content="{}")
+    plan = '{"items":[],"reference":null,"has_more_than_8_items":false,"unresolved":[]}'
+    _patch_client(monkeypatch, captured, content=plan)
 
     content, _ = asyncio.run(
         batch_llm.BatchModel().complete("drafts", {"text": "午饭20元"})
     )
 
-    assert content == "{}"
+    assert content == plan
     headers = captured[0].headers
     assert headers["x-opencode-session"] == "sess-batch"
     assert headers["authorization"] == "Bearer test-only-key"

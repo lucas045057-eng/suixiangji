@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import sessionmaker
 
+from app.auth.registration import DEFAULT_CATEGORIES
+
 
 @pytest.fixture
 def api(tmp_path, monkeypatch):
@@ -79,14 +81,35 @@ def test_register_normalized_login_hash_profile_and_seed_versions(api):
         user = db.get(User, profile["id"])
         assert user.password_hash != "test-password"
         assert verify_password("test-password", user.password_hash)
-        assert user.sync_version == 5
+        seed_count = len(DEFAULT_CATEGORIES)
+        assert user.sync_version == seed_count
         rows = db.scalars(select(Category).where(Category.user_id == user.id)).all()
-        assert sorted(row.server_version for row in rows) == [1, 2, 3, 4, 5]
+        assert sorted(row.server_version for row in rows) == list(range(1, seed_count + 1))
         assert db.scalar(select(InviteCode)).used_count == 1
     for name in ("alice", "ALICE", " Alice "):
         assert client.post("/auth/login", json={"username": name, "password": "test-password"}).status_code == 200
-    assert client.get("/sync/pull?since_version=0", headers=headers(response)).json()["server_version"] == 5
+    assert client.get("/sync/pull?since_version=0", headers=headers(response)).json()["server_version"] == len(DEFAULT_CATEGORIES)
     assert "password" not in response.text
+
+
+def test_new_ledger_seeds_the_default_vocabulary(api):
+    client, sessions = api
+    invite(sessions)
+    response = register(client, "seed-user")
+    headers_ = headers(response)
+    from app.models import Category
+
+    with sessions() as db:
+        user_id = client.get("/auth/me", headers=headers_).json()["id"]
+        rows = db.scalars(select(Category).where(Category.user_id == user_id)).all()
+    seeded = {(row.name, row.kind) for row in rows}
+    assert seeded == set(DEFAULT_CATEGORIES)
+    names = [name for name, _ in DEFAULT_CATEGORIES]
+    assert len(names) == len(set(names))
+    # Vocabulary v2 must not introduce a catch-all bucket.
+    assert "其他" not in names
+    for expected in ("话费", "水电", "药品", "零食", "人情往来"):
+        assert (expected, "expense") in seeded
 
 
 @pytest.mark.parametrize("username", ["ab", "x" * 33, "a b", "中文名", "a@b", "   ", "Kelly"])

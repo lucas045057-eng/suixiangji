@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     # JSON object of extra provider request headers (e.g. vendor session ids).
     llm_extra_headers: str = ""
+    # One silent retry when the provider returns an unparseable plan. Providers
+    # occasionally emit a malformed plan at temperature 0; a second attempt
+    # fixes it without changing the wire contract. Disable to fail fast.
+    llm_parse_retry: bool = True
     frankfurter_base_url: str = "https://api.frankfurter.dev/v2"
     cors_origins: str = "*"
     app_latest_version: str = "1.0.5"

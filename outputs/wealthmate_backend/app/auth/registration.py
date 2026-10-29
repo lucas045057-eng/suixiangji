@@ -10,6 +10,26 @@ from ..core.security import hash_password
 from ..models import Category, InviteCode, User
 
 
+# Every new ledger starts with this vocabulary. It is additive: names are
+# matched verbatim by the quick-entry category chain, and the Flutter demo
+# ledger (lib/domain/demo_state.dart) carries the same names for offline mode.
+DEFAULT_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("餐饮", "expense"),
+    ("交通", "expense"),
+    ("住房", "expense"),
+    ("购物", "expense"),
+    ("娱乐", "expense"),
+    ("健康", "expense"),
+    ("话费", "expense"),
+    ("水电", "expense"),
+    ("药品", "expense"),
+    ("零食", "expense"),
+    ("人情往来", "expense"),
+    ("工资", "income"),
+    ("稿费", "income"),
+)
+
+
 def create_user(
     db: Session,
     username: str,
@@ -25,13 +45,7 @@ def create_user(
     db.add(user)
     db.flush()
     current_version = user.sync_version or 0
-    for name, kind in (
-        ("餐饮", "expense"),
-        ("交通", "expense"),
-        ("住房", "expense"),
-        ("工资", "income"),
-        ("购物", "expense"),
-    ):
+    for name, kind in DEFAULT_CATEGORIES:
         current_version += 1
         db.add(
             Category(

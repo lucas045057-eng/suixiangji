@@ -80,11 +80,43 @@ def test_empty_hint_is_unresolved():
 
 
 def test_alias_table_stays_small_and_additive():
-    assert len(_CATEGORY_ALIASES) <= 30
+    # Default vocabulary v2 has 12 categories; ~4 aliases each is the ceiling.
+    assert len(_CATEGORY_ALIASES) <= 60
     assert all(isinstance(key, str) and isinstance(value, str)
                for key, value in _CATEGORY_ALIASES.items())
     # An alias must never target another alias: the chain has exactly one hop.
     assert not set(_CATEGORY_ALIASES.values()) & set(_CATEGORY_ALIASES)
+
+
+def test_default_vocabulary_v2_aliases_bridge_only_to_existing_names():
+    v2 = [
+        *CATEGORIES,
+        {"id": "mobile", "name": "话费", "kind": "expense"},
+        {"id": "utilities", "name": "水电", "kind": "expense"},
+        {"id": "medical", "name": "药品", "kind": "expense"},
+        {"id": "snacks", "name": "零食", "kind": "expense"},
+        {"id": "social", "name": "人情往来", "kind": "expense"},
+    ]
+    assert resolve("话费", categories=v2) == "mobile"
+    assert resolve("手机费", categories=v2) == "mobile"
+    assert resolve("电费", categories=v2) == "utilities"
+    assert resolve("买药", categories=v2) == "medical"
+    assert resolve("小吃", categories=v2) == "snacks"
+    assert resolve("红包", categories=v2) == "social"
+    # Without the category the hint must stay unresolved instead of inventing one.
+    assert resolve("手机费") is None
+    assert resolve("电费") is None
+    assert resolve("买药") is None
+    # 转账 is not a category: the prompt routes it to unresolved/transfer.
+    assert resolve("转账", categories=v2) is None
+
+
+def test_every_alias_target_is_a_default_category_or_a_legacy_bridge():
+    from app.auth.registration import DEFAULT_CATEGORIES
+
+    defaults = {name for name, _ in DEFAULT_CATEGORIES}
+    # Aliases may only point at a default name; legacy targets are gone.
+    assert set(_CATEGORY_ALIASES.values()) <= defaults
 
 
 def test_end_to_end_card_gets_the_bridged_category_id():

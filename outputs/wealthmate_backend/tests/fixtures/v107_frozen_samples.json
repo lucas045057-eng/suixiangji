@@ -1,7 +1,7 @@
 {
  "meta": {
-  "version": "v107-frozen-1",
-  "frozen_at": "2026-10-28",
+  "version": "v2",
+  "frozen_at": "2026-10-29",
   "design": "docs_review/suikouji-design-v107.md",
   "today": "2026-10-28",
   "card_spec": "<type>|<amount>|<kind>|<category>|<date>[|<currency>]",
@@ -10,7 +10,82 @@
    "inf": "推算卡质量，单独统计",
    "safety": "安全降级正确性，单独统计"
   },
-  "samples_sha256": "3dab8f431c32c9783d6d9161ba9fe0c7a9b7b87faf3457f8e70b2c75592a54c9"
+  "samples_sha256": "c64dde16210d7c5105c5dae8d95b1429a686c2fab2972911d533b6f14da0fe42",
+  "supersedes": "v1",
+  "previous_samples_sha256": "3dab8f431c32c9783d6d9161ba9fe0c7a9b7b87faf3457f8e70b2c75592a54c9",
+  "changes": [
+   {
+    "id": "m14",
+    "field": "context CNY category_totals",
+    "from": "shopping=69.50",
+    "to": "shopping=39.50 + 话费=30.00",
+    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+   },
+   {
+    "id": "m15",
+    "field": "context CNY category_totals",
+    "from": "shopping=69.50",
+    "to": "shopping=32.70 + 药品=36.80",
+    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+   },
+   {
+    "id": "m38",
+    "field": "context CNY category_totals",
+    "from": "shopping=69.50",
+    "to": "shopping=49.50 + 零食=20.00",
+    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+   },
+   {
+    "id": "m49",
+    "field": "context CNY category_totals",
+    "from": "shopping=69.50",
+    "to": "shopping=39.50 + 话费=30.00",
+    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+   },
+   {
+    "id": "m55",
+    "field": "context CNY category_totals.shopping",
+    "from": "69.50",
+    "to": "37.00",
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+   },
+   {
+    "id": "k09",
+    "field": "context CNY category_totals.shopping",
+    "from": "69.50",
+    "to": "37.00",
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+   },
+   {
+    "id": "k10",
+    "field": "context CNY category_totals.shopping",
+    "from": "69.50",
+    "to": "37.00",
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+   },
+   {
+    "id": "m57",
+    "field": "context CNY category_totals.shopping",
+    "from": "69.50",
+    "to": "37.00",
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+   },
+   {
+    "id": "*",
+    "field": "categories",
+    "from": "10 条",
+    "to": "11 条（新增 稿费/income）",
+    "why": "m12「收到稿费500元」属收入卡；本地收入分类此前只有工资，模型只能给 null"
+   }
+  ],
+  "categories_added": [
+   "话费",
+   "水电",
+   "药品",
+   "零食",
+   "人情往来",
+   "稿费"
+  ]
  },
  "categories": [
   {
@@ -36,6 +111,36 @@
   {
    "id": "salary",
    "name": "工资",
+   "kind": "income"
+  },
+  {
+   "id": "mobile",
+   "name": "话费",
+   "kind": "expense"
+  },
+  {
+   "id": "utilities",
+   "name": "水电",
+   "kind": "expense"
+  },
+  {
+   "id": "medical",
+   "name": "药品",
+   "kind": "expense"
+  },
+  {
+   "id": "snacks",
+   "name": "零食",
+   "kind": "expense"
+  },
+  {
+   "id": "social",
+   "name": "人情往来",
+   "kind": "expense"
+  },
+  {
+   "id": "royalty",
+   "name": "稿费",
    "kind": "income"
   }
  ],
@@ -723,7 +828,12 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "39.50"
+        },
+        {
+         "category_id": "mobile",
+         "category_name": "话费",
+         "expense_total": "30.00"
         }
        ]
       },
@@ -772,7 +882,12 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "32.70"
+        },
+        {
+         "category_id": "medical",
+         "category_name": "药品",
+         "expense_total": "36.80"
         }
        ]
       },
@@ -1927,7 +2042,12 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "49.50"
+        },
+        {
+         "category_id": "snacks",
+         "category_name": "零食",
+         "expense_total": "20.00"
         }
        ]
       },
@@ -2480,7 +2600,12 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "39.50"
+        },
+        {
+         "category_id": "mobile",
+         "category_name": "话费",
+         "expense_total": "30.00"
         }
        ]
       },
@@ -4701,7 +4826,7 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "37.00"
         }
        ]
       },
@@ -4763,7 +4888,7 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "37.00"
         }
        ]
       },
@@ -4875,7 +5000,7 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "37.00"
         }
        ]
       },
@@ -4939,7 +5064,7 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "69.50"
+         "expense_total": "37.00"
         }
        ]
       },
