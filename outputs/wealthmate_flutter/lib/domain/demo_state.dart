@@ -20,7 +20,6 @@ class DemoData {
         Category(id: 'mobile', name: '话费'),
         Category(id: 'utilities', name: '水电'),
         Category(id: 'medical', name: '药品'),
-        Category(id: 'snacks', name: '零食'),
         Category(id: 'social', name: '人情往来'),
         Category(id: 'salary', name: '工资', type: TransactionType.income),
         Category(id: 'royalty', name: '稿费', type: TransactionType.income),

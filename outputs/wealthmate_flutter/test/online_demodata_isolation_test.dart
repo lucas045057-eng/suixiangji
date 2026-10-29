@@ -24,9 +24,9 @@ const demoCategoryIds = <String>{
   'mobile',
   'utilities',
   'medical',
-  'snacks',
   'social',
   'salary',
+  'royalty',
   'other',
 };
 const demoTransactionIds = <String>{

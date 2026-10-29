@@ -17,7 +17,6 @@ void main() {
     '话费',
     '水电',
     '药品',
-    '零食',
     '人情往来',
     '工资',
     '稿费',
@@ -39,7 +38,7 @@ void main() {
 
   test('vocabulary v2 categories are expense categories', () {
     final state = DemoData.create();
-    for (final name in const ['话费', '水电', '药品', '零食', '人情往来']) {
+    for (final name in const ['话费', '水电', '药品', '人情往来']) {
       final category = state.categories.firstWhere((item) => item.name == name);
       expect(category.type, TransactionType.expense, reason: name);
     }
@@ -56,7 +55,19 @@ void main() {
     expect(draft('充话费50元支付宝').categoryId, 'mobile');
     expect(draft('水电100元微信').categoryId, 'utilities');
     expect(draft('买药36.8元').categoryId, 'medical');
-    expect(draft('买零食20元').categoryId, 'snacks');
     expect(draft('随礼200元').categoryId, 'social');
+  });
+
+  test('零食 is not a demo category any more (dropped from the vocabulary)', () {
+    final state = DemoData.create();
+    expect(state.categories.any((item) => item.id == 'snacks'), isFalse);
+    expect(state.categories.any((item) => item.name == '零食'), isFalse);
+    // Local rules must not invent a dangling id for snack words either.
+    final draft = FinanceRules.completeNaturalLanguageDraft(
+      '买零食20元',
+      now: DateTime(2026, 10, 29),
+      state: state,
+    );
+    expect(draft.categoryId, isNot('snacks'));
   });
 }
