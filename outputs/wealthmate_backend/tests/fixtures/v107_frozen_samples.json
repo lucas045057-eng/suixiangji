@@ -1,6 +1,6 @@
 {
  "meta": {
-  "version": "v2",
+  "version": "v3",
   "frozen_at": "2026-10-29",
   "design": "docs_review/suikouji-design-v107.md",
   "today": "2026-10-28",
@@ -10,82 +10,95 @@
    "inf": "推算卡质量，单独统计",
    "safety": "安全降级正确性，单独统计"
   },
-  "samples_sha256": "c64dde16210d7c5105c5dae8d95b1429a686c2fab2972911d533b6f14da0fe42",
-  "supersedes": "v1",
-  "previous_samples_sha256": "3dab8f431c32c9783d6d9161ba9fe0c7a9b7b87faf3457f8e70b2c75592a54c9",
+  "samples_sha256": "b64b5153dacd8d79815fe72339d97be71580ab5d596a4273f0703a907c509940",
+  "supersedes": "v2",
+  "previous_samples_sha256": "c64dde16210d7c5105c5dae8d95b1429a686c2fab2972911d533b6f14da0fe42",
   "changes": [
    {
     "id": "m14",
     "field": "context CNY category_totals",
     "from": "shopping=69.50",
     "to": "shopping=39.50 + 话费=30.00",
-    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+    "why": "词表缺口样例的参照日补上新分类（总额不变）",
+    "version": "v2"
    },
    {
     "id": "m15",
     "field": "context CNY category_totals",
     "from": "shopping=69.50",
     "to": "shopping=32.70 + 药品=36.80",
-    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+    "why": "词表缺口样例的参照日补上新分类（总额不变）",
+    "version": "v2"
    },
    {
     "id": "m38",
     "field": "context CNY category_totals",
     "from": "shopping=69.50",
     "to": "shopping=49.50 + 零食=20.00",
-    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+    "why": "词表缺口样例的参照日补上新分类（总额不变）",
+    "version": "v2"
    },
    {
     "id": "m49",
     "field": "context CNY category_totals",
     "from": "shopping=69.50",
     "to": "shopping=39.50 + 话费=30.00",
-    "why": "词表缺口样例的参照日补上新分类（总额不变）"
+    "why": "词表缺口样例的参照日补上新分类（总额不变）",
+    "version": "v2"
    },
    {
     "id": "m55",
     "field": "context CNY category_totals.shopping",
     "from": "69.50",
     "to": "37.00",
-    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00",
+    "version": "v2"
    },
    {
     "id": "k09",
     "field": "context CNY category_totals.shopping",
     "from": "69.50",
     "to": "37.00",
-    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00",
+    "version": "v2"
    },
    {
     "id": "k10",
     "field": "context CNY category_totals.shopping",
     "from": "69.50",
     "to": "37.00",
-    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00",
+    "version": "v2"
    },
    {
     "id": "m57",
     "field": "context CNY category_totals.shopping",
     "from": "69.50",
     "to": "37.00",
-    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00"
+    "why": "分类合计与参照总额自相矛盾（132.50 vs 100.00），后端 invalid_context；下调 shopping 使合计=100.00",
+    "version": "v2"
    },
    {
     "id": "*",
     "field": "categories",
     "from": "10 条",
     "to": "11 条（新增 稿费/income）",
-    "why": "m12「收到稿费500元」属收入卡；本地收入分类此前只有工资，模型只能给 null"
+    "why": "m12「收到稿费500元」属收入卡；本地收入分类此前只有工资，模型只能给 null",
+    "version": "v2"
+   },
+   {
+    "id": "m38",
+    "field": "context CNY category_totals",
+    "from": "shopping=49.50 + 零食=20.00",
+    "to": "shopping=69.50",
+    "why": "零食 移出默认词表，还原 v2 之前的分账（合计仍为 132.50）",
+    "version": "v3"
    }
   ],
-  "categories_added": [
-   "话费",
-   "水电",
-   "药品",
-   "零食",
-   "人情往来",
-   "稿费"
-  ]
+  "categories_removed": [
+   "零食"
+  ],
+  "why": "第三轮 N=3：零食把 水果/蛋糕 吸离 餐饮（m18 3/3、m24 1/3），而 m38 有零食上下文仍 3/3 给 null ⇒ 零收益负效应，移出默认集。"
  },
  "categories": [
   {
@@ -126,11 +139,6 @@
   {
    "id": "medical",
    "name": "药品",
-   "kind": "expense"
-  },
-  {
-   "id": "snacks",
-   "name": "零食",
    "kind": "expense"
   },
   {
@@ -2042,12 +2050,7 @@
         {
          "category_id": "shopping",
          "category_name": "购物",
-         "expense_total": "49.50"
-        },
-        {
-         "category_id": "snacks",
-         "category_name": "零食",
-         "expense_total": "20.00"
+         "expense_total": "69.50"
         }
        ]
       },

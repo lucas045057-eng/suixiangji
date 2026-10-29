@@ -94,15 +94,17 @@ def test_default_vocabulary_v2_aliases_bridge_only_to_existing_names():
         {"id": "mobile", "name": "话费", "kind": "expense"},
         {"id": "utilities", "name": "水电", "kind": "expense"},
         {"id": "medical", "name": "药品", "kind": "expense"},
-        {"id": "snacks", "name": "零食", "kind": "expense"},
         {"id": "social", "name": "人情往来", "kind": "expense"},
     ]
     assert resolve("话费", categories=v2) == "mobile"
     assert resolve("手机费", categories=v2) == "mobile"
     assert resolve("电费", categories=v2) == "utilities"
     assert resolve("买药", categories=v2) == "medical"
-    assert resolve("小吃", categories=v2) == "snacks"
     assert resolve("红包", categories=v2) == "social"
+    # 零食 was dropped from the default vocabulary (round 3); its aliases went
+    # with it, so snack words resolve to nothing rather than to a ghost name.
+    assert resolve("小吃", categories=v2) is None
+    assert resolve("零食", categories=v2) is None
     # Without the category the hint must stay unresolved instead of inventing one.
     assert resolve("手机费") is None
     assert resolve("电费") is None

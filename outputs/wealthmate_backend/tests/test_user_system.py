@@ -108,8 +108,11 @@ def test_new_ledger_seeds_the_default_vocabulary(api):
     assert len(names) == len(set(names))
     # Vocabulary v2 must not introduce a catch-all bucket.
     assert "其他" not in names
-    for expected in ("话费", "水电", "药品", "零食", "人情往来"):
+    for expected in ("话费", "水电", "药品", "人情往来"):
         assert (expected, "expense") in seeded
+    # Round 3 dropped 零食: it pulled 水果/蛋糕 cards away from 餐饮.
+    assert "零食" not in names
+    assert ("稿费", "income") in seeded
 
 
 @pytest.mark.parametrize("username", ["ab", "x" * 33, "a b", "中文名", "a@b", "   ", "Kelly"])

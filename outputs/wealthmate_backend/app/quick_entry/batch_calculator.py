@@ -87,11 +87,11 @@ _CATEGORY_ALIASES = {
     # 医疗/通讯 were never default names; their targets moved to the v2
     # defaults (药品/话费) so every alias stays a single hop to a real name.
     "看病": "药品", "挂号": "药品",
-    # 话费 / 水电 / 药品 / 零食 / 人情往来 (default vocabulary v2)
+    # 话费 / 水电 / 药品 / 人情往来 (default vocabulary v2; 零食 was dropped
+    # after round 3 — it pulled 水果/蛋糕 cards away from 餐饮)
     "手机费": "话费", "流量费": "话费", "宽带费": "话费",
     "电费": "水电", "水费": "水电", "燃气费": "水电", "水电煤": "水电",
     "买药": "药品", "药店": "药品", "医药": "药品", "药": "药品",
-    "小吃": "零食", "零嘴": "零食",
     "随礼": "人情往来", "份子钱": "人情往来", "红包": "人情往来",
 }
 

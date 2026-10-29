@@ -23,7 +23,6 @@ DEFAULT_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("话费", "expense"),
     ("水电", "expense"),
     ("药品", "expense"),
-    ("零食", "expense"),
     ("人情往来", "expense"),
     ("工资", "income"),
     ("稿费", "income"),
