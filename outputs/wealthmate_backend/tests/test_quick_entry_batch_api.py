@@ -471,3 +471,68 @@ def test_http_adapter_errors_are_mapped_without_real_network(monkeypatch, mode, 
     ))
     with pytest.raises(BatchError, match=code):
         asyncio.run(batch_llm.BatchModel().complete("drafts", {"text": "午饭20元"}))
+
+
+def test_provider_payload_lists_category_names_without_ids_or_money(batch_api):
+    from app.models import Category
+
+    client, sessions, auth, stub = batch_api
+    with sessions.begin() as db:
+        db.add(Category(
+            user_id="batch-user", id="entertainment", name="娱乐", kind="expense",
+        ))
+        # Same name and kind twice: the vocabulary is deduplicated.
+        db.add(Category(
+            user_id="batch-user", id="food-duplicate", name="餐饮", kind="expense",
+        ))
+        # Archived categories are not part of the vocabulary.
+        db.add(Category(
+            user_id="batch-user", id="old-travel", name="旅行", kind="expense",
+            active=False,
+        ))
+
+    assert post(batch_api).status_code == 200
+
+    payload = stub.calls[-1][1]
+    assert payload["category_names"] == [
+        {"name": "交通", "kind": "expense"},
+        {"name": "娱乐", "kind": "expense"},
+        {"name": "餐饮", "kind": "expense"},
+        {"name": "工资", "kind": "income"},
+    ]
+    assert all(set(entry) == {"name", "kind"} for entry in payload["category_names"])
+    assert "entertainment" not in json.dumps(payload["category_names"])
+    # The aggregate context is unchanged by this addition.
+    assert "ledger_context" in payload
+
+
+def test_a_category_without_reference_spend_is_still_resolvable(batch_api):
+    from app.models import Category
+
+    client, sessions, auth, stub = batch_api
+    with sessions.begin() as db:
+        db.add(Category(
+            user_id="batch-user", id="entertainment", name="娱乐", kind="expense",
+        ))
+    text = "看电影40元"
+    stub.content = json.dumps(
+        simple_plan(text, "看电影40元", amount="40", category_hint="电影"),
+        ensure_ascii=False,
+    )
+
+    response = client.post("/agent/drafts", headers=auth, json=body(text))
+
+    assert response.status_code == 200, response.text
+    draft = response.json()["drafts"][0]
+    assert draft["category_id"] == "entertainment"
+    # The gap this closes: 娱乐 has no spend on the reference day.
+    reference_totals = body(text)["ledger_context"]["currencies"][0]["reference_day"]["category_totals"]
+    assert "娱乐" not in {row["category_name"] for row in reference_totals}
+    assert {"name": "娱乐", "kind": "expense"} in stub.calls[-1][1]["category_names"]
+
+
+def test_prompt_points_at_the_category_names_field():
+    from app.quick_entry.batch_llm import SYSTEM_PROMPT
+
+    assert "category_names" in SYSTEM_PROMPT
+    assert "category_totals" not in SYSTEM_PROMPT

@@ -1,6 +1,7 @@
 """Deterministic Decimal calculation over validated semantics and local aggregates."""
 from __future__ import annotations
 
+import unicodedata
 from datetime import timedelta
 from decimal import Decimal
 
@@ -61,8 +62,67 @@ def validate_context(payload: DraftsIn) -> None:
             raise BatchError("invalid_context")
 
 
+# Controlled aliases: colloquial words a provider tends to emit → the exact
+# category name a ledger may carry. An alias never creates a category: it only
+# bridges to a name the user already has, otherwise the hint stays unresolved
+# and the user picks manually. Keys are compared after normalisation
+# (NFKC + casefold + whitespace removed), so no case/width variants are listed.
+# Keep this table short and additive.
+_CATEGORY_ALIASES = {
+    # 餐饮
+    "吃饭": "餐饮", "用餐": "餐饮", "外卖": "餐饮", "早餐": "餐饮",
+    "午饭": "餐饮", "晚饭": "餐饮", "饮品": "餐饮", "咖啡": "餐饮",
+    # 交通
+    "打车": "交通", "出租车": "交通", "网约车": "交通", "地铁": "交通", "公交": "交通",
+    # 购物
+    "超市": "购物", "日用": "购物", "网购": "购物", "淘宝": "购物",
+    # 娱乐
+    "电影": "娱乐", "游戏": "娱乐", "唱歌": "娱乐", "聚会": "娱乐",
+    # 住房
+    "房租": "住房", "房贷": "住房", "物业": "住房",
+    # 工资 / 医疗 / 通讯
+    "薪水": "工资", "薪资": "工资", "奖金": "工资",
+    "看病": "医疗", "挂号": "医疗", "话费": "通讯",
+}
+
+
+def _normalize_name(value: str) -> str:
+    """NFKC (full-width → half-width), trim, case-fold, drop inner spaces."""
+    text = unicodedata.normalize("NFKC", value).strip().casefold()
+    return text.replace(" ", "").replace("\t", "").replace("　", "")
+
+
 def _category(hint, kind, categories):
-    matches = [row for row in categories if row["name"] == hint and row["kind"] == kind]
+    """Resolves a hint to an existing category of the same kind.
+
+    Chain: exact name → normalised name → controlled alias. Every stage must
+    match exactly one category of the right kind; duplicated names and aliases
+    pointing at a name the user does not have resolve to None. This never
+    invents a category: an unresolved hint still yields a card the user fills in.
+    """
+    if not hint:
+        return None
+    exact = [
+        row for row in categories
+        if row["kind"] == kind and row["name"] == hint
+    ]
+    if exact:
+        return exact[0]["id"] if len(exact) == 1 else None
+    normalized = _normalize_name(hint)
+    loose = [
+        row for row in categories
+        if row["kind"] == kind and _normalize_name(row["name"]) == normalized
+    ]
+    if loose:
+        return loose[0]["id"] if len(loose) == 1 else None
+    canonical = _CATEGORY_ALIASES.get(normalized)
+    if canonical is None:
+        return None
+    target = _normalize_name(canonical)
+    matches = [
+        row for row in categories
+        if row["kind"] == kind and _normalize_name(row["name"]) == target
+    ]
     return matches[0]["id"] if len(matches) == 1 else None
 
 

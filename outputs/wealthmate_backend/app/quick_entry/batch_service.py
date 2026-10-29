@@ -34,6 +34,22 @@ def _record_log(db, user_id, status, meta, draft_count=0):
     ))
 
 
+def _category_names(db: Session, user_id: str) -> list[dict]:
+    """The provider's category vocabulary: names and kinds only.
+
+    No ids, no totals, no ledger rows: the model may only copy a name, and the
+    server resolves it against the database afterwards.
+    """
+    rows = db.query(Category.name, Category.kind).filter(
+        Category.user_id == user_id, Category.active.is_(True)
+    ).all()
+    unique = {(row.name, row.kind) for row in rows}
+    return [
+        {"name": name, "kind": kind}
+        for name, kind in sorted(unique, key=lambda pair: (pair[1], pair[0]))
+    ]
+
+
 def _failure_code(exc):
     if isinstance(exc, BatchError):
         return exc.code
@@ -52,10 +68,15 @@ async def make_drafts(
     # Authentication has already detached the user and released its read transaction.
     meta = {}
     try:
+        # A short read before the DB-free LLM wait: categories that have no
+        # reference-day spend must still be visible to the model.
+        with db.begin():
+            category_names = _category_names(db, user_id)
         content, meta = await (model or BatchModel()).complete("drafts", {
             "text": payload.text,
             "local_today": payload.local_today.isoformat(),
             "preferred_currency": payload.preferred_currency,
+            "category_names": category_names,
             "ledger_context": (
                 payload.ledger_context.model_dump(mode="json")
                 if payload.ledger_context is not None else None
