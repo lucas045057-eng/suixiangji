@@ -6,7 +6,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from ..assets.domain import money
-from .batch_amounts import currency_in_text, item_amount, item_date, validate_plan
+from .batch_amounts import currency_in_text, item_amount, item_date, reanchor_plan, validate_plan
 from .batch_schemas import BatchError, DraftsIn, ReadyContext, SemanticPlan
 
 
@@ -266,6 +266,7 @@ def _inferred(payload, reference, drafts, categories) -> tuple[dict | None, str 
 
 def calculate_drafts(payload: DraftsIn, plan: SemanticPlan, categories=(), accounts=()) -> dict:
     validate_context(payload)
+    plan = reanchor_plan(payload, plan)
     validate_plan(plan, payload)
     if plan.has_more_than_8_items or len(plan.items) > 8:
         return _response(payload, "needs_split", [], [notice("needs_split")])

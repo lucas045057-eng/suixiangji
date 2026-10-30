@@ -13,7 +13,7 @@ from ..core.dependencies import get_current_user_readonly
 from ..db import get_db
 from ..models import Account, Category, User
 from . import batch_llm, stream_llm
-from .batch_amounts import item_amount, item_date, validate_plan
+from .batch_amounts import item_amount, item_date, reanchor_plan, reanchor_source, validate_plan
 from .batch_calculator import calculate_drafts, validate_context
 from .batch_router import DraftsRoute, drafts_limiter
 from .batch_schemas import BatchError, DraftsIn, SemanticItem, SemanticPlan, SemanticReference
@@ -38,7 +38,7 @@ def preview(tag, ordinal, raw, payload, attempt, category_names):
     try:
         value = strict_json(raw)
         if tag == "reference":
-            source = SemanticReference.model_validate(value)
+            source = reanchor_source(payload, SemanticReference.model_validate(value))
             plan = SemanticPlan(items=[], reference=source, has_more_than_8_items=False, unresolved=[])
             validate_plan(plan, payload)
             return "reference.preview", source.model_dump(mode="json")
@@ -47,6 +47,7 @@ def preview(tag, ordinal, raw, payload, attempt, category_names):
         item = SemanticItem.model_validate(value)
         if item.type == "transfer":
             return None
+        item = reanchor_source(payload, item)
         validate_plan(SemanticPlan(items=[item], has_more_than_8_items=False, unresolved=[]), payload)
         amount, bounds, approximate = item_amount(item)
         # A hint is display-only and may not introduce a provider's invented name.
@@ -119,6 +120,7 @@ async def generation(db, user_id, auth_version, payload, category_names):
                 continue
             raise
         # Semantic errors are deliberately outside the structural retry scope.
+        plan = reanchor_plan(payload, plan)
         validate_plan(plan, payload)
         yield "plan.validated", {}, attempt
         result = final_result(db, user_id, auth_version, payload, plan)

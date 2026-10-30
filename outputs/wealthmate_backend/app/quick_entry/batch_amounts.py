@@ -177,3 +177,30 @@ def validate_plan(plan: SemanticPlan, payload: DraftsIn) -> None:
                 # field equality must not be read as a forged duplicate.
                 if "各" not in payload.text[max(previous.start, item.start):min(previous.end, item.end)]:
                     raise BatchError("llm_bad_response")
+
+
+def _reanchor(payload: DraftsIn, source):
+    """Re-bind a source's offsets to the exact position of its quote.
+
+    LLM-reported start/end are advisory: some routers drift by the
+    punctuation they skip over. `证据回指` stays absolute — the quote must
+    still appear verbatim in the payload text, only its coordinates get
+    corrected. Unfindable quotes are rejected exactly as before.
+    """
+    if 0 <= source.start < source.end <= len(payload.text) \
+            and payload.text[source.start:source.end] == source.quote:
+        return source
+    index = payload.text.find(source.quote)
+    if index < 0:
+        raise BatchError("llm_bad_response")
+    return source.model_copy(update={"start": index, "end": index + len(source.quote)})
+
+
+def reanchor_plan(payload: DraftsIn, plan: SemanticPlan) -> SemanticPlan:
+    items = [_reanchor(payload, item) for item in plan.items]
+    reference = _reanchor(payload, plan.reference) if plan.reference else None
+    return plan.model_copy(update={"items": items, "reference": reference})
+
+
+def reanchor_source(payload: DraftsIn, source):
+    return _reanchor(payload, source)

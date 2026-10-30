@@ -284,7 +284,10 @@ def test_emoji_offsets_are_code_points_and_bad_offsets_fail_whole_batch():
     semantic = simple_plan(text, "午饭20元")
     result = calculate(body(text), semantic)
     assert result["drafts"][0]["evidence"][0]["start"] == 1
-    semantic["items"][0]["start"] += 1
+    semantic["items"][0]["start"] += 3
+    healed = calculate(body(text), semantic)
+    assert healed["drafts"][0]["evidence"][0]["start"] == 1  # reanchor_plan 纠正申报偏移
+    semantic["items"][0]["quote"] = "does-not-exist"
     with pytest.raises(BatchError, match="llm_bad_response"):
         calculate(body(text), semantic)
 

@@ -331,11 +331,12 @@ def test_final_parity_for_result_shapes(streaming, mode):
 
 
 @pytest.mark.parametrize("change", [
-    {"start": 999}, {"note": "invented"}, {"account_hint": "invented"},
+    {"quote": "fabricated"}, {"note": "invented"}, {"account_hint": "invented"},
     {"date_relation": "yesterday"}, {"date_relation": "explicit", "date": "2026-01-01"},
     {"currency": "USD"}, {"amount_kind": "missing", "amount_exact": "20"},
 ])
 def test_single_preview_uses_existing_semantic_guards(change):
+    """语义守卫保留（quote 不在正文即拒绝）；start/end 申报偏移由 reanchor 兜底（cc1709）。"""
     text = "吃饭20元"
     semantic = simple_plan(text)["items"][0]
     semantic.update(change)

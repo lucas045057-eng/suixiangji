@@ -287,11 +287,12 @@ def test_error_mapping_and_failure_logs_never_store_exception_text(batch_api, ca
 
 
 @pytest.mark.parametrize("corruption", [
-    "not_json", "markdown", "bad_quote", "bad_offset", "category_id", "account_id",
+    "not_json", "markdown", "bad_quote", "category_id", "account_id",
     "draft_id", "final_result", "numeric_amount", "missing_with_amount",
     "fabricated_range", "unknown_unresolved", "duplicate_json_keys",
 ])
 def test_untrusted_provider_contract_errors_reject_whole_batch(batch_api, corruption):
+    """bad_offset 旌旄由 reanchors（reanchor_plan）兜底，改为 200 见 test_bad_offsets_are_reanchored。"""
     _, _, _, stub = batch_api
     semantic = plan()
     if corruption in ("not_json", "markdown"):
@@ -302,8 +303,6 @@ def test_untrusted_provider_contract_errors_reject_whole_batch(batch_api, corrup
         first = semantic["items"][0]
         if corruption == "bad_quote":
             first["quote"] = "fabricated quote"
-        elif corruption == "bad_offset":
-            first["start"] += 1
         elif corruption in ("category_id", "account_id", "draft_id"):
             first[corruption] = "foreign-user-private-id"
         elif corruption == "final_result":
@@ -320,6 +319,18 @@ def test_untrusted_provider_contract_errors_reject_whole_batch(batch_api, corrup
     result = post(batch_api)
     assert result.status_code == 502 and result.json()["code"] == "llm_bad_response"
     assert "foreign-user" not in result.text and TEXT not in result.text
+
+
+def test_bad_offsets_are_reanchored_not_rejected(batch_api):
+    """start/end 申报偏离但 quote 逐字在正文中：批评性重锚，不再整批 502（cc1709 A 方案）。"""
+    _, _, _, stub = batch_api
+    semantic = plan()
+    semantic["items"][0]["start"] += 1
+    stub.content = json.dumps(semantic, ensure_ascii=False)
+    result = post(batch_api)
+    assert result.status_code == 200
+    evidence = result.json()["drafts"][0]["evidence"][0]
+    assert evidence["start"] == semantic["items"][0]["start"] - 1
 
 
 def test_success_logs_accept_only_fixed_summary_and_safe_token_counts(batch_api):

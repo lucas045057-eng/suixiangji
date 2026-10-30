@@ -119,11 +119,15 @@ def _fraction_from_suffix(suffix: str) -> Decimal | None:
         return Decimal(fen) / Decimal("100") if fen is not None else None
 
     digit_tail = re.match(r"\d{1,2}", suffix)
+    if digit_tail and re.match(r"\d{1,2}(?:个|次|人|份|件)", suffix):
+        return None  # counting phrase e.g. "20块一个人", not a "六块86"-style fraction
     if digit_tail:
         raw = digit_tail.group(0)
         return Decimal(raw) / (Decimal("10") if len(raw) == 1 else Decimal("100"))
 
     chinese_tail = re.match(r"[零〇一二两三四五六七八九]{1,2}", suffix)
+    if chinese_tail and re.match(r"[零〇一二两三四五六七八九]{1,2}(?:个|次|人|份|件)", suffix):
+        return None  # counting phrase e.g. "一块" in "20块一个人", not 0.1 (§6.2)
     if chinese_tail:
         cents = "".join(str(_CHINESE_DIGITS[char]) for char in chinese_tail.group(0))
         return Decimal(cents) / (Decimal("10") if len(cents) == 1 else Decimal("100"))
