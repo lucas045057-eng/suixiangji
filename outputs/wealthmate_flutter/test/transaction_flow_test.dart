@@ -112,7 +112,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('账目详情'), findsOneWidget);
-    expect(find.text('2026-09-03 18:42'), findsOneWidget);
+    expect(find.text('2026年9月3日 18:42'), findsOneWidget);
     expect(find.textContaining('32'), findsWidgets);
     expect(find.textContaining('230.4'), findsWidgets);
     expect(find.textContaining('Frankfurter'), findsOneWidget);

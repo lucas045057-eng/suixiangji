@@ -261,6 +261,71 @@ void main() {
     }
   });
 
+  test('amounts without a unit parse only next to a spending verb or at the end',
+      () {
+    const examples = <String, double>{
+      '今天喝咖啡花了9.9': 9.9,
+      '今天喝咖啡花了9.90': 9.90,
+      '今天消费18.50': 18.50,
+      '今天买了20': 20,
+      '今天喝咖啡9.9': 9.9,
+    };
+    for (final entry in examples.entries) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        entry.key,
+        now: DateTime(2026, 9, 1, 10),
+      );
+      expect(draft.amount, closeTo(entry.value, .001), reason: entry.key);
+    }
+  });
+
+  test('dates, ordinals and counts are never read as unitless amounts', () {
+    const examples = [
+      '今天是10.30',
+      '今天10月1号',
+      '今天第3次消费',
+      '今天走了20000步',
+      '今天中午外卖 16.860元',
+    ];
+    for (final text in examples) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        text,
+        now: DateTime(2026, 9, 1, 10),
+      );
+      expect(draft.amount, 0, reason: text);
+    }
+  });
+
+  test('a reference phrase never moves the transaction to the older day', () {
+    const examples = [
+      '我今天消费和前天差不多，只是多喝了杯咖啡花了9.9',
+      '我今天消费和两天前差不多，只是多喝了杯咖啡花了9.9',
+      '跟昨天差不多，午饭20元',
+      '和平时一样，午饭20元',
+    ];
+    for (final text in examples) {
+      final draft = FinanceRules.parseNaturalLanguage(
+        text,
+        now: DateTime(2026, 9, 1, 10),
+      );
+      expect(draft.date, '2026-09-01', reason: text);
+    }
+    final coffee = FinanceRules.parseNaturalLanguage(
+      examples.first,
+      now: DateTime(2026, 9, 1, 10),
+    );
+    expect(coffee.amount, closeTo(9.9, .001));
+  });
+
+  test('a standalone day word still dates the transaction', () {
+    final draft = FinanceRules.parseNaturalLanguage(
+      '前天买咖啡花了20元',
+      now: DateTime(2026, 9, 1, 10),
+    );
+    expect(draft.date, '2026-08-30');
+    expect(draft.amount, 20);
+  });
+
   test('missing account and low confidence drafts cannot post', () {
     final noAccount = FinanceRules.parseNaturalLanguage(
       '今天中午外卖 32 元',

@@ -52,9 +52,10 @@ class FinanceRules {
         : TransactionType.expense;
     final categoryId = _categoryFromText(text);
     final accountId = _accountFromText(text) ?? defaultAccountId;
-    final date = now.subtract(text.contains('前天')
+    final dated = withoutReferencePhrases(text);
+    final date = now.subtract(dated.contains('前天')
         ? const Duration(days: 2)
-        : text.contains('昨天')
+        : dated.contains('昨天')
             ? const Duration(days: 1)
             : Duration.zero);
     final missingFacts = <String>[];
@@ -245,6 +246,15 @@ class FinanceRules {
     return null;
   }
 
+  /// "和前天差不多" compares against another day's baseline; it never moves the
+  /// transaction itself. Stripping the phrase first keeps a today expense on
+  /// today even when the user names an older day as the comparison.
+  static final RegExp _referencePhrase = RegExp(
+      r'(?:和|跟|与|同|比)\s*(?:(?:大?前天|[\d一二两三四五六七八九十]+天前|昨天|昨日|上(?:周|个?月)|平时)\s*(?:差不多|类似|相近|相同|一样|持平)?|(?:差不多|类似|相近|相同|一样|持平))');
+
+  static String withoutReferencePhrases(String text) =>
+      text.replaceAll(_referencePhrase, '');
+
   static String _dateKey(DateTime date) =>
       '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 
@@ -266,7 +276,7 @@ class FinanceRules {
         break;
       }
     }
-    if (match == null) return null;
+    if (match == null) return _bareAmountFromText(normalized);
     final rawYuan = match.group(1)!;
     final yuan = _parseWholeYuan(rawYuan);
     if (yuan == null || yuan < 0) return null;
@@ -285,6 +295,38 @@ class FinanceRules {
     if (start > 0 && RegExp(r'[\d.]').hasMatch(text[start - 1])) return false;
     if (end < text.length && RegExp(r'[.]').hasMatch(text[end])) return false;
     return true;
+  }
+
+  /// Amounts written without a unit ("花了9.9"). Only digits right after a
+  /// spending verb, or a number that closes the sentence, may be read as money;
+  /// dates, ordinals and counts must stay unparsed.
+  static double? _bareAmountFromText(String text) {
+    const verbs = r'(?:花了|花掉|花去|消费了?|支付了?|付了|付款|用了|买了|充值|收到|赚了)';
+    for (final match
+        in RegExp('$verbs(\\d{1,4}(?:\\.\\d{1,2})?)').allMatches(text)) {
+      final value = _bareValue(
+          text, match.end - match.group(1)!.length, match.end);
+      if (value != null) return value;
+    }
+    final tail = RegExp(r'(\d{1,4}(?:\.\d{1,2})?)$').firstMatch(text);
+    if (tail != null) {
+      return _bareValue(text, tail.start, tail.end);
+    }
+    return null;
+  }
+
+  static const String _dateBefore = '年月日号第周星期是于在';
+  static const String _unitAfter = '年月日号个次天点时分折％%';
+
+  static double? _bareValue(String text, int start, int end) {
+    if (start > 0) {
+      final before = text[start - 1];
+      if (RegExp(r'[\d.]').hasMatch(before)) return null;
+      if (_dateBefore.contains(before)) return null;
+    }
+    if (end < text.length && _unitAfter.contains(text[end])) return null;
+    final value = double.tryParse(text.substring(start, end));
+    return value != null && value > 0 ? value : null;
   }
 
   static String _normalizeAmountText(String text) {

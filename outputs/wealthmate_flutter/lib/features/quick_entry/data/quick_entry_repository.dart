@@ -337,7 +337,7 @@ class QuickEntryRepository {
       transactions.add(FinanceTransaction(
         id: id,
         date: draft.date,
-        occurredAt: '${draft.date}T00:00:00',
+        occurredAt: LedgerRules.occurredAtFor(draft.date, clock),
         type: draft.type,
         amount: draft.amount,
         currency: draft.currency,

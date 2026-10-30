@@ -126,13 +126,9 @@ class TransactionDetailPage extends StatelessWidget {
       ]));
 
   String _occurredLabel(FinanceTransaction value) {
-    final raw = value.occurredAt;
-    if (raw == null || raw.isEmpty) return value.date;
-    if (raw.length >= 16 && raw[10] == 'T')
-      return '${raw.substring(0, 10)} ${raw.substring(11, 16)}';
-    final parsed = DateTime.tryParse(raw);
-    if (parsed == null) return raw.replaceFirst('T', ' ').split('.').first;
-    return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')} ${parsed.hour.toString().padLeft(2, '0')}:${parsed.minute.toString().padLeft(2, '0')}';
+    final date = ledgerFullDate(value.date);
+    final time = recordedTime(value.occurredAt);
+    return time == null ? '$date（时间未记录）' : '$date $time';
   }
 
   String _exchangeLabel(FinanceTransaction value) {

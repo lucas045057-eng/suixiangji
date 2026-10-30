@@ -159,7 +159,7 @@ class _LedgerPageState extends State<LedgerPage> {
               : transaction.note,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       subtitle: Text(
-          '${transaction.date} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
+          '${_whenLabel(transaction)} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
           style: const TextStyle(color: paInkFaint, fontSize: 10)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(
@@ -181,6 +181,13 @@ class _LedgerPageState extends State<LedgerPage> {
                 ]),
       ]),
     );
+  }
+
+  /// Date always; the clock time only when one was actually recorded.
+  String _whenLabel(FinanceTransaction transaction) {
+    final date = ledgerDate(transaction.date);
+    final time = recordedTime(transaction.occurredAt);
+    return time == null ? date : '$date $time';
   }
 
   void _openNew(BuildContext context) => showModalBottomSheet<void>(

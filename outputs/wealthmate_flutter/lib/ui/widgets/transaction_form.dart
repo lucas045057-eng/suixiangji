@@ -357,6 +357,14 @@ class _TransactionFormState extends State<TransactionForm> {
     final note = noteController.text.trim().isEmpty
         ? categoryName(widget.ledger.state, categoryId)
         : noteController.text.trim();
+    // Keep a real, unchanged clock time when editing; otherwise stamp today's
+    // entries with the current time and back-dated ones with midnight.
+    final keepExistingTime = existing != null &&
+        existing.date == date &&
+        recordedTime(existing.occurredAt) != null;
+    occurredAt = keepExistingTime
+        ? existing.occurredAt!
+        : LedgerRules.occurredAtFor(date, DateTime.now());
     final transaction = FinanceTransaction(
       id: id,
       date: date,

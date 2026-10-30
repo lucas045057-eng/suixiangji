@@ -2,6 +2,18 @@ import '../../../domain/models.dart';
 
 /// Pure transaction and category decisions for the Ledger feature.
 class LedgerRules {
+  /// Timestamp for a new transaction: today's entries keep the real clock,
+  /// back-dated ones carry midnight (the UI then shows "时间未记录" instead of
+  /// inventing 00:00).
+  static String occurredAtFor(String date, DateTime clock) {
+    final today = '${clock.year.toString().padLeft(4, '0')}-'
+        '${clock.month.toString().padLeft(2, '0')}-'
+        '${clock.day.toString().padLeft(2, '0')}';
+    if (date != today) return '${date}T00:00:00';
+    return '${date}T${clock.hour.toString().padLeft(2, '0')}:'
+        '${clock.minute.toString().padLeft(2, '0')}:00';
+  }
+
   static FinanceTransaction prepareConversion(
       FinanceState state, FinanceTransaction transaction) {
     if (transaction.currency == 'CNY') {

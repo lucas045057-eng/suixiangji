@@ -11,6 +11,7 @@ class MetricCard extends StatelessWidget {
       required this.icon,
       this.caption,
       this.positive = false,
+      this.valueSuffix,
       super.key});
 
   final String label;
@@ -18,6 +19,17 @@ class MetricCard extends StatelessWidget {
   final IconData icon;
   final String? caption;
   final bool positive;
+
+  /// Non-null renders the number with this suffix instead of the ¥ amount
+  /// format (e.g. `%` for 储蓄率); the money format stays the default.
+  final String? valueSuffix;
+
+  String get _valueText {
+    final suffix = valueSuffix;
+    if (suffix == null) return money(value);
+    final whole = value.truncateToDouble() == value;
+    return '${value.toStringAsFixed(whole ? 0 : 1)}$suffix';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +49,7 @@ class MetricCard extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(money(value),
+            child: Text(_valueText,
                 style: const TextStyle(
                     color: paInk,
                     fontSize: 22,

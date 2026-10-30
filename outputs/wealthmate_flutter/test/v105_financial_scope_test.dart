@@ -165,7 +165,7 @@ void main() {
     await tester.tap(categoryRow);
     await tester.pumpAndSettle();
     expect(find.byType(LedgerPage), findsOneWidget);
-    expect(find.text('2026-09-30 · 餐饮 · 请选择账户 · CNY'), findsOneWidget);
+    expect(find.textContaining('9月30日 12:00 · 餐饮 · 请选择账户 · CNY'), findsOneWidget);
     expect(find.textContaining('2026-10-01'), findsNothing);
     await tester.pageBack();
     await tester.pumpAndSettle();

@@ -193,6 +193,7 @@ class DashboardPage extends StatelessWidget {
                           value: metrics.savingsRate * 100,
                           icon: Icons.savings_outlined,
                           caption: '健康区间 > 30%',
+                          valueSuffix: '%',
                           positive: metrics.savingsRate >= .3)),
                   SizedBox(
                       width: width,

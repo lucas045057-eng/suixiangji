@@ -198,7 +198,7 @@ class QuickEntryRules {
         if (_mentionsPreviousDayReference(trimmed))
           const QuickEntryNotice(
             code: 'reference_not_converted',
-            message: '「跟昨天比」这类参照需要云端解析，本次未折算。',
+            message: '「跟昨天/前天比」这类参照需要云端解析，本次未折算。',
           ),
       ],
       candidates: [
@@ -211,8 +211,11 @@ class QuickEntryRules {
     );
   }
 
-  static bool _mentionsPreviousDayReference(String text) =>
-      RegExp(r'跟昨天|和昨天|与昨天|同昨天|跟昨日|比昨天|差不多').hasMatch(text);
+  static bool _mentionsPreviousDayReference(String text) => RegExp(
+          r'跟昨天|和昨天|与昨天|同昨天|跟昨日|比昨天|差不多'
+          r'|(?:跟|和|与|同|比)(?:大?前天|[\d一二两三四五六七八九十]+天前'
+          r'|上(?:周|个?月)|平时)')
+      .hasMatch(text);
 
   static String? _remoteCategory(AgentDraft draft, FinanceState state) {
     final categoryId = draft.categoryId;
