@@ -12,6 +12,7 @@ import 'dashboard_page.dart';
 import 'ledger_page.dart';
 import 'settings_page.dart';
 import 'stats_page.dart';
+import 'theme.dart';
 import 'widgets/transaction_form.dart';
 import 'wealth_page.dart';
 
@@ -197,7 +198,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
       children: [
         Container(
           width: 210,
-          color: const Color(0xFF12201D),
+          decoration: const BoxDecoration(
+            color: paBg,
+            border: Border(right: BorderSide(color: paHairline)),
+          ),
           padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,14 +210,15 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                 padding: EdgeInsets.symmetric(horizontal: 12),
                 child: Text('随想记',
                     style: TextStyle(
-                        color: Colors.white,
+                        color: paInk,
                         fontSize: 20,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1)),
               ),
               const Padding(
                 padding: EdgeInsets.fromLTRB(12, 4, 12, 36),
                 child: Text('你的钱，有自己的节奏',
-                    style: TextStyle(color: Color(0xFF9DB8AC), fontSize: 11)),
+                    style: TextStyle(color: paInkSub, fontSize: 11)),
               ),
               Expanded(
                 child: ListView(
@@ -228,11 +233,10 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                       color: Colors.transparent,
                       child: ListTile(
                         onTap: _openBudgets,
-                        leading: const Icon(Icons.track_changes,
-                            color: Color(0xFF9DB8AC)),
+                        leading:
+                            const Icon(Icons.track_changes, color: paInkFaint),
                         title: const Text('预算',
-                            style: TextStyle(
-                                color: Color(0xFFB7C8BF), fontSize: 13)),
+                            style: TextStyle(color: paInkSub, fontSize: 13)),
                         contentPadding:
                             const EdgeInsets.symmetric(horizontal: 12),
                       ),
@@ -240,27 +244,27 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
                   ],
                 ),
               ),
-              const Divider(color: Color(0x334A665B)),
+              const Divider(color: paHairline),
               ListTile(
                 contentPadding: EdgeInsets.symmetric(horizontal: 12),
                 leading: CircleAvatar(
                     radius: 16,
-                    backgroundColor: Color(0xFFF3B187),
+                    backgroundColor: paHairline,
                     child: Text(
                         (widget.store.profile?.displayName ?? '朋友')
                             .characters
                             .first,
                         style: const TextStyle(
-                            color: Color(0xFF56301E),
+                            color: paInkSub,
                             fontSize: 12,
-                            fontWeight: FontWeight.w800))),
+                            fontWeight: FontWeight.w700))),
                 title: Text(widget.store.profile?.displayName ?? '朋友',
                     style: const TextStyle(
-                        color: Colors.white,
+                        color: paInk,
                         fontSize: 12,
                         fontWeight: FontWeight.w700)),
                 subtitle: const Text('本地模式',
-                    style: TextStyle(color: Color(0xFF8B9C95), fontSize: 10)),
+                    style: TextStyle(color: paInkFaint, fontSize: 10)),
               ),
             ],
           ),
@@ -278,26 +282,24 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
 
   Widget _desktopNav(IconData icon, String label, int index) {
     final active = selectedIndex == index;
+    final color = active ? paInk : paInkFaint;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
+      padding: const EdgeInsets.only(bottom: 2),
       child: Material(
         color: Colors.transparent,
         child: ListTile(
           selected: active,
           onTap: () => _selectPage(index),
-          leading: Icon(icon,
-              color: active ? const Color(0xFF12201D) : const Color(0xFFA9BBB4),
-              size: 20),
+          leading: Icon(icon, color: color, size: 20),
           title: Text(label,
               style: TextStyle(
-                  color: active
-                      ? const Color(0xFF12201D)
-                      : const Color(0xFFA9BBB4),
+                  color: color,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700)),
-          selectedTileColor: const Color(0xFFBDEBDC),
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w400)),
+          // 方向 A：选中行只加粗，不填色。
+          selectedTileColor: Colors.transparent,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
         ),
       ),
@@ -305,19 +307,28 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   }
 
   Widget _buildMobileNavigation() {
-    return NavigationBar(
-      selectedIndex: selectedIndex,
-      onDestinationSelected: _selectPage,
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.grid_view_rounded), label: '首页'),
-        NavigationDestination(
-            icon: Icon(Icons.receipt_long_rounded), label: '账本'),
-        NavigationDestination(icon: Icon(Icons.bar_chart_rounded), label: '统计'),
-        NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_rounded), label: '财富'),
-        NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded), label: '我的'),
-      ],
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: paSurface,
+        border: Border(top: BorderSide(color: paHairline)),
+      ),
+      child: NavigationBar(
+        backgroundColor: paSurface,
+        selectedIndex: selectedIndex,
+        onDestinationSelected: _selectPage,
+        destinations: const [
+          NavigationDestination(
+              icon: Icon(Icons.grid_view_rounded), label: '首页'),
+          NavigationDestination(
+              icon: Icon(Icons.receipt_long_rounded), label: '账本'),
+          NavigationDestination(
+              icon: Icon(Icons.bar_chart_rounded), label: '统计'),
+          NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_rounded), label: '财富'),
+          NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded), label: '我的'),
+        ],
+      ),
     );
   }
 }
@@ -338,7 +349,6 @@ class _DesktopDetailPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
-              color: const Color(0xFFF0EEFF),
               child: Padding(
                 padding: const EdgeInsets.all(18),
                 child: Column(
@@ -346,22 +356,23 @@ class _DesktopDetailPanel extends StatelessWidget {
                     children: [
                       const Text('随想记助手',
                           style: TextStyle(
-                              color: Color(0xFF4C4A9C),
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12)),
+                              color: paInkSub,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                              letterSpacing: 2)),
                       const SizedBox(height: 14),
                       Text(budget.progress.isEmpty ? '还没有预算提醒' : '先看看本月预算节奏',
                           style: const TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.w800)),
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: paInk)),
                       const SizedBox(height: 8),
                       Text(
                           store.isDemoMode
                               ? '当前为离线演示，数据只保存在本机。'
                               : '已连接同步服务，变更会进入同步队列。',
                           style: const TextStyle(
-                              color: Color(0xFF686795),
-                              fontSize: 11,
-                              height: 1.5)),
+                              color: paInkSub, fontSize: 11, height: 1.5)),
                     ]),
               ),
             ),
@@ -374,19 +385,23 @@ class _DesktopDetailPanel extends StatelessWidget {
                     children: [
                       const Text('本月结余',
                           style: TextStyle(
-                              color: Color(0xFF6C7C74),
+                              color: paInkSub,
                               fontSize: 11,
-                              fontWeight: FontWeight.w700)),
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 3)),
                       const SizedBox(height: 8),
                       Text('¥${metrics.savings.toStringAsFixed(0)}',
                           style: const TextStyle(
-                              fontSize: 24, fontWeight: FontWeight.w800)),
+                              fontSize: 30,
+                              fontWeight: FontWeight.w300,
+                              color: paInk,
+                              fontFeatures: paTabularFigures)),
                       const SizedBox(height: 4),
                       Text('储蓄率 ${(metrics.savingsRate * 100).round()}%',
                           style: const TextStyle(
-                              color: Color(0xFF2F9F7D),
+                              color: paIncome,
                               fontSize: 11,
-                              fontWeight: FontWeight.w700)),
+                              fontWeight: FontWeight.w600)),
                     ]),
               ),
             ),
