@@ -141,14 +141,168 @@ def test_no_yesterday_records_is_distinct_from_zero_sum_records():
     assert "reference_unavailable" in codes(calculate(payload))
 
 
-def test_multiple_currencies_require_unambiguous_reference_evidence():
+def test_multiple_currencies_derive_from_preferred_currency_and_flag_partial():
+    # V1.0.8 hotfix: another currency with real reference-day spending no longer
+    # blocks the card; the card is derived from the preferred currency and the
+    # gap is disclosed with a notice instead of a refusal.
     payload = body()
     with_currency(payload, "USD")
     result = calculate(payload)
-    assert len(result["drafts"]) == 1 and "ambiguous_currency" in codes(result)
+    assert len(result["drafts"]) == 2
+    assert "partial_currency_reference" in codes(result)
+    assert "ambiguous_currency" not in codes(result)
+    inferred = [item for item in result["drafts"] if item["source"] == "inferred"][0]
+    assert inferred["currency"] == "CNY" and inferred["amount"] == "87.50"
+    # An explicitly declared reference currency still needs the currency word
+    # inside the reference span when the context has more than one currency.
     semantic = plan()
     semantic["reference"]["currency"] = "CNY"
     assert "ambiguous_currency" in codes(calculate(payload, semantic))
+
+
+def test_ghost_currency_without_spending_on_either_day_never_blocks():
+    # A ledger that once recorded a foreign expense keeps an entry with zero
+    # counts for both days. That must not disable reference inference.
+    payload = body()
+    entry = with_currency(payload, "HKD", "0", "0")
+    entry["reference_day"]["expense_count"] = 0
+    result = calculate(payload)
+    assert len(result["drafts"]) == 2
+    assert "partial_currency_reference" not in codes(result)
+    assert "ambiguous_currency" not in codes(result)
+    inferred = [item for item in result["drafts"] if item["source"] == "inferred"][0]
+    assert inferred["currency"] == "CNY" and inferred["amount"] == "87.50"
+
+
+def test_foreign_spending_today_does_not_block_the_preferred_reference():
+    text = "我今天消费跟昨天差不多，还花了50美元"
+    payload = body(text)
+    semantic = {
+        "items": [item(text, "还花了50美元", "50", currency="USD")],
+        "reference": reference(text, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(payload, semantic)
+    currencies = {draft["currency"]: draft for draft in result["drafts"]}
+    assert currencies["USD"]["source"] == "explicit"
+    assert currencies["CNY"]["source"] == "inferred"
+    assert currencies["CNY"]["amount"] == "132.50"
+    assert not codes(result)
+
+
+def test_preferred_currency_without_reference_spending_is_unavailable():
+    # No currency word in the utterance, so the items resolve to the preferred
+    # currency (USD) and the CNY baseline must not be borrowed for them.
+    text = "我今天消费跟昨天差不多，只有吃饭吃了40多"
+    payload = body(text)
+    payload["preferred_currency"] = "USD"
+    semantic = {
+        "items": [item(text, "吃饭吃了40多", amount=None, amount_kind="bounded_range",
+                       range={"lower": "40", "upper": "50", "upper_inclusive": False})],
+        "reference": reference(text), "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(payload, semantic)
+    assert "reference_unavailable" in codes(result)
+    assert not [draft for draft in result["drafts"] if draft["source"] == "inferred"]
+    assert result["drafts"][0]["currency"] == "USD"
+
+
+def test_foreign_spending_alone_does_not_borrow_its_baseline():
+    payload = body()
+    one_currency(payload, "0", count=0)
+    with_currency(payload, "USD", "500")
+    assert "reference_unavailable" in codes(calculate(payload))
+
+
+def test_currency_notices_explain_what_to_do():
+    payload = body()
+    with_currency(payload, "USD")
+    partial = calculate(payload)
+    message = [n["message"] for n in partial["notices"]
+               if n["code"] == "partial_currency_reference"]
+    assert message and "其他币种" in message[0]
+    semantic = plan()
+    semantic["reference"]["currency"] = "CNY"
+    ambiguous = calculate(payload, semantic)
+    message = [n["message"] for n in ambiguous["notices"]
+               if n["code"] == "ambiguous_currency"]
+    assert message and "手输" in message[0]
+
+
+V108_TEXT = "我今天消费和昨天差不多，只是多了杯咖啡9.9"
+
+
+def _v108_plan(text=V108_TEXT, currency=None):
+    return {
+        "items": [item(text, "多了杯咖啡9.9", amount="9.90", category_hint="餐饮",
+                       currency=currency)],
+        "reference": reference(text, "和昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+
+
+def _v108_hkd(reference_total="200.00", reference_count=1):
+    return {
+        "currency": "HKD",
+        "reference_day": {
+            "expense_total": reference_total, "expense_count": reference_count,
+            "category_totals": [] if reference_count == 0 else [
+                {"category_id": "food", "category_name": "餐饮",
+                 "expense_total": reference_total}],
+        },
+        "target_day": {"expense_total": "0.00", "expense_count": 0},
+    }
+
+
+def _v108_case(name):
+    """Inputs of `v108_diag/repro_currency.py`, one case per reported path."""
+    if name == "d":
+        text = "我今天消费和昨天差不多，还花了50港币"
+        return body(text), {
+            "items": [item(text, "还花了50港币", amount="50.00", category_hint="购物",
+                           currency="HKD")],
+            "reference": reference(text, "和昨天差不多"),
+            "has_more_than_8_items": False, "unresolved": [],
+        }
+    payload, semantic = body(V108_TEXT), _v108_plan()
+    if name in ("a", "e"):
+        payload["ledger_context"]["currencies"].append(_v108_hkd())
+    elif name == "a2":
+        payload["ledger_context"]["currencies"].append(_v108_hkd("0.00", 0))
+    elif name == "c":
+        payload["preferred_currency"] = "USD"
+    if name in ("e", "f"):
+        semantic["reference"]["currency"] = "CNY"
+    return payload, semantic
+
+
+V108_EXPECTED = {
+    # (a) another currency really spent yesterday: derive + disclose
+    "a": ({"partial_currency_reference"},
+          [("explicit", "9.90", "CNY"), ("inferred", "122.60", "CNY")]),
+    # (a2) historical foreign currency (zero counts both days): no notice
+    "a2": (set(), [("explicit", "9.90", "CNY"), ("inferred", "122.60", "CNY")]),
+    # (b) control: single currency
+    "b": (set(), [("explicit", "9.90", "CNY"), ("inferred", "122.60", "CNY")]),
+    # (c) preferred currency has no reference entry: never borrow CNY's baseline
+    "c": ({"reference_unavailable"}, [("explicit", "9.90", "USD")]),
+    # (d) a foreign draft today coexists with the CNY-calibre inferred card
+    "d": (set(), [("explicit", "50.00", "HKD"), ("inferred", "132.50", "CNY")]),
+    # (e) declared reference currency without the currency word: still ambiguous
+    "e": ({"ambiguous_currency"}, [("explicit", "9.90", "CNY")]),
+    # (f) control: single currency with a declared reference currency
+    "f": (set(), [("explicit", "9.90", "CNY"), ("inferred", "122.60", "CNY")]),
+}
+
+
+@pytest.mark.parametrize("name", sorted(V108_EXPECTED))
+def test_v108_repro_cases_match_the_hotfix_matrix(name):
+    payload, semantic = _v108_case(name)
+    result = calculate(payload, semantic)
+    expected_codes, expected_drafts = V108_EXPECTED[name]
+    assert codes(result) == expected_codes
+    assert [(draft["source"], draft["amount"], draft["currency"])
+            for draft in result["drafts"]] == expected_drafts
 
 
 def test_multicurrency_calculation_stays_within_explicit_currency_and_date():

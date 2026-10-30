@@ -14,7 +14,8 @@ _MESSAGES = {
     "approximate_amount": "有界金额区间已按中值约记，可修改。",
     "reference_unavailable": "未找到可用的昨日已记支出参照，请手输今日总额。",
     "unsupported_reference": "暂只支持今天与昨天的支出参照，其余参照未折算。",
-    "ambiguous_currency": "参照的币种口径不明确，未生成推算卡。",
+    "ambiguous_currency": "昨天存在多种币种的支出，未生成推算卡，请手输今日总额。",
+    "partial_currency_reference": "参照日还有其他币种的支出，本卡仅按默认币种口径推算。",
     "ambiguous_total": "合计金额无法安全拆分，请手动确认。",
     "transfer_not_supported": "转账请使用现有手动转账入口。",
     "missing_amount": "明确事项存在未确定金额，请补全后重新解析参照。",
@@ -170,21 +171,35 @@ def _response(payload, status, drafts, notices):
 
 
 def _inferred(payload, reference, drafts, categories) -> tuple[dict | None, str | None]:
+    """Derives the "rest of yesterday" card.
+
+    When the utterance does not name a currency the card is always derived from
+    the preferred currency only. Other currencies in the context never block it
+    any more: entries that actually carry spending on the reference or target
+    day add a `partial_currency_reference` notice instead, and entries with no
+    spending on either day ("ghost" currencies from historical transactions)
+    are ignored. The returned code may accompany a draft when it is an
+    informational notice rather than a failure.
+    """
     context = payload.ledger_context
     if not isinstance(context, ReadyContext) or not context.currencies:
         return None, "reference_unavailable"
     currency = reference.currency
+    info = None
     if currency is None:
-        if len(context.currencies) != 1:
-            return None, "ambiguous_currency"
-        currency = context.currencies[0].currency
-        if currency != payload.preferred_currency:
-            return None, "ambiguous_currency"
+        currency = payload.preferred_currency
+        preferred_entry = next(
+            (row for row in context.currencies if row.currency == currency), None)
+        # No spending in the user's own currency yesterday: deriving from a
+        # foreign baseline would silently compare across currencies.
+        if preferred_entry is None or preferred_entry.reference_day.expense_count == 0:
+            return None, "reference_unavailable"
         if any(
-            draft["currency"] != currency and draft["type"] == "expense"
-            and draft["date"] == context.target_date.isoformat() for draft in drafts
+            row.currency != currency
+            and (row.reference_day.expense_count or row.target_day.expense_count)
+            for row in context.currencies
         ):
-            return None, "ambiguous_currency"
+            info = "partial_currency_reference"
     elif len(context.currencies) > 1 and not currency_in_text(currency, reference.quote):
         return None, "ambiguous_currency"
     entry = next((row for row in context.currencies if row.currency == currency), None)
@@ -261,7 +276,7 @@ def _inferred(payload, reference, drafts, categories) -> tuple[dict | None, str 
             "formula": "reference_expense - target_recorded - explicit_candidates",
             "result": result, "context_fingerprint": context.fingerprint,
         },
-    }, None
+    }, info
 
 
 def calculate_drafts(payload: DraftsIn, plan: SemanticPlan, categories=(), accounts=()) -> dict:

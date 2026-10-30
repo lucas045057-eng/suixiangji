@@ -111,13 +111,29 @@ class SemanticReference(SourceQuote):
     currency: Currency | None = None
 
 
+_UNRESOLVED = Literal["unsupported_reference", "transfer", "ambiguous_currency", "ambiguous_total"]
+
+
+def _unresolved_code(value):
+    """Keeps the code when a provider attaches evidence to an unresolved entry.
+
+    Some plans arrive as `{"kind": "unsupported_reference", "quote": ...}`
+    instead of the bare enum string. The kind is still a white-listed code, so
+    the entry is reduced to it instead of failing the whole plan; any other
+    shape (unknown kind, non-scalar junk) stays invalid.
+    """
+    if isinstance(value, dict):
+        kind = value.get("kind")
+        if isinstance(kind, str) and kind in _UNRESOLVED.__args__:
+            return kind
+    return value
+
+
 class SemanticPlan(StrictModel):
     items: list[SemanticItem]
     reference: SemanticReference | None = None
     has_more_than_8_items: bool
-    unresolved: list[
-        Literal["unsupported_reference", "transfer", "ambiguous_currency", "ambiguous_total"]
-    ]
+    unresolved: list[Annotated[_UNRESOLVED, BeforeValidator(_unresolved_code)]]
 
 
 class BatchError(Exception):
