@@ -5,17 +5,17 @@ import 'package:wealthmate_flutter/core/config/app_config.dart';
 
 void main() {
   test('ships Flutter runtime version 1.0.7 build 11', () {
-    expect(kProductVersion, '1.0.7');
-    expect(kProductBuild, 11);
+    expect(kProductVersion, '1.0.8');
+    expect(kProductBuild, 12);
   });
 
   test('publishes matching package and Windows fallback metadata', () {
     final pubspec = File('pubspec.yaml').readAsStringSync();
     final runnerRc = File('windows/runner/Runner.rc').readAsStringSync();
 
-    expect(pubspec, contains('version: 1.0.7+11'));
-    expect(runnerRc, contains('#define VERSION_AS_NUMBER 1,0,7,11'));
-    expect(runnerRc, contains('#define VERSION_AS_STRING "1.0.7"'));
+    expect(pubspec, contains('version: 1.0.8+12'));
+    expect(runnerRc, contains('#define VERSION_AS_NUMBER 1,0,8,12'));
+    expect(runnerRc, contains('#define VERSION_AS_STRING "1.0.8"'));
   });
 
   test('retains the V1.0.1 Embedded Cronet delivery contract', () {
