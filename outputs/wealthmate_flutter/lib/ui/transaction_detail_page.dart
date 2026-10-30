@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models.dart';
 import '../state/finance_store.dart';
 import '../features/ledger/state/ledger_store.dart';
+import 'theme.dart';
 import 'widgets/transaction_form.dart';
 import 'widgets/ui_helpers.dart';
 
@@ -54,7 +55,6 @@ class TransactionDetailPage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(22, 10, 22, 32),
         children: [
           Card(
-            color: isIncome ? const Color(0xFFE6F6EF) : const Color(0xFFFFF1E4),
             child: Padding(
               padding: const EdgeInsets.all(22),
               child: Column(
@@ -62,16 +62,19 @@ class TransactionDetailPage extends StatelessWidget {
                 children: [
                   Text(isIncome ? '收入' : '支出',
                       style: TextStyle(
-                          color: isIncome
-                              ? const Color(0xFF2F9F7D)
-                              : const Color(0xFFC77C3E),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800)),
+                          color: isIncome ? paIncome : paInkSub,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2)),
                   const SizedBox(height: 8),
                   Text(
                       '${isIncome ? '+' : '-'}${value.amount.toStringAsFixed(value.amount.truncateToDouble() == value.amount ? 0 : 2)} $currency',
-                      style: const TextStyle(
-                          fontSize: 30, fontWeight: FontWeight.w800)),
+                      style: TextStyle(
+                          color: isIncome ? paIncome : paInk,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: -.6,
+                          fontFeatures: paTabularFigures)),
                   if (converted != null && currency != 'CNY') ...[
                     const SizedBox(height: 6),
                     Text('折合人民币 ${money(converted)}',
@@ -114,7 +117,7 @@ class TransactionDetailPage extends StatelessWidget {
             width: 104,
             child: Text(label,
                 style:
-                    const TextStyle(color: Color(0xFF87958F), fontSize: 11))),
+                    const TextStyle(color: paInkSub, fontSize: 11))),
         Expanded(
             child: Text(value,
                 textAlign: TextAlign.right,

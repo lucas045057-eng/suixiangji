@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/auth/state/auth_store.dart';
+import 'theme.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({required this.auth, required this.onLoggedIn, super.key});
@@ -116,7 +117,7 @@ class _RegisterPageState extends State<RegisterPage> {
                           padding: const EdgeInsets.only(top: 12),
                           child: Text(
                             _message!,
-                            style: const TextStyle(color: Color(0xFFB65B55)),
+                            style: const TextStyle(color: paWarn),
                           ),
                         ),
                       const SizedBox(height: 20),

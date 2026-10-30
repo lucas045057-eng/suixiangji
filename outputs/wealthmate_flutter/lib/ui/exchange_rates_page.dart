@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../features/assets/state/asset_store.dart';
+import 'theme.dart';
 
 class ExchangeRatesPage extends StatelessWidget {
   const ExchangeRatesPage({required this.store, super.key});
@@ -20,7 +21,7 @@ class ExchangeRatesPage extends StatelessWidget {
           children: [
             const Text('汇率采用低频核验；没有可靠数据时不会猜测人民币金额。',
                 style: TextStyle(
-                    color: Color(0xFF87958F), fontSize: 11, height: 1.5)),
+                    color: paInkSub, fontSize: 11, height: 1.5)),
             const SizedBox(height: 14),
             if (currencies.isEmpty)
               const Card(
@@ -28,15 +29,13 @@ class ExchangeRatesPage extends StatelessWidget {
                       padding: EdgeInsets.all(20),
                       child: Text('当前没有外币账户或账目。',
                           style: TextStyle(
-                              color: Color(0xFF87958F), fontSize: 12)))),
+                              color: paInkSub, fontSize: 12)))),
             for (final currency in currencies) _rateCard(context, currency),
             if (store.message != null) ...[
               const SizedBox(height: 12),
               Text(store.message!,
                   style: const TextStyle(
-                      color: Color(0xFF2F9F7D),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700))
+                      color: paInk, fontSize: 11, fontWeight: FontWeight.w600))
             ],
           ],
         ),
@@ -61,18 +60,17 @@ class ExchangeRatesPage extends StatelessWidget {
                         fontSize: 15, fontWeight: FontWeight.w800))),
             Text(snapshot == null ? '待补充汇率' : snapshot.rate.toStringAsFixed(4),
                 style: TextStyle(
-                    color: snapshot == null
-                        ? const Color(0xFFB65B55)
-                        : const Color(0xFF2F9F7D),
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800))
+                    color: snapshot == null ? paWarn : paInk,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: paTabularFigures))
           ]),
           const SizedBox(height: 6),
           Text(
               snapshot == null
                   ? '暂无来源和日期'
                   : '${snapshot.source} · ${snapshot.rateDate}',
-              style: const TextStyle(color: Color(0xFF87958F), fontSize: 10)),
+              style: const TextStyle(color: paInkFaint, fontSize: 10)),
           const SizedBox(height: 14),
           Row(children: [
             Expanded(

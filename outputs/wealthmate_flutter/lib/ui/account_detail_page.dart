@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../features/assets/state/asset_store.dart';
+import 'theme.dart';
 import 'widgets/ui_helpers.dart';
 
 class AccountDetailPage extends StatefulWidget {
@@ -65,25 +66,21 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
             padding: const EdgeInsets.fromLTRB(22, 10, 22, 32),
             children: [
               Card(
-                color: const Color(0xFF12201D),
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('当前计算余额',
-                          style: TextStyle(
-                              color: Color(0xFF91B1A4), fontSize: 11)),
+                      const Text('当前计算余额', style: paSectionLabel),
                       const SizedBox(height: 8),
-                      Text(money(balance),
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 5),
+                      FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(money(balance),
+                              style: paNumberLarge.copyWith(fontSize: 34))),
+                      const SizedBox(height: 6),
                       const Text('余额由初始余额和已确认账目计算，可通过校准修正。',
-                          style: TextStyle(
-                              color: Color(0xFFA9E3CB), fontSize: 10)),
+                          style: TextStyle(color: paInkFaint, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -149,8 +146,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   onPressed: _account.archivedAt == null ? _archive : _restore,
                   icon: const Icon(Icons.archive_outlined),
                   label: Text(_account.archivedAt == null ? '归档账户' : '恢复账户'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFFB65B55))),
+                  style: TextButton.styleFrom(foregroundColor: paWarn)),
             ],
           );
         },

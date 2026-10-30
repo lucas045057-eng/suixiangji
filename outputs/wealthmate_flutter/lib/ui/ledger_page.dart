@@ -5,6 +5,7 @@ import '../domain/transaction_query.dart';
 import '../state/finance_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import 'widgets/transaction_form.dart';
+import 'theme.dart';
 import 'widgets/ui_helpers.dart';
 import 'transaction_detail_page.dart';
 
@@ -69,7 +70,7 @@ class _LedgerPageState extends State<LedgerPage> {
                       SizedBox(height: 5),
                       Text('每一笔都值得被看见',
                           style:
-                              TextStyle(color: Color(0xFF87958F), fontSize: 11))
+                              TextStyle(color: paInkSub, fontSize: 11))
                     ])),
                 IconButton(
                     onPressed: () => _openNew(context),
@@ -129,7 +130,7 @@ class _LedgerPageState extends State<LedgerPage> {
               child: transactions.isEmpty
                   ? const Center(
                       child: Text('没有符合条件的账目',
-                          style: TextStyle(color: Color(0xFF87958F))))
+                          style: TextStyle(color: paInkSub)))
                   : ListView.separated(
                       padding: const EdgeInsets.fromLTRB(22, 4, 22, 100),
                       itemCount: transactions.length,
@@ -149,11 +150,9 @@ class _LedgerPageState extends State<LedgerPage> {
           builder: (_) => TransactionDetailPage(
               ledger: widget.ledger, transaction: transaction))),
       leading: CircleAvatar(
-          backgroundColor:
-              income ? const Color(0xFFE6F6EF) : const Color(0xFFFFF1E4),
+          backgroundColor: paBg,
           child: Icon(income ? Icons.south_west : Icons.restaurant_outlined,
-              color: income ? const Color(0xFF2F9F7D) : const Color(0xFFC77C3E),
-              size: 17)),
+              color: income ? paIncome : paInkSub, size: 16)),
       title: Text(
           transaction.note.isEmpty
               ? categoryName(widget.ledger.state, transaction.categoryId)
@@ -161,15 +160,15 @@ class _LedgerPageState extends State<LedgerPage> {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
       subtitle: Text(
           '${transaction.date} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
-          style: const TextStyle(fontSize: 10)),
+          style: const TextStyle(color: paInkFaint, fontSize: 10)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(
             '${income ? '+' : '-'}${money(transaction.amount)} ${transaction.currency}',
             style: TextStyle(
-                color:
-                    income ? const Color(0xFF2F9F7D) : const Color(0xFF1A2621),
-                fontWeight: FontWeight.w800,
-                fontSize: 12)),
+                color: income ? paIncome : paInk,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                fontFeatures: paTabularFigures)),
         PopupMenuButton<String>(
             onSelected: (value) async {
               if (value == 'edit') _openEdit(context, transaction);

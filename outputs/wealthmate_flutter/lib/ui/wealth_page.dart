@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models.dart';
 import '../features/assets/state/asset_store.dart';
 import '../features/ledger/state/ledger_store.dart';
+import 'theme.dart';
 import 'widgets/ui_helpers.dart';
 import 'account_detail_page.dart';
 import 'exchange_rates_page.dart';
@@ -36,11 +37,9 @@ class WealthPage extends StatelessWidget {
                                 fontSize: 27, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 5),
                         const Text('资产、负债和离目标还有多远',
-                            style: TextStyle(
-                                color: Color(0xFF87958F), fontSize: 11)),
+                            style: TextStyle(color: paInkSub, fontSize: 11)),
                         const SizedBox(height: 18),
                         Card(
-                            color: const Color(0xFF12201D),
                             child: Padding(
                                 padding: const EdgeInsets.all(23),
                                 child: Column(
@@ -48,23 +47,18 @@ class WealthPage extends StatelessWidget {
                                         CrossAxisAlignment.start,
                                     children: [
                                       const Text('当前净资产',
-                                          style: TextStyle(
-                                              color: Color(0xFF91B1A4),
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700)),
+                                          style: paSectionLabel),
                                       const SizedBox(height: 10),
-                                      Text(money(metrics.netWorth),
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 36,
-                                              fontWeight: FontWeight.w800)),
+                                      FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(money(metrics.netWorth),
+                                              style: paNumberLarge)),
                                       const SizedBox(height: 17),
                                       Row(children: [
-                                        _summary('资产', metrics.assetTotal,
-                                            const Color(0xFFA9E3CB)),
+                                        _summary('资产', metrics.assetTotal),
                                         const SizedBox(width: 32),
-                                        _summary('负债', metrics.liabilityTotal,
-                                            const Color(0xFFFAC6A5))
+                                        _summary('负债', metrics.liabilityTotal)
                                       ]),
                                     ]))),
                         const SizedBox(height: 16),
@@ -90,14 +84,16 @@ class WealthPage extends StatelessWidget {
         });
   }
 
-  Widget _summary(String label, double value, Color color) =>
+  Widget _summary(String label, double value) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: const TextStyle(color: Color(0xFF91B1A4), fontSize: 10)),
+        Text(label, style: const TextStyle(color: paInkSub, fontSize: 10)),
         const SizedBox(height: 5),
         Text(money(value),
-            style: TextStyle(
-                color: color, fontSize: 15, fontWeight: FontWeight.w800))
+            style: const TextStyle(
+                color: paInk,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                fontFeatures: paTabularFigures))
       ]);
 
   Widget _accountSection(
@@ -114,43 +110,57 @@ class WealthPage extends StatelessWidget {
               const SizedBox(height: 10),
               if (accounts.isEmpty)
                 const Text('暂无账户',
-                    style: TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                    style: TextStyle(color: paInkSub, fontSize: 11)),
               for (final item in accounts)
-                ListTile(
+                InkWell(
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute<void>(
                             builder: (_) => AccountDetailPage(
                                 store: store, account: item.account))),
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                        backgroundColor: positive
-                            ? const Color(0xFFE6F6EF)
-                            : const Color(0xFFFFF1E4),
-                        child: Icon(
-                            positive
-                                ? Icons.account_balance_wallet_outlined
-                                : Icons.credit_card_outlined,
-                            color: positive
-                                ? const Color(0xFF2F9F7D)
-                                : const Color(0xFFC77C3E),
-                            size: 17)),
-                    title: Text(item.account.name,
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                        '${item.account.currency} · 可编辑配置或校准余额',
-                        style: const TextStyle(fontSize: 10)),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(money(item.balance),
-                          style: TextStyle(
-                              color: positive
-                                  ? const Color(0xFF1A2621)
-                                  : const Color(0xFFB65B55),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800)),
-                      const SizedBox(width: 5),
-                      const Icon(Icons.chevron_right, size: 17)
-                    ])),
+                    child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        decoration: const BoxDecoration(
+                            border:
+                                Border(bottom: BorderSide(color: paHairline))),
+                        child: Row(children: [
+                          Icon(
+                              positive
+                                  ? Icons.account_balance_wallet_outlined
+                                  : Icons.credit_card_outlined,
+                              color: paInkFaint,
+                              size: 16),
+                          const SizedBox(width: 10),
+                          Expanded(
+                              child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                Text(item.account.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: paInk,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 2),
+                                Text(
+                                    '${item.account.currency} · 可编辑配置或校准余额',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: paInkFaint, fontSize: 10)),
+                              ])),
+                          const SizedBox(width: 8),
+                          Text(money(item.balance),
+                              style: const TextStyle(
+                                  color: paInk,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  fontFeatures: paTabularFigures)),
+                          const SizedBox(width: 2),
+                          const Icon(Icons.chevron_right,
+                              size: 16, color: paInkFaint)
+                        ]))),
             ])));
   }
 

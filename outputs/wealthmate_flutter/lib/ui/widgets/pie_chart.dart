@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 class PieChartItem {
   const PieChartItem(
       {required this.label, required this.value, required this.color});
@@ -63,7 +65,7 @@ class _PiePainter extends CustomPainter {
       start += sweep;
     }
     canvas.drawCircle(size.center(Offset.zero), size.shortestSide * .23,
-        Paint()..color = Colors.white);
+        Paint()..color = paSurface);
   }
 
   @override

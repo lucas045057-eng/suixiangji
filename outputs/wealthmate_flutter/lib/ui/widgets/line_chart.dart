@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
+
 class WealthLineChart extends StatelessWidget {
   const WealthLineChart({required this.values, super.key});
 
@@ -23,7 +25,7 @@ class _LineChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = const Color(0xFFEAF0EC)
+      ..color = paHairline
       ..strokeWidth = 1;
     for (var row = 1; row < 4; row += 1) {
       final y = size.height * row / 4;
@@ -42,8 +44,8 @@ class _LineChartPainter extends CustomPainter {
       points.add(Offset(x, y));
     }
     final line = Paint()
-      ..color = const Color(0xFF2F9F7D)
-      ..strokeWidth = 3
+      ..color = paInk
+      ..strokeWidth = 1.8
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
@@ -53,15 +55,15 @@ class _LineChartPainter extends CustomPainter {
     }
     canvas.drawPath(path, line);
     final dot = Paint()
-      ..color = Colors.white
+      ..color = paSurface
       ..style = PaintingStyle.fill;
     final ring = Paint()
-      ..color = const Color(0xFF2F9F7D)
-      ..strokeWidth = 2
+      ..color = paInk
+      ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
     for (final point in points) {
-      canvas.drawCircle(point, 4, dot);
-      canvas.drawCircle(point, 4, ring);
+      canvas.drawCircle(point, 3, dot);
+      canvas.drawCircle(point, 3, ring);
     }
   }
 

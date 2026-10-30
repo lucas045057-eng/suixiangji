@@ -8,6 +8,7 @@ import 'ledger_page.dart';
 import 'widgets/bar_chart.dart';
 import 'widgets/line_chart.dart';
 import 'widgets/pie_chart.dart';
+import 'theme.dart';
 import 'widgets/ui_helpers.dart';
 
 enum StatsPeriod { day, week, month, custom }
@@ -87,7 +88,7 @@ class _StatsPageState extends State<StatsPage> {
                 const SizedBox(height: 5),
                 Text('${_periodLabel(period)} · 看见钱流向哪里',
                     style: const TextStyle(
-                        color: Color(0xFF87958F), fontSize: 11)),
+                        color: paInkSub, fontSize: 11)),
                 const SizedBox(height: 16),
                 SegmentedButton<StatsPeriod>(segments: const [
                   ButtonSegment(value: StatsPeriod.day, label: Text('本日')),
@@ -153,20 +154,19 @@ class _StatsPageState extends State<StatsPage> {
                             Text(
                                 '${_formatDate(range.start)} - ${_formatDate(range.end)} · 按${period == StatsPeriod.day ? '小时' : '天'}统计',
                                 style: const TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 10)),
+                                    color: paInkSub, fontSize: 10)),
                             const SizedBox(height: 14),
                             if (points.every((point) => point.expense == 0))
                               const Text('当前时段还没有支出',
                                   style: TextStyle(
-                                      color: Color(0xFF87958F), fontSize: 12))
+                                      color: paInkSub, fontSize: 12))
                             else
                               WealthLineChart(
                                   values: points
                                       .map((point) => point.expense)
                                       .toList()),
                             if (points.any((point) => point.expense > 0))
-                              _legend(
-                                  '支出', totalExpense, const Color(0xFFC77C3E)),
+                              _legend('支出', totalExpense),
                           ]),
                     ),
                   ),
@@ -184,7 +184,7 @@ class _StatsPageState extends State<StatsPage> {
                             const SizedBox(height: 4),
                             const Text('金额越长，代表本时段占用越多',
                                 style: TextStyle(
-                                    color: Color(0xFF87958F), fontSize: 10)),
+                                    color: paInkSub, fontSize: 10)),
                             const SizedBox(height: 15),
                             SpendingBarChart(
                                 items: categories,
@@ -207,7 +207,7 @@ class _StatsPageState extends State<StatsPage> {
                             if (categories.isEmpty)
                               const Text('当前时段还没有可统计的支出',
                                   style: TextStyle(
-                                      color: Color(0xFF87958F), fontSize: 12))
+                                      color: paInkSub, fontSize: 12))
                             else
                               Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +242,7 @@ class _StatsPageState extends State<StatsPage> {
                   const SizedBox(height: 12),
                   Text('有 $pendingConversionCount 笔外币账目缺少可靠汇率，已从人民币统计中暂时排除。',
                       style: const TextStyle(
-                          color: Color(0xFFB65B55), fontSize: 11)),
+                          color: paWarn, fontSize: 11)),
                 ],
               ],
             ),
@@ -277,7 +277,7 @@ class _StatsPageState extends State<StatsPage> {
           padding: const EdgeInsets.all(15),
           child: Row(
             children: [
-              Icon(icon, size: 17, color: const Color(0xFF2F9F7D)),
+              Icon(icon, size: 17, color: paInkFaint),
               const SizedBox(width: 10),
               Expanded(
                   child: Column(
@@ -285,7 +285,7 @@ class _StatsPageState extends State<StatsPage> {
                       children: [
                     Text(label,
                         style: const TextStyle(
-                            color: Color(0xFF87958F), fontSize: 10)),
+                            color: paInkSub, fontSize: 10)),
                     const SizedBox(height: 5),
                     Text(value,
                         overflow: TextOverflow.ellipsis,
@@ -304,19 +304,16 @@ class _StatsPageState extends State<StatsPage> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Container(
-              width: 8,
-              height: 8,
-              decoration:
-                  BoxDecoration(color: item.color, shape: BoxShape.circle)),
-          const SizedBox(width: 6),
           Expanded(
               child: Text(item.label,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11))),
+                  style: const TextStyle(color: paInkSub, fontSize: 11))),
           Text('${(item.value / total * 100).round()}%',
-              style:
-                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+              style: const TextStyle(
+                  color: paInk,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: paTabularFigures)),
         ],
       ),
     );
@@ -326,15 +323,6 @@ class _StatsPageState extends State<StatsPage> {
     final entries = values.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final top = entries;
-    const colors = [
-      Color(0xFF2F9F7D),
-      Color(0xFF6A6CF4),
-      Color(0xFFE79E6C),
-      Color(0xFF5AA9A0),
-      Color(0xFFB87DC4),
-      Color(0xFFC18B27),
-      Color(0xFF9AA7A0)
-    ];
     return [
       for (var index = 0; index < top.length; index += 1)
         BarChartItem(
@@ -347,7 +335,7 @@ class _StatsPageState extends State<StatsPage> {
                         ? '其他'
                         : categoryName(widget.insights.state, top[index].key),
             value: top[index].value,
-            color: colors[index % colors.length])
+            color: Color.lerp(paInk, paHairline, (index * .16).clamp(0, .75))!)
     ];
   }
 
@@ -416,13 +404,7 @@ class _StatsPageState extends State<StatsPage> {
 
   String _formatDate(DateTime value) => '${value.month}/${value.day}';
 
-  Widget _legend(String label, double value, Color color) => Row(children: [
-        Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 6),
-        Text('$label ${money(value)}',
-            style: const TextStyle(color: Color(0xFF6C7C74), fontSize: 10))
-      ]);
+  Widget _legend(String label, double value) => Text('$label ${money(value)}',
+      style: const TextStyle(
+          color: paInkSub, fontSize: 10.5, fontFeatures: paTabularFigures));
 }

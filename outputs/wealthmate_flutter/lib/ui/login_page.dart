@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/auth/state/auth_store.dart';
 import 'register_page.dart';
 import 'password_recovery_page.dart';
+import 'theme.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -64,12 +65,12 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 6),
                       const Text('登录你的本地财富空间',
                           style: TextStyle(
-                              color: Color(0xFF87958F), fontSize: 11)),
+                              color: paInkSub, fontSize: 11)),
                       if (pendingCleanupMessage != null) ...[
                         const SizedBox(height: 14),
                         Text(pendingCleanupMessage!,
                             style: const TextStyle(
-                                color: Color(0xFFB65B55), fontSize: 11)),
+                                color: paWarn, fontSize: 11)),
                         if (widget.onRetryCleanup != null) ...[
                           const SizedBox(height: 8),
                           OutlinedButton(
@@ -90,7 +91,7 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(height: 12),
                         Text(message!,
                             style: const TextStyle(
-                                color: Color(0xFFB65B55), fontSize: 11)),
+                                color: paWarn, fontSize: 11)),
                       ],
                       const SizedBox(height: 20),
                       SizedBox(

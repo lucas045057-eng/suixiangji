@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../features/auth/state/auth_store.dart';
+import 'theme.dart';
 
 class PasswordRecoveryPage extends StatefulWidget {
   const PasswordRecoveryPage({required this.auth, super.key});
@@ -57,7 +58,7 @@ class _PasswordRecoveryPageState extends State<PasswordRecoveryPage> {
                 validator: (v) => v != password.text ? '两次密码不一致' : null),
             const SizedBox(height: 16),
             if (message != null)
-              Text(message!, style: const TextStyle(color: Color(0xFFB65B55))),
+              Text(message!, style: const TextStyle(color: paWarn)),
             FilledButton(
                 onPressed: busy ? null : _reset,
                 child: Text(busy ? '重置中…' : '重置密码')),

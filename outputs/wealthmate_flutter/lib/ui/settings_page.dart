@@ -12,6 +12,7 @@ import 'account_management_page.dart';
 import 'app_update_dialog.dart';
 import 'category_management_page.dart';
 import 'profile_settings_page.dart';
+import 'theme.dart';
 import 'currency_preferences_page.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -55,19 +56,19 @@ class SettingsPage extends StatelessWidget {
                           TextStyle(fontSize: 27, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 5),
                   const Text('数据在你手里，连接状态说清楚',
-                      style: TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                      style: TextStyle(color: paInkSub, fontSize: 11)),
                   const SizedBox(height: 18),
                   Card(
                       child: ListTile(
                           leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFF3B187),
+                              backgroundColor: paHairline,
                               child: Text(
                                   (store.profile?.displayName ?? '朋友')
                                       .characters
                                       .first,
                                   style: const TextStyle(
-                                      color: Color(0xFF56301E),
-                                      fontWeight: FontWeight.w800))),
+                                      color: paInk,
+                                      fontWeight: FontWeight.w600))),
                           title: Text(store.profile?.displayName ?? '朋友',
                               style:
                                   const TextStyle(fontWeight: FontWeight.w800)),
@@ -243,7 +244,7 @@ class SettingsPage extends StatelessWidget {
                     Card(
                         child: ListTile(
                             leading: const Icon(Icons.logout,
-                                color: Color(0xFFB65B55)),
+                                color: paWarn),
                             title: const Text('退出登录'),
                             subtitle: const Text('只清除登录凭据，不删除本地财务数据'),
                             onTap: () async {
@@ -255,7 +256,7 @@ class SettingsPage extends StatelessWidget {
                   const Text(
                       'API 基址与 JWT 通过集中构建配置注入：WEALTHMATE_API_BASE_URL / WEALTHMATE_API_TOKEN。当前缺少配置时，客户端只运行离线演示，不会伪造同步成功。',
                       style: TextStyle(
-                          color: Color(0xFF87958F), fontSize: 10, height: 1.5)),
+                          color: paInkSub, fontSize: 10, height: 1.5)),
                 ])));
   }
 

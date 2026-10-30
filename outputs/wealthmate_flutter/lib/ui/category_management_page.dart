@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models.dart';
 import '../state/finance_store.dart';
 import '../features/ledger/state/ledger_store.dart';
+import 'theme.dart';
 
 class CategoryManagementPage extends StatelessWidget {
   CategoryManagementPage({LedgerStore? ledger, FinanceStore? store, super.key})
@@ -28,7 +29,7 @@ class CategoryManagementPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(22, 10, 22, 30),
           children: [
             const Text('分类只会归档，不会删除历史账目。',
-                style: TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                style: TextStyle(color: paInkSub, fontSize: 11)),
             const SizedBox(height: 14),
             Card(
               child: Column(
@@ -36,17 +37,13 @@ class CategoryManagementPage extends StatelessWidget {
                   for (final category in ledger.state.categories)
                     ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: category.active
-                            ? const Color(0xFFE6F6EF)
-                            : const Color(0xFFF0F2F0),
+                        backgroundColor: paBg,
                         child: Icon(
                             category.type == TransactionType.income
                                 ? Icons.south_west_rounded
                                 : Icons.north_east_rounded,
                             size: 16,
-                            color: category.active
-                                ? const Color(0xFF2F9F7D)
-                                : const Color(0xFF87958F)),
+                            color: category.active ? paInk : paInkFaint),
                       ),
                       title: Text(category.name,
                           style: const TextStyle(fontWeight: FontWeight.w700)),

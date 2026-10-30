@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../features/auth/state/auth_store.dart';
 import '../state/finance_store.dart';
 import 'recovery_code_page.dart';
+import 'theme.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({required this.store, this.auth, super.key});
@@ -66,7 +67,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               const Text('这些信息会同步到使用同一账号的设备。',
-                  style: TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                  style: TextStyle(color: paInkSub, fontSize: 11)),
               const SizedBox(height: 18),
               TextField(
                   controller: displayNameController,
@@ -90,7 +91,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                   style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
               const SizedBox(height: 6),
               const Text('修改后其他手机需要重新登录。密码不会显示或保存到本机。',
-                  style: TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                  style: TextStyle(color: paInkSub, fontSize: 11)),
               const SizedBox(height: 18),
               TextField(
                   controller: currentPasswordController,
@@ -119,8 +120,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
               if (widget.store.message != null) ...[
                 const SizedBox(height: 14),
                 Text(widget.store.message!,
-                    style: const TextStyle(
-                        color: Color(0xFF4C4A9C), fontSize: 11)),
+                    style: const TextStyle(color: paAi, fontSize: 11)),
               ],
               if (!widget.store.isDemoMode) ...[
                 ListTile(
@@ -138,8 +138,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                     onPressed: _deleting ? null : _deleteAccount,
-                    icon: const Icon(Icons.delete_forever,
-                        color: Color(0xFFB65B55)),
+                    icon: const Icon(Icons.delete_forever, color: paWarn),
                     label: Text(_deleting ? '正在删除…' : '永久删除账号')),
               ],
             ]),
@@ -240,7 +239,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
               onChanged: (value) => setState(() => _confirmed = value ?? false),
               title: const Text('我确认永久删除当前账号及其数据')),
           if (_error != null)
-            Text(_error!, style: const TextStyle(color: Color(0xFFB65B55))),
+            Text(_error!, style: const TextStyle(color: paWarn)),
         ])),
         actions: [
           TextButton(

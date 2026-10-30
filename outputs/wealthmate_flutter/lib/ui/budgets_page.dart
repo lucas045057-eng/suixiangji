@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models.dart';
 import '../features/budget/state/budget_store.dart';
 import '../features/budget/domain/budget_rules.dart';
+import 'theme.dart';
 import 'widgets/progress_row.dart';
 import 'widgets/ui_helpers.dart';
 
@@ -42,8 +43,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
             children: [
               Text('${widget.store.state.currentMonth} · 给支出设一个轻量边界',
-                  style:
-                      const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+                  style: const TextStyle(color: paInkSub, fontSize: 11)),
               const SizedBox(height: 12),
               FilledButton.tonal(
                   onPressed: () => _openBudgetEditor(context, total: true),
@@ -86,8 +86,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
                     children: [
                       if (progress.isEmpty)
                         const Text('还没有预算记录',
-                            style: TextStyle(
-                                color: Color(0xFF87958F), fontSize: 12)),
+                            style: TextStyle(color: paInkSub, fontSize: 12)),
                       for (final item in progress)
                         ProgressRow(
                             progress: item,
@@ -101,7 +100,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
               const SizedBox(height: 14),
               const Text('预算可以随时调整月份、分类和额度。转账不会影响预算。',
                   style: TextStyle(
-                      color: Color(0xFF87958F), fontSize: 10, height: 1.5)),
+                      color: paInkSub, fontSize: 10, height: 1.5)),
               const Text('总预算统计全部支出，分类预算用于分配额度，两者不会相加。缺少汇率的账目暂不计入。',
                   style: TextStyle(fontSize: 10)),
             ],
@@ -114,11 +113,7 @@ class _BudgetsPageState extends State<BudgetsPage> {
   Widget _alertBanner(BudgetProgress progress, String category) {
     final over = progress.ratio > 1;
     final exhausted = progress.ratio == 1;
-    final color = over
-        ? const Color(0xFFB65B55)
-        : exhausted
-            ? const Color(0xFFC9783C)
-            : const Color(0xFFC18B27);
+    const color = paWarn;
     final title = over
         ? '注意消费：$category 已超出预算'
         : exhausted
