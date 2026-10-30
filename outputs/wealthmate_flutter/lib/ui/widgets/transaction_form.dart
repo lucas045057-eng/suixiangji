@@ -5,6 +5,7 @@ import '../../features/quick_entry/state/quick_entry_store.dart';
 import '../../domain/models.dart';
 import '../../features/ledger/domain/ledger_rules.dart';
 import '../../state/finance_store.dart';
+import '../theme.dart';
 import 'draft_confirmation_card.dart';
 import 'draft_editor.dart';
 import 'quick_entry_batch_panel.dart';
@@ -179,7 +180,7 @@ class _TransactionFormState extends State<TransactionForm> {
                   const TextStyle(fontSize: 21, fontWeight: FontWeight.w800)),
           const SizedBox(height: 5),
           Text(subtitle,
-              style: const TextStyle(color: Color(0xFF87958F), fontSize: 11)),
+              style: const TextStyle(color: paInkSub, fontSize: 11)),
         ])),
         IconButton(
             onPressed: () => Navigator.pop(context),
@@ -204,7 +205,7 @@ class _TransactionFormState extends State<TransactionForm> {
       ),
       const SizedBox(height: 8),
       const Text('支持金额、分类、支付账户和“昨天/今天”等时间描述。',
-          style: TextStyle(color: Color(0xFF87958F), fontSize: 10)),
+          style: TextStyle(color: paInkSub, fontSize: 10)),
       const SizedBox(height: 18),
       SizedBox(
           width: double.infinity,

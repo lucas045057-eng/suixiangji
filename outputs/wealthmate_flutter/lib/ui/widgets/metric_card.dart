@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../theme.dart';
 import 'ui_helpers.dart';
 
+/// 白卡 + 发丝线，数字用碳黑 w300 等宽；只有语义色（收入/正向）允许点缀。
 class MetricCard extends StatelessWidget {
   const MetricCard(
       {required this.label,
@@ -21,40 +23,37 @@ class MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text(label,
-                style: const TextStyle(
-                    color: Color(0xFF6C7C74),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700)),
-            CircleAvatar(
-                radius: 15,
-                backgroundColor: positive
-                    ? const Color(0xFFE6F6EF)
-                    : const Color(0xFFF0EEFF),
-                child: Icon(icon,
-                    size: 16,
-                    color: positive
-                        ? const Color(0xFF2F9F7D)
-                        : const Color(0xFF6A6CF4))),
+            Flexible(
+                child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: paSectionLabel.copyWith(letterSpacing: 2))),
+            Icon(icon, size: 15, color: paInkFaint),
           ]),
-          const SizedBox(height: 15),
-          Text(money(value),
-              style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -.5)),
+          const SizedBox(height: 14),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(money(value),
+                style: const TextStyle(
+                    color: paInk,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: -.5,
+                    fontFeatures: paTabularFigures)),
+          ),
           if (caption != null) ...[
             const SizedBox(height: 6),
             Text(caption!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                    color: positive
-                        ? const Color(0xFF2F9F7D)
-                        : const Color(0xFF87958F),
+                    color: positive ? paIncome : paInkFaint,
                     fontSize: 10,
-                    fontWeight: FontWeight.w600)),
+                    fontWeight: FontWeight.w500)),
           ],
         ]),
       ),

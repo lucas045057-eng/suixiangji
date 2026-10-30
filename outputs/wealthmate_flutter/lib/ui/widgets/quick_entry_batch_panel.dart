@@ -28,11 +28,10 @@ class QuickEntryBatchPanel extends StatefulWidget {
 }
 
 class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
-  static const _ink = Color(0xFF1A2621);
-  static const _muted = Color(0xFF6C7B74);
-  static const _purple = Color(0xFF4C4A9C);
-  static const _mint = Color(0xFF2F9F7D);
-  static const _amber = Color(0xFFC18B27);
+  static const _ink = paInk;
+  static const _muted = paInkSub;
+  static const _purple = paAi;
+  static const _amber = paWarn;
 
   final Set<String> _expanded = <String>{};
 
@@ -51,10 +50,6 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
           return _streamingCard(context);
         }
         return Card(
-          color: const Color(0xFFF7F6FF),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: const BorderSide(color: Color(0xFFE2E0FF))),
           child: Padding(
             padding: const EdgeInsets.all(15),
             child: Column(
@@ -168,8 +163,7 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
             style: TextStyle(
                 color: _purple, fontSize: 11, fontWeight: FontWeight.w800)),
         const SizedBox(width: 8),
-        _badge(batch.isCloud ? '云端 AI' : '本地规则',
-            const Color(0xFFEAE8FF), _purple),
+        _badge(batch.isCloud ? '云端 AI' : '本地规则', paBg, _muted),
         const Spacer(),
         if (store.isParsing)
           const SizedBox(
@@ -223,7 +217,7 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
       decoration: BoxDecoration(
-        color: candidate.isInferred ? Colors.transparent : Colors.white,
+        color: candidate.isInferred ? Colors.transparent : paSurface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -242,28 +236,29 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
                     _badge(
                       candidate.isInferred ? '推算' : '明确',
                       candidate.isInferred
-                          ? const Color(0xFFF0EEFF)
-                          : const Color(0xFFE6F6EF),
-                      candidate.isInferred ? _purple : _mint,
+                          ? _purple.withValues(alpha: .07)
+                          : paBg,
+                      candidate.isInferred ? _purple : _muted,
                     ),
                     if (draft.isApproximate && !candidate.isInferred) ...[
                       const SizedBox(width: 5),
-                      _badge('约', const Color(0xFFFFF3E8), _amber),
+                      _badge('约', _amber.withValues(alpha: .08), _amber),
                     ],
                     if (candidate.userEdited) ...[
                       const SizedBox(width: 5),
-                      _badge('已修改', const Color(0xFFF1F1F1), _muted),
+                      _badge('已修改', paBg, _muted),
                     ],
                     if (candidate.stale) ...[
                       const SizedBox(width: 5),
-                      _badge('账本已变化', const Color(0xFFFFEBE9), Color(0xFFB65B55)),
+                      _badge('账本已变化', _amber.withValues(alpha: .08), _amber),
                     ],
                     const SizedBox(width: 8),
                     Flexible(
                         child: Text(amountLabel,
                             style: const TextStyle(
                                 fontSize: 15,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: paTabularFigures,
                                 color: _ink))),
                   ]),
                   const SizedBox(height: 2),
@@ -316,7 +311,7 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
     if (!candidate.isInferred) return row;
     return CustomPaint(
       foregroundPainter: _DashedBorderPainter(
-          color: const Color(0xFFB9B5F0), radius: 12),
+          color: paAi.withValues(alpha: .45), radius: 12),
       child: row,
     );
   }
