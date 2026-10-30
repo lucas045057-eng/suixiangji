@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # occasionally emit a malformed plan at temperature 0; a second attempt
     # fixes it without changing the wire contract. Disable to fail fast.
     llm_parse_retry: bool = True
+    llm_thinking_disabled: bool = False
     frankfurter_base_url: str = "https://api.frankfurter.dev/v2"
     cors_origins: str = "*"
     app_latest_version: str = "1.0.5"
