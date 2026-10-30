@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import '../../../domain/finance_rules.dart';
@@ -6,6 +8,7 @@ import '../data/quick_entry_repository.dart';
 import '../domain/quick_entry_batch.dart';
 import '../domain/quick_entry_context.dart';
 import '../domain/quick_entry_rules.dart';
+import '../domain/quick_entry_stream.dart';
 import '../domain/quick_entry_wire.dart';
 
 class QuickEntryStore extends ChangeNotifier {
@@ -29,6 +32,9 @@ class QuickEntryStore extends ChangeNotifier {
   int _parseGeneration = 0;
   bool _cloudEnabled = true;
   bool _cloudPreferenceLoaded = false;
+  QuickEntryStreamPhase _streamPhase = QuickEntryStreamPhase.idle;
+  QuickEntryPreviewSession? _preview;
+  Completer<void>? _streamAbort;
 
   /// The local partition a batch belongs to. A rebind or user switch replaces
   /// this object, so identity comparison invalidates the session.
@@ -54,8 +60,17 @@ class QuickEntryStore extends ChangeNotifier {
   bool get batchSupported => repository.supportsAtomicBatch;
   int get parseGeneration => _parseGeneration;
 
+  /// Read-only preview of the generation in flight (§5.4). Never a candidate.
+  QuickEntryPreviewSession? get preview => _preview;
+  QuickEntryStreamPhase get streamPhase => _streamPhase;
+
+  /// §7: submitting/streaming/retrying/finalizing are read-only. Existing
+  /// mutators no-op on a null batch, but confirmation is guarded explicitly so
+  /// a direct call cannot slip through.
+  bool get isStreamLocked => _streamPhase.isLocked;
+
   bool get canConfirmBatch {
-    if (_confirming || _parsing) return false;
+    if (_confirming || _parsing || isStreamLocked) return false;
     final selected = selectedCandidates;
     return selected.isNotEmpty &&
         selected.every((item) => QuickEntryRules.isComplete(item.draft));
@@ -99,6 +114,9 @@ class QuickEntryStore extends ChangeNotifier {
     _cloudEnabled = enabled;
     _cloudPreferenceLoaded = true;
     _parseGeneration += 1;
+    _abortActiveStream();
+    _preview = null;
+    _streamPhase = QuickEntryStreamPhase.idle;
     _parsing = false;
     _batch = null;
     _draft = null;
@@ -135,6 +153,9 @@ class QuickEntryStore extends ChangeNotifier {
     }
     final generation = _parseGeneration + 1;
     _parseGeneration = generation;
+    _abortActiveStream();
+    _preview = null;
+    _streamPhase = QuickEntryStreamPhase.idle;
     _sessionLocal = repository.session.local;
     _sourceText = input;
     _draft = null;
@@ -150,6 +171,9 @@ class QuickEntryStore extends ChangeNotifier {
       _message = '当前本地存储不支持事务批量确认';
       notifyListeners();
       return false;
+    }
+    if (_cloudEnabled && repository.canStream) {
+      return _streamBatch(input, generation, now);
     }
     try {
       final batch = await repository.createBatch(input, _state,
@@ -183,7 +207,97 @@ class QuickEntryStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Runs one generation against `POST /agent/drafts/stream`. Every update is
+  /// generation-checked: a newer input, a cancel or an identity change makes
+  /// the late parts of this stream inert.
+  Future<bool> _streamBatch(String input, int generation, DateTime? now) async {
+    final abort = Completer<void>();
+    _streamAbort = abort;
+    _streamPhase = QuickEntryStreamPhase.submitting;
+    _preview = QuickEntryPreviewSession(requestId: '', sourceText: input);
+    notifyListeners();
+    try {
+      final messages = repository.streamBatch(
+        input,
+        _state,
+        now: now,
+        allowCloud: true,
+        abortTrigger: abort.future,
+      );
+      await for (final message in messages) {
+        if (generation != _parseGeneration) return false;
+        if (!identical(_sessionLocal, repository.session.local)) return false;
+        switch (message) {
+          case QuickEntryStreamPhaseMessage():
+            _streamPhase = message.phase;
+            notifyListeners();
+          case QuickEntryStreamPreviewMessage():
+            _preview = message.preview;
+            // An empty preview is the retry reset: keep "正在重新整理" until the
+            // first item of the new attempt arrives.
+            if (!message.preview.isEmpty) {
+              _streamPhase = QuickEntryStreamPhase.streaming;
+            }
+            notifyListeners();
+          case QuickEntryStreamBatchMessage():
+            // Terminal: the same frame replaces previews with the formal batch.
+            // The parsing flag is cleared here, not in `finally`: cancelling the
+            // subscription can settle a turn later, and a lingering spinner
+            // would contradict the cards already on screen.
+            _streamPhase = QuickEntryStreamPhase.ready;
+            _preview = null;
+            _parsing = false;
+            _adoptBatch(message.batch);
+            return true;
+        }
+      }
+      if (generation == _parseGeneration) {
+        _streamPhase = QuickEntryStreamPhase.failed;
+        _preview = null;
+        _message = '整理没有完成，请重试';
+        notifyListeners();
+      }
+      return false;
+    } on QuickEntryStreamCancelled {
+      return false;
+    } on Object {
+      if (generation == _parseGeneration) {
+        _streamPhase = QuickEntryStreamPhase.failed;
+        _preview = null;
+        _message = '解析失败，请稍后重试';
+        notifyListeners();
+      }
+      return false;
+    } finally {
+      if (identical(_streamAbort, abort)) _streamAbort = null;
+      if (generation == _parseGeneration) {
+        _parsing = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// §7: mark the generation cancelled first, then abort the request. The
+  /// shared HTTP client is never closed — other requests keep running.
+  void cancelStream() {
+    if (!isStreamLocked) return;
+    _parseGeneration += 1;
+    _streamPhase = QuickEntryStreamPhase.cancelled;
+    _preview = null;
+    _parsing = false;
+    _message = '已取消这次整理';
+    notifyListeners();
+    _abortActiveStream();
+  }
+
+  void _abortActiveStream() {
+    final abort = _streamAbort;
+    _streamAbort = null;
+    if (abort != null && !abort.isCompleted) abort.complete();
+  }
+
   void toggleCandidate(String id, bool selected) {
+    if (isStreamLocked) return;
     final batch = _batch;
     if (batch == null) return;
     var staleBlocked = false;
@@ -203,6 +317,7 @@ class QuickEntryStore extends ChangeNotifier {
   }
 
   void selectAllExplicit() {
+    if (isStreamLocked) return;
     final batch = _batch;
     if (batch == null) return;
     _batch = batch.copyWith(candidates: [
@@ -217,6 +332,7 @@ class QuickEntryStore extends ChangeNotifier {
   }
 
   void removeCandidate(String id) {
+    if (isStreamLocked) return;
     final batch = _batch;
     if (batch == null) return;
     _batch = batch.copyWith(candidates: [
@@ -228,6 +344,7 @@ class QuickEntryStore extends ChangeNotifier {
   }
 
   void updateCandidate(String id, AgentDraft draft) {
+    if (isStreamLocked) return;
     final batch = _batch;
     if (batch == null) return;
     final updated = <QuickEntryCandidate>[];
@@ -251,7 +368,7 @@ class QuickEntryStore extends ChangeNotifier {
 
   /// "手输今日总额" entry offered when the reference cannot be folded in.
   void addManualCandidate(double amount, {String? note}) {
-    if (amount <= 0) return;
+    if (isStreamLocked || amount <= 0) return;
     final now = DateTime.now();
     final batch = _batch ??
         QuickEntryBatch(
@@ -287,7 +404,7 @@ class QuickEntryStore extends ChangeNotifier {
 
   Future<bool> confirmBatch({DateTime? now}) async {
     final batch = _batch;
-    if (batch == null || _confirming) return false;
+    if (batch == null || _confirming || isStreamLocked) return false;
     if (!identical(_sessionLocal, repository.session.local)) {
       _invalidateSession('登录身份已切换，候选卡已作废');
       return false;
@@ -408,6 +525,9 @@ class QuickEntryStore extends ChangeNotifier {
 
   void clearDraft() {
     _parseGeneration += 1;
+    _abortActiveStream();
+    _preview = null;
+    _streamPhase = QuickEntryStreamPhase.idle;
     _draft = null;
     _sourceText = null;
     _message = null;
@@ -418,6 +538,9 @@ class QuickEntryStore extends ChangeNotifier {
 
   void _invalidateSession(String message) {
     _parseGeneration += 1;
+    _abortActiveStream();
+    _preview = null;
+    _streamPhase = QuickEntryStreamPhase.idle;
     _batch = null;
     _draft = null;
     _sourceText = null;

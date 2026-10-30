@@ -139,7 +139,27 @@ class ApiTransport {
     );
   }
 
-  ApiFailure _baseFailureForStatus(int statusCode, String path) {
+  /// Same mapping as [requestMap], for transports that read the body as a
+  /// stream (SSE). Keeps one source of truth for the error contract.
+  static ApiFailure failureForResponse(
+    int statusCode,
+    String path, {
+    String? body,
+    Map<String, String> headers = const <String, String>{},
+  }) {
+    final error = body == null ? null : _errorBody(body);
+    final base = _baseFailureForStatus(statusCode, path);
+    return ApiFailure(
+      base.kind,
+      base.message,
+      statusCode: statusCode,
+      code: error?.code,
+      detail: error?.detail,
+      retryAfter: _retryAfter(headers),
+    );
+  }
+
+  static ApiFailure _baseFailureForStatus(int statusCode, String path) {
     if (statusCode == 400 && path == '/auth/register') {
       return const ApiFailure(
           ApiFailureKind.validation, '邀请码无效、已过期或已用完，请联系邀请人');

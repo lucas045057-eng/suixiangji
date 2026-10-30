@@ -92,6 +92,7 @@ class DashboardPage extends StatelessWidget {
         final alerts = budget?.alerts ?? budgetAlerts;
         final progress = budget?.progress ?? metrics.budgetProgress;
         final currentDraft = quickEntry?.draft ?? draft;
+        final quickEntryStore = quickEntry;
         final recent = state.transactions
             .where((item) => item.deletedAt == null)
             .toList()
@@ -218,8 +219,10 @@ class DashboardPage extends StatelessWidget {
                 ]);
               }),
               const SizedBox(height: 16),
-              if (quickEntry?.batch != null) ...[
-                QuickEntryBatchPanel(store: quickEntry!, state: state),
+              if (quickEntryStore != null &&
+                  (quickEntryStore.batch != null ||
+                      quickEntryStore.isStreamLocked)) ...[
+                QuickEntryBatchPanel(store: quickEntryStore, state: state),
                 const SizedBox(height: 16),
               ] else if (currentDraft != null) ...[
                 DraftConfirmationCard(

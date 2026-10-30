@@ -101,11 +101,17 @@ class _TransactionFormState extends State<TransactionForm> {
     final quickEntry = widget.quickEntry;
     final activeDraft = quickEntry?.draft ?? financeStore?.draft;
     final batch = quickEntry?.batch;
-    if (widget.smartMode && quickEntry != null && batch != null) {
+    final streaming = quickEntry?.isStreamLocked ?? false;
+    if (widget.smartMode && quickEntry != null && (batch != null || streaming)) {
       return SingleChildScrollView(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _sheetHeader(context, '确认这次的账单', 'AI 只整理候选卡，勾选确认后才入账。'),
+        _sheetHeader(
+            context,
+            streaming ? '正在整理这次的账单' : '确认这次的账单',
+            streaming
+                ? 'AI 正按原话逐项整理，整理完成后才能勾选和确认。'
+                : 'AI 只整理候选卡，勾选确认后才入账。'),
         QuickEntryBatchPanel(
           store: quickEntry,
           state: widget.ledger.state,

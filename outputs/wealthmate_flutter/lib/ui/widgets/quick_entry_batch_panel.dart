@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../../domain/models.dart';
 import '../../features/quick_entry/domain/quick_entry_batch.dart';
 import '../../features/quick_entry/domain/quick_entry_rules.dart';
+import '../../features/quick_entry/domain/quick_entry_stream.dart';
 import '../../features/quick_entry/state/quick_entry_store.dart';
+import '../theme.dart';
 import 'draft_editor.dart';
 import 'ui_helpers.dart';
 
@@ -42,7 +44,12 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
       listenable: store,
       builder: (context, _) {
         final batch = store.batch;
-        if (batch == null) return const SizedBox.shrink();
+        if (batch == null) {
+          if (!store.isStreamLocked && store.preview == null) {
+            return const SizedBox.shrink();
+          }
+          return _streamingCard(context);
+        }
         return Card(
           color: const Color(0xFFF7F6FF),
           shape: RoundedRectangleBorder(
@@ -75,6 +82,81 @@ class _QuickEntryBatchPanelState extends State<QuickEntryBatchPanel> {
       },
     );
   }
+
+  /// 生成中：只读预览。没有骨架、没有闪光、没有百分比 —— 只呈现已经到达的
+  /// 完整事项；确认与编辑在 completed 通过整批校验前一律不出现。
+  Widget _streamingCard(BuildContext context) {
+    final preview = store.preview;
+    final phase = store.streamPhase;
+    final items = preview?.items ?? const <QuickEntryPreviewItem>[];
+    final reference = preview?.reference;
+    final quote = preview?.sourceText ?? store.sourceText ?? '';
+    final reducedMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                    color: paAi, shape: BoxShape.circle)),
+            const SizedBox(width: 7),
+            Flexible(
+              child: Text('随口记 · ${phase.label}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: paInk, fontSize: 12, fontWeight: FontWeight.w700)),
+            ),
+            const SizedBox(width: 8),
+            const Text('识别中 · 预览',
+                style: TextStyle(color: paInkFaint, fontSize: 10.5)),
+          ]),
+          if (quote.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text('「$quote」',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: paInkFaint,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic)),
+          ],
+          if (items.isEmpty && reference == null) ...[
+            const SizedBox(height: 12),
+            const Text('正在从原话里整理事项…',
+                style: TextStyle(color: paInkFaint, fontSize: 11)),
+          ] else ...[
+            const SizedBox(height: 4),
+            _StreamingPreviewList(
+              items: items,
+              reference: reference,
+              reducedMotion: reducedMotion,
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(children: [
+            const Expanded(
+              child: Text('整理完成后可确认',
+                  style: TextStyle(color: paInkFaint, fontSize: 10)),
+            ),
+            TextButton(
+              key: const Key('quick-entry-stream-cancel'),
+              onPressed: store.cancelStream,
+              style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 30),
+                  foregroundColor: paInkSub),
+              child: const Text('取消', style: TextStyle(fontSize: 11)),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  }
+
 
   Widget _header(BuildContext context, QuickEntryBatch batch) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -400,4 +482,245 @@ class _DashedBorderPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
       oldDelegate.color != color || oldDelegate.radius != radius;
+}
+
+/// 生成中的逐项预览列表。只在用户本来就在底部时跟随；否则累计“新增 N 项”，
+/// 不把视线反复拉走（v2 §9）。
+class _StreamingPreviewList extends StatefulWidget {
+  const _StreamingPreviewList({
+    required this.items,
+    required this.reference,
+    required this.reducedMotion,
+  });
+
+  final List<QuickEntryPreviewItem> items;
+  final QuickEntryPreviewReference? reference;
+  final bool reducedMotion;
+
+  @override
+  State<_StreamingPreviewList> createState() => _StreamingPreviewListState();
+}
+
+class _StreamingPreviewListState extends State<_StreamingPreviewList> {
+  final ScrollController _controller = ScrollController();
+  int _pending = 0;
+  int _seen = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _seen = widget.items.length;
+  }
+
+  @override
+  void didUpdateWidget(covariant _StreamingPreviewList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final added = widget.items.length - _seen;
+    _seen = widget.items.length;
+    if (added <= 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_isAtBottom) {
+        _scrollToBottom();
+      } else {
+        setState(() => _pending += added);
+      }
+    });
+  }
+
+  bool get _isAtBottom {
+    if (!_controller.hasClients) return true;
+    final position = _controller.position;
+    return position.maxScrollExtent - position.pixels <= 24;
+  }
+
+  void _scrollToBottom() {
+    if (!mounted) return;
+    setState(() => _pending = 0);
+    if (!_controller.hasClients) return;
+    final target = _controller.position.maxScrollExtent;
+    if (widget.reducedMotion) {
+      _controller.jumpTo(target);
+    } else {
+      _controller.animateTo(target,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[
+      for (final item in widget.items)
+        _FadeSlideIn(
+          key: ValueKey<String>(item.previewId),
+          animate: !widget.reducedMotion,
+          child: _PreviewRow(item: item),
+        ),
+      if (widget.reference != null)
+        _FadeSlideIn(
+          key: const ValueKey<String>('reference'),
+          animate: !widget.reducedMotion,
+          child: _PreviewReferenceRow(reference: widget.reference!),
+        ),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 320),
+        child: ListView(
+          shrinkWrap: true,
+          controller: _controller,
+          padding: EdgeInsets.zero,
+          children: rows,
+        ),
+      ),
+      if (_pending > 0)
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: GestureDetector(
+            onTap: _scrollToBottom,
+            child: Text('新增 $_pending 项 ↓',
+                style: const TextStyle(
+                    color: paAi, fontSize: 10.5, fontWeight: FontWeight.w600)),
+          ),
+        ),
+    ]);
+  }
+}
+
+class _PreviewRow extends StatelessWidget {
+  const _PreviewRow({required this.item});
+
+  final QuickEntryPreviewItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = [item.categoryHint ?? '分类待核对', item.date].join(' · ');
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: paHairline)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 22,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+              border: Border.all(color: paHairline), shape: BoxShape.circle),
+          child: Text('${item.ordinal + 1}',
+              style: const TextStyle(color: paInkSub, fontSize: 10.5)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.note.isEmpty ? '未命名事项' : item.note,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                    color: paInk, fontSize: 13.5, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(meta,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: paInkFaint, fontSize: 10.5)),
+            if (item.quote.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text('「${item.quote}」',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: paInkFaint,
+                    fontSize: 10,
+                    decoration: TextDecoration.underline,
+                    decorationStyle: TextDecorationStyle.dotted,
+                    decorationColor: paHairline,
+                  )),
+            ],
+          ]),
+        ),
+        const SizedBox(width: 10),
+        _amount(),
+      ]),
+    );
+  }
+
+  /// A missing amount stays missing: previews never invent a number.
+  Widget _amount() {
+    final value = item.amount;
+    if (value == null) {
+      return const Text('金额待补',
+          style: TextStyle(color: paInkFaint, fontSize: 12));
+    }
+    return Text(
+      '${item.isApproximate ? '≈' : ''}${item.isIncome ? '+' : '-'}${money(value)}',
+      style: const TextStyle(
+        color: paInk,
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        fontFeatures: paTabularFigures,
+      ),
+    );
+  }
+}
+
+class _PreviewReferenceRow extends StatelessWidget {
+  const _PreviewReferenceRow({required this.reference});
+
+  final QuickEntryPreviewReference reference;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: paHairline)),
+      ),
+      child: Row(children: [
+        const Icon(Icons.history, size: 15, color: paInkFaint),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('检测到昨日参照，等待核算',
+                style: TextStyle(color: paInkSub, fontSize: 11.5)),
+            const SizedBox(height: 2),
+            Text('「${reference.quote}」',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: paInkFaint, fontSize: 10)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// 240ms 渐显 + 轻微上移；系统减弱动效时直接切换。
+class _FadeSlideIn extends StatelessWidget {
+  const _FadeSlideIn({required this.child, required this.animate, super.key});
+
+  final Widget child;
+  final bool animate;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!animate) return child;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+            offset: Offset(0, 6 * (1 - value)), child: child),
+      ),
+      child: child,
+    );
+  }
 }
