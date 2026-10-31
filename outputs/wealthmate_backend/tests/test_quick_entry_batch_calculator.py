@@ -8,7 +8,7 @@ from app.quick_entry.batch_schemas import BatchError, DraftsIn, SemanticPlan
 
 from batch_cases import (
     ACCOUNTS, CATEGORIES, TEXT, body, item, one_currency, plan, reference,
-    simple_plan, with_currency,
+    aggregate, simple_plan, with_currency,
 )
 
 
@@ -24,7 +24,7 @@ def codes(result):
 
 
 def test_worked_example_preserves_range_formula_fingerprint_and_evidence():
-    result = calculate()
+    result = calculate(aggregate(body()))
     assert result["status"] == "ok" and result["engine"] == "llm"
     explicit, inferred = result["drafts"]
     assert explicit["amount"] == "45.00" and explicit["selected_by_default"] is True
@@ -145,7 +145,7 @@ def test_multiple_currencies_derive_from_preferred_currency_and_flag_partial():
     # V1.0.8 hotfix: another currency with real reference-day spending no longer
     # blocks the card; the card is derived from the preferred currency and the
     # gap is disclosed with a notice instead of a refusal.
-    payload = body()
+    payload = aggregate(body())
     with_currency(payload, "USD")
     result = calculate(payload)
     assert len(result["drafts"]) == 2
@@ -163,7 +163,7 @@ def test_multiple_currencies_derive_from_preferred_currency_and_flag_partial():
 def test_ghost_currency_without_spending_on_either_day_never_blocks():
     # A ledger that once recorded a foreign expense keeps an entry with zero
     # counts for both days. That must not disable reference inference.
-    payload = body()
+    payload = aggregate(body())
     entry = with_currency(payload, "HKD", "0", "0")
     entry["reference_day"]["expense_count"] = 0
     result = calculate(payload)
@@ -176,7 +176,7 @@ def test_ghost_currency_without_spending_on_either_day_never_blocks():
 
 def test_foreign_spending_today_does_not_block_the_preferred_reference():
     text = "我今天消费跟昨天差不多，还花了50美元"
-    payload = body(text)
+    payload = aggregate(body(text))
     semantic = {
         "items": [item(text, "还花了50美元", "50", currency="USD")],
         "reference": reference(text, "跟昨天差不多"),
@@ -258,13 +258,13 @@ def _v108_case(name):
     """Inputs of `v108_diag/repro_currency.py`, one case per reported path."""
     if name == "d":
         text = "我今天消费和昨天差不多，还花了50港币"
-        return body(text), {
+        return aggregate(body(text)), {
             "items": [item(text, "还花了50港币", amount="50.00", category_hint="购物",
                            currency="HKD")],
             "reference": reference(text, "和昨天差不多"),
             "has_more_than_8_items": False, "unresolved": [],
         }
-    payload, semantic = body(V108_TEXT), _v108_plan()
+    payload, semantic = aggregate(body(V108_TEXT)), _v108_plan()
     if name in ("a", "e"):
         payload["ledger_context"]["currencies"].append(_v108_hkd())
     elif name == "a2":
@@ -501,3 +501,203 @@ def test_known_foreign_currency_amounts_remain_in_original_currency(quote, curre
     result = calculate(body(quote), simple_plan(quote, currency=currency))
     assert result["drafts"][0]["amount"] == "20.00"
     assert result["drafts"][0]["currency"] == currency
+
+# --- §14 per-category inferred cards (design v107 §14, 2026-10-31) ---
+
+ALL_CATEGORIES = CATEGORIES + [
+    {"id": "shopping", "name": "购物", "kind": "expense"},
+]
+TRUNC_CATEGORIES = ALL_CATEGORIES + [
+    {"id": "drugs", "name": "药品", "kind": "expense"},
+    {"id": "fun", "name": "娱乐", "kind": "expense"},
+]
+TEXT14 = "我今天消费跟昨天差不多，早饭30元"
+MULTI_TEXT = (
+    "今天消费跟昨天差不多，早餐10元，午饭10元，晚饭10元，外卖10元，咖啡10元，"
+    "打车10元，地铁10元，公交10元"
+)
+
+
+def infer_only():
+    return {
+        "items": [], "reference": reference(), "has_more_than_8_items": False,
+        "unresolved": [],
+    }
+
+
+def expanded_context(rows, recorded="0.00", text=TEXT):
+    """body() whose CNY reference day carries exactly `rows` = (id, name, total)."""
+    payload = body(text)
+    total = sum((Decimal(amount) for _, _, amount in rows), Decimal("0"))
+    entry = one_currency(payload, format(total, ".2f"), recorded=recorded, count=1)
+    entry["reference_day"]["category_totals"] = [
+        {"category_id": cid, "category_name": name, "expense_total": amount}
+        for cid, name, amount in rows
+    ]
+    return payload
+
+
+def test_section14_expands_into_one_descending_card_per_yesterday_category():
+    result = calculate(body(), infer_only(), categories=ALL_CATEGORIES)
+    assert result["status"] == "ok" and not codes(result)
+    drafts = result["drafts"]
+    assert [(draft["source"], draft["amount"], draft["category_id"],
+             draft["category_hint"], draft["note"]) for draft in drafts] == [
+        ("inferred", "69.50", "shopping", "购物", "购物（按昨日推算）"),
+        ("inferred", "45.00", "food", "餐饮", "餐饮（按昨日推算）"),
+        ("inferred", "18.00", "transport", "交通", "交通（按昨日推算）"),
+    ]
+    assert [draft["client_draft_id"] for draft in drafts] == ["d1", "d2", "d3"]
+    for draft in drafts:
+        assert draft["type"] == "expense" and draft["currency"] == "CNY"
+        assert draft["is_approximate"] is True and draft["confidence"] == 0.60
+        assert draft["selected_by_default"] is False and draft["date"] == "2026-10-28"
+        assert draft["amount_range"] is None and draft["account_id"] is None
+        assert draft["missing_facts"] == ["请选择支付账户"]
+        derivation = draft["derivation"]
+        assert derivation["kind"] == "previous_day_expense_residual"
+        assert derivation["formula"] == (
+            "reference_expense - target_recorded - explicit_candidates")
+        assert [row["key"] for row in derivation["operands"]] == [
+            "reference_expense", "target_recorded", "explicit_candidates"]
+        assert [row["amount"] for row in derivation["operands"]] == [
+            draft["amount"], "0.00", "0.00"]
+        assert derivation["result"] == draft["amount"]
+        assert derivation["context_fingerprint"] == (
+            body()["ledger_context"]["fingerprint"])
+        source, context_evidence = draft["evidence"]
+        assert source["kind"] == "source_text"
+        assert context_evidence == {
+            "kind": "ledger_context",
+            "context_path": (
+                "currencies.CNY.reference_day.category_totals."
+                + draft["category_id"]),
+            "reference_date": "2026-10-27",
+        }
+
+
+def test_section14_deducts_explicit_cards_only_from_their_own_category():
+    semantic = {
+        "items": [item(TEXT14, "早饭30元", "30", category_hint="餐饮")],
+        "reference": reference(TEXT14, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(body(TEXT14), semantic, categories=ALL_CATEGORIES)
+    assert [(draft["source"], draft["amount"], draft["category_id"])
+            for draft in result["drafts"]] == [
+        ("explicit", "30.00", "food"),
+        ("inferred", "69.50", "shopping"),
+        ("inferred", "18.00", "transport"),
+        ("inferred", "15.00", "food"),
+    ]
+    assert [draft["client_draft_id"] for draft in result["drafts"]] == [
+        "d1", "d2", "d3", "d4"]
+    by_category = {draft["category_id"]: draft for draft in result["drafts"]
+                   if draft["source"] == "inferred"}
+    assert [row["amount"] for row in by_category["food"]["derivation"]["operands"]] == [
+        "45.00", "0.00", "30.00"]
+    assert [row["amount"]
+            for row in by_category["transport"]["derivation"]["operands"]] == [
+        "18.00", "0.00", "0.00"]
+
+
+def test_section14_nonzero_recorded_today_keeps_the_aggregate_card():
+    payload = body()
+    entry = payload["ledger_context"]["currencies"][0]
+    entry["target_day"].update(expense_total="50.00", expense_count=1)
+    result = calculate(payload, infer_only(), categories=ALL_CATEGORIES)
+    assert len(result["drafts"]) == 1 and not codes(result)
+    card = result["drafts"][0]
+    assert card["source"] == "inferred" and card["amount"] == "82.50"
+    assert card["category_id"] is None and card["note"] == "其他支出（按昨日推算）"
+    assert card["evidence"][1]["context_path"] == "currencies.CNY.reference_day"
+    assert [row["amount"] for row in card["derivation"]["operands"]] == [
+        "132.50", "50.00", "0.00"]
+
+
+def test_section14_unattributed_explicit_card_keeps_the_aggregate_card():
+    semantic = {
+        "items": [item(TEXT14, "早饭30元", "30", category_hint="神秘小店")],
+        "reference": reference(TEXT14, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(body(TEXT14), semantic, categories=ALL_CATEGORIES)
+    inferred = [draft for draft in result["drafts"] if draft["source"] == "inferred"]
+    assert len(inferred) == 1
+    assert inferred[0]["amount"] == "102.50" and inferred[0]["category_id"] is None
+    assert inferred[0]["note"] == "其他支出（按昨日推算）"
+
+
+def test_section14_explicit_card_without_amount_blocks_inference():
+    semantic = {
+        "items": [item(TEXT14, "早饭30元", amount=None, amount_kind="missing")],
+        "reference": reference(TEXT14, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(body(TEXT14), semantic, categories=ALL_CATEGORIES)
+    assert codes(result) == {"missing_amount"}
+    assert not [draft for draft in result["drafts"] if draft["source"] == "inferred"]
+
+
+def test_section14_unresolvable_category_rows_are_skipped_silently():
+    # CATEGORIES has no 购物 row: that category is dropped without a notice.
+    result = calculate(body(), infer_only())
+    assert [(draft["amount"], draft["category_id"])
+            for draft in result["drafts"]] == [("45.00", "food"), ("18.00", "transport")]
+    assert not codes(result)
+
+
+def test_section14_categories_fully_covered_by_explicit_cards_are_skipped():
+    result = calculate(body(), plan(), categories=ALL_CATEGORIES)
+    assert [(draft["source"], draft["amount"], draft["category_id"])
+            for draft in result["drafts"]] == [
+        ("explicit", "45.00", "food"),
+        ("inferred", "69.50", "shopping"),
+        ("inferred", "18.00", "transport"),
+    ]
+    assert codes(result) == {"approximate_amount"}
+
+
+def test_section14_card_cap_truncates_and_reports_once():
+    rows = [
+        ("shopping", "购物", "80.00"), ("transport", "交通", "18.00"),
+        ("drugs", "药品", "12.00"), ("fun", "娱乐", "11.00"),
+    ]
+    semantic = {
+        "items": [item(MULTI_TEXT, quote, "10") for quote in
+                  ("早餐10元", "午饭10元", "晚饭10元", "外卖10元", "咖啡10元")],
+        "reference": reference(MULTI_TEXT, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(expanded_context(rows, text=MULTI_TEXT), semantic,
+                       categories=TRUNC_CATEGORIES)
+    assert len(result["drafts"]) == 8
+    assert [draft["amount"] for draft in result["drafts"]
+            if draft["source"] == "inferred"] == ["80.00", "18.00", "12.00"]
+    truncated = [row for row in result["notices"]
+                 if row["code"] == "inferred_categories_truncated"]
+    assert len(truncated) == 1
+    assert truncated[0]["message"] == "昨日分类较多，仅展示金额较大的分类卡，其余未生成。"
+
+
+def test_section14_eight_explicit_cards_keep_the_limit_notice():
+    semantic = {
+        "items": [item(MULTI_TEXT, quote, "10") for quote in
+                  ("早餐10元", "午饭10元", "晚饭10元", "外卖10元", "咖啡10元",
+                   "打车10元", "地铁10元", "公交10元")],
+        "reference": reference(MULTI_TEXT, "跟昨天差不多"),
+        "has_more_than_8_items": False, "unresolved": [],
+    }
+    result = calculate(expanded_context([("shopping", "购物", "80.00")], text=MULTI_TEXT),
+                       semantic, categories=ALL_CATEGORIES)
+    assert len(result["drafts"]) == 8
+    assert codes(result) == {"inferred_limit_reached"}
+    assert not [draft for draft in result["drafts"] if draft["source"] == "inferred"]
+
+
+def test_section14_expansion_keeps_the_partial_currency_notice():
+    payload = body()
+    with_currency(payload, "USD")
+    result = calculate(payload, infer_only(), categories=ALL_CATEGORIES)
+    assert [draft["amount"] for draft in result["drafts"]] == ["69.50", "45.00", "18.00"]
+    assert codes(result) == {"partial_currency_reference"}

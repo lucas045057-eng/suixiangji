@@ -23,6 +23,7 @@ _MESSAGES = {
     "non_positive_residual": "本次明确金额或今日已记金额已不低于昨日参照，请核对。",
     "residual_below_threshold": "其余差额较小，未生成推算卡。",
     "inferred_limit_reached": "已有8张明确卡，参照因上限未折算。",
+    "inferred_categories_truncated": "昨日分类较多，仅展示金额较大的分类卡，其余未生成。",
     "needs_split": "内容超过8个独立事项，请分次说。",
     "no_actionable_items": "没有可安全生成的事项，请手动输入。",
 }
@@ -170,94 +171,24 @@ def _response(payload, status, drafts, notices):
     }
 
 
-def _inferred(payload, reference, drafts, categories) -> tuple[dict | None, str | None]:
-    """Derives the "rest of yesterday" card.
-
-    When the utterance does not name a currency the card is always derived from
-    the preferred currency only. Other currencies in the context never block it
-    any more: entries that actually carry spending on the reference or target
-    day add a `partial_currency_reference` notice instead, and entries with no
-    spending on either day ("ghost" currencies from historical transactions)
-    are ignored. The returned code may accompany a draft when it is an
-    informational notice rather than a failure.
-    """
+def _inferred_card(
+    payload, reference, currency, number, residual, category_id, category_hint,
+    note, baseline, recorded, explicit, explicit_approximate, context_path,
+) -> dict:
+    """Builds one inferred card; shared by the aggregate and per-category paths."""
     context = payload.ledger_context
-    if not isinstance(context, ReadyContext) or not context.currencies:
-        return None, "reference_unavailable"
-    currency = reference.currency
-    info = None
-    if currency is None:
-        currency = payload.preferred_currency
-        preferred_entry = next(
-            (row for row in context.currencies if row.currency == currency), None)
-        # No spending in the user's own currency yesterday: deriving from a
-        # foreign baseline would silently compare across currencies.
-        if preferred_entry is None or preferred_entry.reference_day.expense_count == 0:
-            return None, "reference_unavailable"
-        if any(
-            row.currency != currency
-            and (row.reference_day.expense_count or row.target_day.expense_count)
-            for row in context.currencies
-        ):
-            info = "partial_currency_reference"
-    elif len(context.currencies) > 1 and not currency_in_text(currency, reference.quote):
-        return None, "ambiguous_currency"
-    entry = next((row for row in context.currencies if row.currency == currency), None)
-    if entry is None or entry.reference_day.expense_count == 0:
-        return None, "reference_unavailable"
-    category_id = category_hint = None
-    category_scope = reference.kind == "previous_day_category_expense"
-    if category_scope:
-        category_hint = reference.category_hint
-        category_id = _category(category_hint, "expense", categories)
-        if category_id is None:
-            return None, "reference_unavailable"
-        category_total = next(
-            (row for row in entry.reference_day.category_totals if row.category_id == category_id),
-            None,
-        )
-        if category_total is None:
-            return None, "reference_unavailable"
-        baseline = money(Decimal(category_total.expense_total))
-        # v1 has only today's total, so a nonzero category operand is unknowable.
-        if Decimal(entry.target_day.expense_total) != 0:
-            return None, "reference_unavailable"
-        recorded = Decimal("0.00")
-    else:
-        baseline = money(Decimal(entry.reference_day.expense_total))
-        recorded = money(Decimal(entry.target_day.expense_total))
-    if baseline <= 0:
-        return None, "reference_unavailable"
-    eligible = [
-        draft for draft in drafts if draft["type"] == "expense"
-        and draft["currency"] == currency and draft["date"] == context.target_date.isoformat()
-    ]
-    if any(draft["amount"] is None for draft in eligible):
-        return None, "missing_amount"
-    if category_scope:
-        if any(draft["category_id"] is None for draft in eligible):
-            return None, "ambiguous_category"
-        eligible = [draft for draft in eligible if draft["category_id"] == category_id]
-    explicit = sum((Decimal(draft["amount"]) for draft in eligible), Decimal("0.00"))
-    residual = baseline - recorded - explicit
-    if residual <= 0:
-        return None, "non_positive_residual"
-    if residual < Decimal("10") or residual < baseline * Decimal("0.10"):
-        return None, "residual_below_threshold"
-    if len(drafts) == 8:
-        return None, "inferred_limit_reached"
     result = format(money(residual), ".2f")
     context_evidence = {
         "kind": "ledger_context",
-        "context_path": f"currencies.{currency}.reference_day",
+        "context_path": context_path,
         "reference_date": context.reference_date.isoformat(),
     }
     return {
-        "client_draft_id": f"d{len(drafts) + 1}", "source": "inferred", "type": "expense",
+        "client_draft_id": f"d{number}", "source": "inferred", "type": "expense",
         "amount": result, "amount_range": None, "is_approximate": True,
         "currency": currency, "category_hint": category_hint, "category_id": category_id,
         "account_hint": None, "account_id": None,
-        "date": context.target_date.isoformat(), "note": "其他支出（按昨日推算）",
+        "date": context.target_date.isoformat(), "note": note,
         "confidence": 0.60, "missing_facts": _missing(result, category_id, None),
         "selected_by_default": False, "evidence": [_source(reference), context_evidence],
         "derivation": {
@@ -271,12 +202,161 @@ def _inferred(payload, reference, drafts, categories) -> tuple[dict | None, str 
                  "amount": format(recorded, ".2f"), "is_approximate": False},
                 {"key": "explicit_candidates", "label": "本次明确卡合计",
                  "amount": format(explicit, ".2f"),
-                 "is_approximate": any(draft["is_approximate"] for draft in eligible)},
+                 "is_approximate": explicit_approximate},
             ],
             "formula": "reference_expense - target_recorded - explicit_candidates",
             "result": result, "context_fingerprint": context.fingerprint,
         },
-    }, info
+    }
+
+
+def _expandable(entry, eligible) -> bool:
+    """Whether the aggregate reference may expand into one card per category (§14).
+
+    The v1 context package only carries today's total, so a nonzero recorded
+    amount makes per-category attribution unknowable; cards with unknown amount
+    or unknown category cannot be deducted from a single category either.
+    """
+    return (
+        Decimal(entry.target_day.expense_total) == 0
+        and all(draft["amount"] is not None for draft in eligible)
+        and all(draft["category_id"] is not None for draft in eligible)
+    )
+
+
+def _category_cards(payload, reference, entry, eligible, categories, currency, used):
+    """One inferred card per resolvable reference-day category, largest residual first."""
+    active = {row["id"]: row["name"] for row in categories if row["kind"] == "expense"}
+    rows = []
+    for total in entry.reference_day.category_totals:
+        name = active.get(total.category_id)
+        if name is None:
+            continue
+        baseline = money(Decimal(total.expense_total))
+        if baseline <= 0:
+            continue
+        related = [draft for draft in eligible if draft["category_id"] == total.category_id]
+        explicit = sum((Decimal(draft["amount"]) for draft in related), Decimal("0.00"))
+        residual = baseline - explicit
+        if residual <= 0:
+            continue
+        rows.append((residual, name, total.category_id, baseline, explicit,
+                     any(draft["is_approximate"] for draft in related)))
+    rows.sort(key=lambda row: (-row[0], row[1]))
+    cards, truncated = [], False
+    for residual, name, category_id, baseline, explicit, approximate in rows:
+        if used + len(cards) >= 8:
+            truncated = True
+            break
+        cards.append(_inferred_card(
+            payload, reference, currency, used + len(cards) + 1, residual,
+            category_id, name, f"{name}（按昨日推算）", baseline, Decimal("0.00"),
+            explicit, approximate,
+            f"currencies.{currency}.reference_day.category_totals.{category_id}",
+        ))
+    return cards, truncated
+
+
+def _inferred(payload, reference, drafts, categories) -> tuple[list[dict], list[str]]:
+    """Derives the "rest of yesterday" card(s).
+
+    When the utterance does not name a currency the card is derived from the
+    preferred currency only. Other currencies in the context never block it
+    any more: entries that actually carry spending on the reference or target
+    day add a `partial_currency_reference` notice instead, and entries with no
+    spending on either day ("ghost" currencies from historical transactions)
+    are ignored.
+
+    With nothing recorded today and fully attributed explicit cards, the
+    aggregate reference expands into one card per reference-day category
+    (design v107 §14). Otherwise the single aggregate card is kept with its
+    thresholds unchanged. Returned codes are notices; they may accompany
+    drafts because they are informational rather than failures.
+    """
+    context = payload.ledger_context
+    if not isinstance(context, ReadyContext) or not context.currencies:
+        return [], ["reference_unavailable"]
+    currency = reference.currency
+    info = None
+    if currency is None:
+        currency = payload.preferred_currency
+        preferred_entry = next(
+            (row for row in context.currencies if row.currency == currency), None)
+        # No spending in the user's own currency yesterday: deriving from a
+        # foreign baseline would silently compare across currencies.
+        if preferred_entry is None or preferred_entry.reference_day.expense_count == 0:
+            return [], ["reference_unavailable"]
+        if any(
+            row.currency != currency
+            and (row.reference_day.expense_count or row.target_day.expense_count)
+            for row in context.currencies
+        ):
+            info = "partial_currency_reference"
+    elif len(context.currencies) > 1 and not currency_in_text(currency, reference.quote):
+        return [], ["ambiguous_currency"]
+    entry = next((row for row in context.currencies if row.currency == currency), None)
+    if entry is None or entry.reference_day.expense_count == 0:
+        return [], ["reference_unavailable"]
+    category_id = category_hint = None
+    category_scope = reference.kind == "previous_day_category_expense"
+    if category_scope:
+        category_hint = reference.category_hint
+        category_id = _category(category_hint, "expense", categories)
+        if category_id is None:
+            return [], ["reference_unavailable"]
+        category_total = next(
+            (row for row in entry.reference_day.category_totals if row.category_id == category_id),
+            None,
+        )
+        if category_total is None:
+            return [], ["reference_unavailable"]
+        baseline = money(Decimal(category_total.expense_total))
+        # v1 has only today's total, so a nonzero category operand is unknowable.
+        if Decimal(entry.target_day.expense_total) != 0:
+            return [], ["reference_unavailable"]
+        recorded = Decimal("0.00")
+    else:
+        baseline = money(Decimal(entry.reference_day.expense_total))
+        recorded = money(Decimal(entry.target_day.expense_total))
+    if baseline <= 0:
+        return [], ["reference_unavailable"]
+    eligible = [
+        draft for draft in drafts if draft["type"] == "expense"
+        and draft["currency"] == currency and draft["date"] == context.target_date.isoformat()
+    ]
+    if any(draft["amount"] is None for draft in eligible):
+        return [], ["missing_amount"]
+    if category_scope:
+        if any(draft["category_id"] is None for draft in eligible):
+            return [], ["ambiguous_category"]
+        eligible = [draft for draft in eligible if draft["category_id"] == category_id]
+    elif _expandable(entry, eligible):
+        if len(drafts) == 8:
+            return [], ["inferred_limit_reached"]
+        cards, truncated = _category_cards(
+            payload, reference, entry, eligible, categories, currency, len(drafts))
+        if cards:
+            codes = [info] if info else []
+            if truncated:
+                codes.append("inferred_categories_truncated")
+            return cards, codes
+        # No category row survived (unresolved, already covered, or empty):
+        # fall back to the aggregate card, thresholds included.
+    explicit = sum((Decimal(draft["amount"]) for draft in eligible), Decimal("0.00"))
+    residual = baseline - recorded - explicit
+    if residual <= 0:
+        return [], ["non_positive_residual"]
+    if residual < Decimal("10") or residual < baseline * Decimal("0.10"):
+        return [], ["residual_below_threshold"]
+    if len(drafts) == 8:
+        return [], ["inferred_limit_reached"]
+    card = _inferred_card(
+        payload, reference, currency, len(drafts) + 1, residual, category_id, category_hint,
+        "其他支出（按昨日推算）", baseline, recorded, explicit,
+        any(draft["is_approximate"] for draft in eligible),
+        f"currencies.{currency}.reference_day",
+    )
+    return [card], ([info] if info else [])
 
 
 def calculate_drafts(payload: DraftsIn, plan: SemanticPlan, categories=(), accounts=()) -> dict:
@@ -310,10 +390,9 @@ def calculate_drafts(payload: DraftsIn, plan: SemanticPlan, categories=(), accou
         if approximate:
             notices.append(notice("approximate_amount"))
     if plan.reference:
-        inferred, code = _inferred(payload, plan.reference, drafts, categories)
-        if inferred is not None:
-            drafts.append(inferred)
-        if code:
+        inferred, codes = _inferred(payload, plan.reference, drafts, categories)
+        drafts.extend(inferred)
+        for code in codes:
             notices.append(notice(code))
     if not drafts:
         notices.append(notice("no_actionable_items"))

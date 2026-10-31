@@ -9,7 +9,7 @@ from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from test_user_system import api
-from batch_cases import ACCOUNTS, CATEGORIES, TEXT, body, plan, simple_plan
+from batch_cases import ACCOUNTS, CATEGORIES, TEXT, aggregate, body, plan, simple_plan
 
 
 class StubModel:
@@ -61,7 +61,8 @@ def test_endpoint_contract_is_structured_and_parse_never_posts_transactions(batc
     from app.models import AgentLog, SyncOperation, Transaction, User
 
     client, sessions, auth, stub = batch_api
-    result = post(batch_api)
+    # §14 expands per-category cards; this case pins the aggregate contract.
+    result = post(batch_api, aggregate(body()))
     assert result.status_code == 200, result.text
     value = result.json()
     assert set(value) == {

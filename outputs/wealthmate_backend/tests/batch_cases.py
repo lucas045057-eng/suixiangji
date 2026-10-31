@@ -85,6 +85,18 @@ def one_currency(payload, baseline, recorded="0", count=1):
     return entry
 
 
+def aggregate(payload):
+    """Drops per-category rows so inference stays on the single aggregate card.
+
+    §14 expands the aggregate reference into one card per reference-day
+    category. Cases that verify the aggregate fallback itself pin their
+    context here instead.
+    """
+    for entry in payload["ledger_context"]["currencies"]:
+        entry["reference_day"]["category_totals"] = []
+    return payload
+
+
 def with_currency(payload, code, baseline="100", recorded="0"):
     entry = deepcopy(payload["ledger_context"]["currencies"][0])
     entry["currency"] = code
