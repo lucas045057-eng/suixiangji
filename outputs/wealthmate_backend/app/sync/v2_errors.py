@@ -31,7 +31,7 @@ def validate(schema, data):
         if not isinstance(value, Decimal):
             continue
         scale = 10 if field.endswith("rate") else 6
-        if not value.is_finite() or abs(value) >= Decimal(10) ** (20-scale):
+        if not value.is_finite() or value.copy_abs() >= Decimal(10) ** (20-scale):
             raise Rejected("invalid_amount", "Amount exceeds storage range", field)
         if value != value.quantize(Decimal(10) ** -scale):
             raise Rejected("invalid_amount", "Amount exceeds storage precision", field)

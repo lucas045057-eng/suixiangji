@@ -111,7 +111,8 @@ def test_version_competition_only_enters_conflicts_and_replays(api):
     assert body['rejected']==[] and len(body['conflicts'])==1
     assert body['conflicts'][0]['reason']=='version_conflict'
     assert body['conflicts'][0]['authoritative_row']['note']=='new'
-    assert [r['id'] for r in body['results']]==['valid']
+    assert [r['id'] for r in body['results']]==['a','valid']
+    assert body['results'][0]['status']=='conflict'
     assert push(client,operation).json()['conflicts']==body['conflicts']
 
 @pytest.mark.parametrize('route',['/sync/push','/sync/pull'])
@@ -335,7 +336,7 @@ def test_balance_changed_is_conflict_not_business_rejection(api,monkeypatch):
     monkeypatch.setattr(v2,'_apply',compete)
     body=push(client,op('a',{'note':'note'},opid='balance'),op('b',{'name':'b'})).json()
     assert body['conflicts'][0]['reason']=='balance_changed' and body['rejected']==[]
-    assert body['results'][0]['id']=='b'
+    assert [(r['id'],r['status']) for r in body['results']]==[('a','conflict'),('b','applied')]
 
 
 @pytest.mark.parametrize('payload',[

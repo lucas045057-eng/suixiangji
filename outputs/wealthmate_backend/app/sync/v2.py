@@ -128,6 +128,14 @@ def _identity(op):
     return dict(op_id=op.client_op_id, entity=op.entity, id=op.entity_id)
 
 
+def _complete_result(op, outcome):
+    if "conflict" in outcome and "result" not in outcome:
+        conflict = outcome["conflict"]
+        return {**outcome, "result": {**_identity(op), "status": "conflict",
+            "reason": conflict["reason"], "row": conflict["authoritative_row"]}}
+    return outcome
+
+
 def _rejected(op, exc):
     detail = {**_identity(op), "code": exc.code, "detail": exc.detail}
     if exc.field is not None:
@@ -203,11 +211,13 @@ def push(payload, db, user):
                     if not _known_integrity(exc):
                         raise
                     outcome = _rejected(op, Rejected("duplicate_key", "Operation violates a business uniqueness constraint"))
+                outcome = _complete_result(op, outcome)
                 # Outcome receipts share the outer transaction. Unknown failures remain fatal.
                 db.add(SyncOperation(user_id=user.id, client_op_id=op.client_op_id, entity=op.entity,
                     entity_id=op.entity_id, server_version=user.sync_version, protocol_version=2,
                     request_hash=request_hash, result_json=outcome))
                 db.flush()
+            outcome = _complete_result(op, outcome)
             if "result" in outcome:
                 results[op.client_op_id] = outcome["result"]
             if "rejected" in outcome:

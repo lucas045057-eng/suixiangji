@@ -193,7 +193,7 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
 def pull(since_version: int = 0, db: Session | None = None, user: User | None = None, *, include_adjustments: bool = False, protocol: int = 1) -> dict:
     if db is None or user is None:
         raise TypeError("db and user are required")
-    user = _lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    user = _lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0, shared=True)
     enforce_sync_floor(user, protocol)
     watermark = user.sync_version
     transactions = (

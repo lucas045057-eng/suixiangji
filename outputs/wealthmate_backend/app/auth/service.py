@@ -13,6 +13,7 @@ from ..models import (
     Account,
     AccountMutationAudit,
     UserPreference,
+    UserExchangeRate,
     AgentLog,
     Budget,
     Category,
@@ -207,6 +208,7 @@ def delete_user(db: Session, user: User, payload: DeleteUserIn) -> dict:
     try:
         for model in (
             UserPreference,
+            UserExchangeRate,
             AccountMutationAudit,
             Transaction,
             Budget,

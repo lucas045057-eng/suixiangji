@@ -179,6 +179,21 @@ class ExchangeRate(Base):
     fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class UserExchangeRate(Base):
+    """User-owned restored FX history; never overwrite the shared live cache."""
+    __tablename__ = "user_exchange_rates"
+    __table_args__ = (UniqueConstraint("user_id", "base_currency", "quote_currency", "rate_date", "source",
+                                      name="uq_user_exchange_snapshot"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    base_currency: Mapped[str] = mapped_column(String(16))
+    quote_currency: Mapped[str] = mapped_column(String(16), default="CNY")
+    rate: Mapped[Decimal] = mapped_column(Numeric(20, 10))
+    rate_date: Mapped[date] = mapped_column(Date)
+    source: Mapped[str] = mapped_column(String(256))
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class Budget(Base):
     __tablename__ = "budgets"
     __table_args__ = (UniqueConstraint("user_id", "month", "category_id", name="uq_budget_user_month_category"),)

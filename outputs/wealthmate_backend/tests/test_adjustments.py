@@ -122,7 +122,9 @@ def test_asset_liability_signs_and_reports_exclude_adjustments(api):
     assert stats['category_totals']=={} and not stats['data_sufficient']
     assert stats['expense_total']==stats['net_worth_change']==0
     assert stats['pending_conversion_count']==0
-    assert client.get('/backup/export').status_code==409
+    backup=client.get('/backup/export')
+    assert backup.status_code==200 and backup.json()['schema_version']==3
+    assert any(row['kind']=='adjustment' for row in backup.json()['transactions'])
 
 def test_fractional_history_delta_is_not_rounded(api):
     client,sessions=api;account(client)
@@ -292,7 +294,7 @@ def test_postgres_0006_rerun_preserves_storage(postgres_case):
         before=c.execute(text('SELECT id,sync_version FROM users ORDER BY id')).all()
         with Operations.context(MigrationContext.configure(c)):module.upgrade()
         assert c.execute(text('SELECT id,sync_version FROM users ORDER BY id')).all()==before
-        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0007_v110_sync_v2'
+        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0008_v110_backup_v3'
 
 
 def test_reverse_retry_without_explicit_date_returns_original_after_day_change(api):

@@ -36,7 +36,7 @@ from .schemas import RestoreIn
 
 
 BACKUP_KIND = "suixiangji.backup"
-BACKUP_SCHEMA_VERSION = 2
+BACKUP_SCHEMA_VERSION = 3
 MAX_BACKUP_BYTES = 10 * 1024 * 1024
 MAX_ACCOUNTS = 5_000
 MAX_CATEGORIES = 5_000
@@ -79,7 +79,8 @@ def _decimal_text(value: Decimal | int | float | str | None) -> str | None:
     return format(decimal, "f")
 
 
-def _canonical_decimal_text(value: Any) -> str:
+def _canonical_decimal_text(value: Any, *, field: str = "amount") -> str:
+    _validate_decimal(value, field=field, index=0)
     try:
         decimal = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
@@ -151,6 +152,8 @@ def _backup_transaction(row: Transaction) -> dict[str, Any]:
         "note": row.note,
         "client_op_id": row.client_op_id,
         "deleted_at": _iso(row.deleted_at),
+        "adjustment_meta": row.adjustment_meta,
+        "reverses_transaction_id": row.reverses_transaction_id,
     }
 
 
@@ -165,69 +168,16 @@ def _backup_budget(row: Budget) -> dict[str, Any]:
     }
 
 
-def export_backup(db: Session, user: User) -> dict[str, Any]:
-    """Export one lock-consistent V2 snapshot without advancing the watermark."""
-    started_transaction = db.in_transaction()
-    if not started_transaction:
-        db.begin()
-    try:
-        locked_user = _lock_current_user(
-            db,
-            user.id,
-            verified_auth_version=user.auth_version or 0,
-        )
-        if db.query(Transaction.id).filter(Transaction.user_id == locked_user.id, Transaction.kind == "adjustment").first():
-            raise HTTPException(status_code=409, detail="Adjustment backups require backup schema v3")
-        accounts = (
-            db.query(Account)
-            .filter(Account.user_id == locked_user.id)
-            .order_by(Account.id.asc())
-            .all()
-        )
-        categories = (
-            db.query(Category)
-            .filter(Category.user_id == locked_user.id)
-            .order_by(Category.id.asc())
-            .all()
-        )
-        transactions = (
-            db.query(Transaction)
-            .filter(Transaction.user_id == locked_user.id)
-            .order_by(Transaction.id.asc())
-            .all()
-        )
-        budgets = (
-            db.query(Budget)
-            .filter(Budget.user_id == locked_user.id)
-            .order_by(Budget.id.asc())
-            .all()
-        )
-        result = {
-            "kind": BACKUP_KIND,
-            "schema_version": BACKUP_SCHEMA_VERSION,
-            "exported_at": datetime.now(timezone.utc).isoformat(),
-            "owner_id": locked_user.id,
-            "source_server_version": locked_user.sync_version,
-            "profile": {
-                "display_name": locked_user.display_name or locked_user.username,
-                "quick_memories": locked_user.quick_memories or [],
-            },
-            "accounts": [_backup_account(row) for row in accounts],
-            "categories": [_backup_category(row) for row in categories],
-            "transactions": [_backup_transaction(row) for row in transactions],
-            "budgets": [_backup_budget(row) for row in budgets],
-        }
-        return result
-    finally:
-        if not started_transaction:
-            db.rollback()
+def export_backup(db: Session, user: User, *, protocol: int = 1) -> dict[str, Any]:
+    from .v3_export import export_backup as export_v3
+    return export_v3(db, user, protocol=protocol)
 
 
 def _canonical_value(key: str | None, value: Any) -> Any:
     if key in _VERSION_FIELDS:
         return None
     if key in _DECIMAL_KEYS and value is not None:
-        return _canonical_decimal_text(value)
+        return _canonical_decimal_text(value, field=key)
     if isinstance(value, (date, datetime)):
         return value.isoformat()
     if isinstance(value, dict):
@@ -250,6 +200,13 @@ def _canonical_record(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def _content_hash(payload: RestoreIn) -> str:
+    if payload.schema_version == 3:
+        canonical = payload.model_dump(mode="json", exclude={"restore_id", "exported_at"})
+        for key, value in canonical.items():
+            if isinstance(value, list):
+                canonical[key] = sorted(value, key=lambda row: json.dumps(row, sort_keys=True, ensure_ascii=True))
+        return hashlib.sha256(json.dumps(canonical, sort_keys=True, ensure_ascii=True,
+                                        separators=(",", ":"), allow_nan=False).encode()).hexdigest()
     profile = (
         payload.profile.model_dump(exclude_none=False)
         if payload.profile is not None
@@ -294,7 +251,7 @@ def _payload_as_json(payload: RestoreIn) -> bytes:
 
 
 def _validate_id(value: Any, *, field: str, index: int) -> str:
-    if not isinstance(value, str) or not value or len(value) > 64:
+    if not isinstance(value, str) or not value or len(value) > 64 or "\x00" in value:
         raise HTTPException(
             status_code=422,
             detail=f"备份 {field}[{index}] 的 id 无效",
@@ -317,6 +274,10 @@ def _validate_payload_limits(payload: RestoreIn) -> None:
             for field in ("deleted_at", "archived_at"):
                 if field in record and record[field] is not None:
                     _parse_timestamp(record[field], field=field, index=index)
+    for name, limit in [("sync_operations", 100_000), ("exchange_rates", 20_000),
+                        ("net_worth_snapshots", 12_000), ("account_mutation_audits", 100_000)]:
+        if len(getattr(payload, name)) > limit:
+            raise HTTPException(413, detail="Backup section exceeds restore limits: "+name)
     if len(_payload_as_json(payload)) > MAX_BACKUP_BYTES:
         raise HTTPException(status_code=413, detail="备份文件超过 10 MiB 上限")
 
@@ -339,7 +300,10 @@ def _validate_decimal(value: Any, *, field: str, index: int, positive: bool = Fa
         number = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=f"备份 {field}[{index}] 金额格式无效") from exc
-    if not number.is_finite() or (positive and number <= 0):
+    scale = 10 if field.endswith("rate") else 6
+    if (not number.is_finite() or (positive and number <= 0)
+            or number.copy_abs() >= Decimal(10) ** (20-scale)
+            or (number.is_finite() and number != number.quantize(Decimal(10) ** -scale))):
         raise HTTPException(status_code=422, detail=f"备份 {field}[{index}] 金额格式无效")
 
 
@@ -415,7 +379,7 @@ def _precheck_records(payload: RestoreIn, db: Session, user: User) -> None:
     operation_ids: set[str] = set()
     for index, record in enumerate(payload.transactions):
         client_op_id = record.get("client_op_id")
-        if payload.schema_version == 2 and (
+        if payload.schema_version in {2, 3} and (
             not isinstance(client_op_id, str) or not client_op_id or len(client_op_id) > 128
         ):
             raise HTTPException(status_code=422, detail=f"备份 transactions[{index}] client_op_id 无效")
@@ -434,7 +398,7 @@ def _precheck_records(payload: RestoreIn, db: Session, user: User) -> None:
             if existing and existing.id != record["id"]:
                 raise HTTPException(status_code=409, detail="交易 client_op_id 已被其他交易使用")
         kind = record.get("kind") or record.get("type") or "expense"
-        if kind not in {"income", "expense", "transfer"}:
+        if kind not in ({"income", "expense", "transfer", "adjustment"} if payload.schema_version == 3 else {"income", "expense", "transfer"}):
             raise HTTPException(status_code=422, detail=f"备份 transactions[{index}] 类型无效")
         currency = record.get("currency") or record.get("original_currency") or "CNY"
         if not isinstance(currency, str) or not 3 <= len(currency) <= 16:
@@ -446,7 +410,7 @@ def _precheck_records(payload: RestoreIn, db: Session, user: User) -> None:
             required=True,
         )
         _validate_date(record.get("exchange_rate_date"), field="exchange_rate_date", index=index)
-        _validate_decimal(record.get("amount", record.get("original_amount")), field="amount", index=index, positive=True)
+        _validate_decimal(record.get("amount", record.get("original_amount")), field="amount", index=index, positive=kind != "adjustment")
         if record.get("cny_amount") is not None:
             _validate_decimal(record["cny_amount"], field="cny_amount", index=index)
         if record.get("exchange_rate") is not None:
@@ -622,7 +586,10 @@ def _invalidate_derived_data(db: Session, user_id: str) -> None:
         db.query(model).filter(model.user_id == user_id).delete(synchronize_session=False)
 
 
-def restore_backup(payload: RestoreIn, db: Session, user: User) -> dict[str, Any]:
+def restore_backup(payload: RestoreIn, db: Session, user: User, *, protocol: int = 1) -> dict[str, Any]:
+    if payload.schema_version == 3:
+        from .v3_restore import restore_backup as restore_v3
+        return restore_v3(payload, db, user, protocol=protocol)
     _validate_payload_limits(payload)
     if payload.owner_id is not None and payload.owner_id != user.id:
         raise HTTPException(status_code=422, detail="备份不属于当前用户")
@@ -641,6 +608,8 @@ def restore_backup(payload: RestoreIn, db: Session, user: User) -> dict[str, Any
             user.id,
             verified_auth_version=user.auth_version or 0,
         )
+        from ..core.protocol import enforce_sync_floor
+        enforce_sync_floor(locked_user, protocol)
         previous = (
             db.query(SyncOperation)
             .filter(
@@ -663,6 +632,8 @@ def restore_backup(payload: RestoreIn, db: Session, user: User) -> dict[str, Any
                 "server_version": previous.server_version,
             }
 
+        from .v3_validate import guard_existing_finances
+        guard_existing_finances(payload, db, locked_user)
         # Perform database-dependent validation only after the user lock and
         # replay check. A reused restore_id therefore always gets the 409
         # contract before a changed payload can trigger another validation.
@@ -675,6 +646,8 @@ def restore_backup(payload: RestoreIn, db: Session, user: User) -> dict[str, Any
         budgets = _apply_budgets(db, locked_user, payload.budgets)
         transactions = _apply_transactions(db, locked_user, payload.transactions)
         _apply_profile(locked_user, payload)
+        from .v3_restore import _preference
+        _preference(db, locked_user, [])
         applied_entities = accounts + categories + budgets + transactions
         if applied_entities:
             _invalidate_derived_data(db, locked_user.id)

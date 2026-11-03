@@ -9,12 +9,13 @@ def lock_current_user(
     user_id: str,
     *,
     verified_auth_version: int | None = None,
+    shared: bool = False,
 ) -> User:
-    """Lock and refresh the authoritative User row for one financial write transaction."""
+    """Lock and refresh one user; shared readers coexist and exclude financial writers."""
     locked = db.execute(
         select(User)
         .where(User.id == user_id)
-        .with_for_update()
+        .with_for_update(read=shared)
         .execution_options(populate_existing=True)
     ).scalar_one_or_none()
     if locked is None:

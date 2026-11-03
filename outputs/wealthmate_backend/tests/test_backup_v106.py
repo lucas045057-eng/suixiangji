@@ -124,7 +124,7 @@ def test_v2_export_contains_core_entities_profile_tombstones_and_decimal_strings
     response = client.get("/backup/export", headers=auth)
     assert response.status_code == 200, response.text
     body = response.json()
-    assert (body["kind"], body["schema_version"]) == ("suixiangji.backup", 2)
+    assert (body["kind"], body["schema_version"]) == ("suixiangji.backup", 3)
     assert body["profile"]["display_name"] == "Original profile"
     assert body["accounts"][0]["opening_balance"] == "10.125678"
     assert body["budgets"][0]["limit"] == "20.125678"

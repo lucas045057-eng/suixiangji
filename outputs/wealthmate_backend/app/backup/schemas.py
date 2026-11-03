@@ -14,12 +14,12 @@ class BackupProfile(BaseModel):
 
 
 class RestoreIn(BaseModel):
-    """V2 cloud-backup payload, while retaining the small V1 import shape."""
+    """V3 cloud-backup payload, while retaining the small V1 import shape."""
 
     model_config = ConfigDict(extra="forbid")
 
     kind: str | None = None
-    schema_version: int | None = Field(default=None, ge=1, le=2)
+    schema_version: int | None = Field(default=None, ge=1, le=3)
     exported_at: str | datetime | None = None
     owner_id: str | None = Field(default=None, max_length=64)
     source_server_version: int | None = Field(default=None, ge=0)
@@ -28,13 +28,23 @@ class RestoreIn(BaseModel):
     categories: list[dict[str, Any]] = Field(default_factory=list)
     transactions: list[dict[str, Any]] = Field(default_factory=list)
     budgets: list[dict[str, Any]] = Field(default_factory=list)
+    user_preferences: list[dict[str, Any]] = Field(default_factory=list, max_length=1)
+    sync_operations: list[dict[str, Any]] = Field(default_factory=list)
+    protocol_metadata: dict[str, Any] | None = None
+    exchange_rates: list[dict[str, Any]] = Field(default_factory=list)
+    net_worth_snapshots: list[dict[str, Any]] = Field(default_factory=list)
+    account_mutation_audits: list[dict[str, Any]] = Field(default_factory=list)
     restore_id: str | None = Field(default=None, min_length=1, max_length=128)
 
     @model_validator(mode="after")
     def validate_contract(self) -> "RestoreIn":
-        if self.schema_version == 2:
+        v3_fields = {"user_preferences", "sync_operations", "protocol_metadata", "exchange_rates",
+                     "net_worth_snapshots", "account_mutation_audits"}
+        if self.schema_version != 3 and v3_fields & self.model_fields_set:
+            raise ValueError("V3 sections require schema_version 3")
+        if self.schema_version in {2, 3}:
             if self.kind != "suixiangji.backup" or not self.owner_id:
-                raise ValueError("V2 backup kind and owner_id are required")
+                raise ValueError("Backup kind and owner_id are required")
             return self
 
         # V1 files were emitted without kind/schema metadata and only carried
