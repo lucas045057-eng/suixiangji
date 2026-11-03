@@ -424,6 +424,52 @@ class ExchangeRateSnapshot {
           updatedAt: json['updated_at'] as String?);
 }
 
+/// A locally saved balance-calibration target.
+///
+/// 1.0.10 only stores the user's intent while the new calibration semantics
+/// are being prepared; it never rewrites an account's opening balance.
+class CalibrationDraft {
+  const CalibrationDraft({
+    required this.accountId,
+    required this.targetCny,
+    required this.effectiveOn,
+    required this.createdAt,
+  });
+
+  final String accountId;
+  final double targetCny;
+  final String effectiveOn;
+  final String createdAt;
+
+  CalibrationDraft copyWith({
+    String? accountId,
+    double? targetCny,
+    String? effectiveOn,
+    String? createdAt,
+  }) =>
+      CalibrationDraft(
+        accountId: accountId ?? this.accountId,
+        targetCny: targetCny ?? this.targetCny,
+        effectiveOn: effectiveOn ?? this.effectiveOn,
+        createdAt: createdAt ?? this.createdAt,
+      );
+
+  Map<String, Object?> toJson() => {
+        'account_id': accountId,
+        'target_cny': targetCny,
+        'effective_on': effectiveOn,
+        'created_at': createdAt,
+      };
+
+  factory CalibrationDraft.fromJson(Map<String, Object?> json) =>
+      CalibrationDraft(
+        accountId: json['account_id']! as String,
+        targetCny: (json['target_cny'] as num?)?.toDouble() ?? 0,
+        effectiveOn: json['effective_on'] as String? ?? '',
+        createdAt: json['created_at'] as String? ?? '',
+      );
+}
+
 class Report {
   const Report(
       {required this.id,
@@ -536,6 +582,7 @@ class FinanceState {
     this.reports = const <Report>[],
     this.conflicts = const <String>[],
     this.quickMemories = const <QuickMemory>[],
+    this.calibrationDrafts = const <CalibrationDraft>[],
     this.defaultAccountId,
     this.syncState = const SyncState(),
   });
@@ -552,8 +599,13 @@ class FinanceState {
   final List<Report> reports;
   final List<String> conflicts;
   final List<QuickMemory> quickMemories;
+  final List<CalibrationDraft> calibrationDrafts;
   final String? defaultAccountId;
   final SyncState syncState;
+
+  CalibrationDraft? calibrationDraftFor(String accountId) => calibrationDrafts
+      .where((draft) => draft.accountId == accountId)
+      .firstOrNull;
 
   FinanceState copyWith({
     int? schemaVersion,
@@ -568,6 +620,7 @@ class FinanceState {
     List<Report>? reports,
     List<String>? conflicts,
     List<QuickMemory>? quickMemories,
+    List<CalibrationDraft>? calibrationDrafts,
     String? defaultAccountId,
     SyncState? syncState,
   }) {
@@ -584,6 +637,7 @@ class FinanceState {
       reports: reports ?? this.reports,
       conflicts: conflicts ?? this.conflicts,
       quickMemories: quickMemories ?? this.quickMemories,
+      calibrationDrafts: calibrationDrafts ?? this.calibrationDrafts,
       defaultAccountId: defaultAccountId ?? this.defaultAccountId,
       syncState: syncState ?? this.syncState,
     );
@@ -602,6 +656,8 @@ class FinanceState {
         'reports': reports.map((item) => item.toJson()).toList(),
         'conflicts': conflicts,
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
+        'calibration_drafts':
+            calibrationDrafts.map((item) => item.toJson()).toList(),
         'default_account_id': defaultAccountId,
         'sync_state': {
           'server_version': syncState.serverVersion,
@@ -656,6 +712,11 @@ class FinanceState {
                 const <Object?>[])
             .map((item) =>
                 QuickMemory.fromJson((item! as Map).cast<String, Object?>()))
+            .toList(),
+        calibrationDrafts: ((json['calibration_drafts'] as List<Object?>?) ??
+                const <Object?>[])
+            .map((item) => CalibrationDraft.fromJson(
+                (item! as Map).cast<String, Object?>()))
             .toList(),
         defaultAccountId: json['default_account_id'] as String?,
         syncState: SyncState(

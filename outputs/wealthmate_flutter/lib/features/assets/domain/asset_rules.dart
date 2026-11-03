@@ -28,28 +28,60 @@ class AssetRules {
     return next;
   }
 
-  static Account calibrateBalance(Account account, double delta) {
-    if (!delta.isFinite) {
-      throw ArgumentError.value(delta, 'delta', '必须是有限数');
+  /// Builds a local calibration draft. It deliberately does not touch the
+  /// account: 1.0.10 only records the user's target until the adjustment-based
+  /// calibration ships.
+  static CalibrationDraft buildCalibrationDraft(
+    Account account, {
+    required double targetCny,
+    required String effectiveOn,
+    DateTime? createdAt,
+  }) {
+    if (!targetCny.isFinite) {
+      throw ArgumentError.value(targetCny, 'targetCny', '必须是有限数');
     }
-    final change = _round(delta);
-    if (change == 0) {
-      throw ArgumentError.value(delta, 'delta', '不能为零变化');
+    if (targetCny <= 0) {
+      throw ArgumentError.value(targetCny, 'targetCny', '人民币账面余额必须大于零');
     }
+    final cents = targetCny * 100;
+    if ((cents - cents.roundToDouble()).abs() > 1e-6) {
+      throw ArgumentError.value(targetCny, 'targetCny', '最多保留两位小数');
+    }
+    final date = _parseDate(effectiveOn);
+    if (date == null) {
+      throw ArgumentError.value(
+          effectiveOn, 'effectiveOn', '日期格式必须为 YYYY-MM-DD');
+    }
+    final now = createdAt ?? DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (date.isAfter(today)) {
+      throw ArgumentError.value(effectiveOn, 'effectiveOn', '不能使用未来日期');
+    }
+    return CalibrationDraft(
+      accountId: account.id,
+      targetCny: _round(targetCny),
+      effectiveOn: effectiveOn,
+      createdAt: now.toIso8601String(),
+    );
+  }
 
-    final isCny = account.currency.toUpperCase() == 'CNY';
-    final current =
-        isCny ? account.openingBalance : account.openingCnyAmount ?? 0;
-    if (!current.isFinite) {
-      throw ArgumentError.value(account, 'account', '当前余额必须是有限数');
-    }
-    final nextOpening = _round(current + change);
-    if (!nextOpening.isFinite) {
-      throw ArgumentError.value(delta, 'delta', '校准后余额必须是有限数');
-    }
-    return isCny
-        ? account.copyWith(openingBalance: nextOpening)
-        : account.copyWith(openingCnyAmount: nextOpening);
+  static FinanceState upsertCalibrationDraft(
+      FinanceState state, CalibrationDraft draft) {
+    return state.copyWith(calibrationDrafts: [
+      ...state.calibrationDrafts
+          .where((item) => item.accountId != draft.accountId),
+      draft,
+    ]);
+  }
+
+  static DateTime? _parseDate(String value) {
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) return null;
+    final parsed = DateTime.tryParse(value);
+    if (parsed == null) return null;
+    final normalized = '${parsed.year.toString().padLeft(4, '0')}-'
+        '${parsed.month.toString().padLeft(2, '0')}-'
+        '${parsed.day.toString().padLeft(2, '0')}';
+    return normalized == value ? parsed : null;
   }
 
   static FinanceState setDefaultAccount(FinanceState state, String accountId) {
@@ -68,6 +100,7 @@ class AssetRules {
         DateTime.tryParse(snapshot.rateDate) == null) {
       throw ArgumentError('需要有效的人民币汇率快照');
     }
+    final base = snapshot.baseCurrency.toUpperCase();
     final rates = [
       ...state.exchangeRates.where((item) =>
           item.baseCurrency != snapshot.baseCurrency ||
@@ -75,8 +108,11 @@ class AssetRules {
       snapshot,
     ];
     final accounts = state.accounts.map((account) {
+      // Landed CNY snapshots are frozen. A rate refresh only fills accounts
+      // that have never had one; it must not revalue history.
       if (!account.isActive ||
-          account.currency.toUpperCase() != snapshot.baseCurrency) {
+          account.currency.toUpperCase() != base ||
+          account.openingCnyAmount != null) {
         return account;
       }
       return account.copyWith(

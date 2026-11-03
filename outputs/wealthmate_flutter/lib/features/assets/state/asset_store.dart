@@ -143,26 +143,44 @@ class AssetStore extends ChangeNotifier {
     await updateAccount(account.copyWith(clearArchivedAt: true));
   }
 
-  Future<void> calibrateBalance(Account account, double delta) async {
+  CalibrationDraft? calibrationDraftFor(String accountId) =>
+      _state.calibrationDraftFor(accountId);
+
+  /// Saves the target as a local draft. It never rewrites opening balances or
+  /// enqueues an account operation; the adjustment-based flow ships in 1.1.0.
+  Future<void> calibrateBalance(Account account, double targetCny,
+      {String? effectiveOn}) async {
     final current =
         _state.accounts.where((item) => item.id == account.id).firstOrNull;
     if (current == null) return;
 
-    late final Account calibrated;
+    late final CalibrationDraft draft;
     try {
-      calibrated = AssetRules.calibrateBalance(current, delta);
+      draft = AssetRules.buildCalibrationDraft(
+        current,
+        targetCny: targetCny,
+        effectiveOn: effectiveOn ?? _dayKey(DateTime.now()),
+      );
     } on ArgumentError catch (error) {
-      _message = error.message?.toString() ?? '余额校准金额无效';
+      _message = error.message?.toString() ?? '人民币账面余额无效';
+      _notifyMessageChanged();
+      return;
+    }
+    final currentBalance = accountBalances
+        .where((item) => item.account.id == current.id)
+        .firstOrNull
+        ?.balance;
+    if (currentBalance != null && currentBalance == draft.targetCny) {
+      _message = '余额已一致，无需校准';
       _notifyMessageChanged();
       return;
     }
     if (!await _apply((baseState) =>
-        repository.saveAccount(calibrated, baseState: baseState))) {
+        repository.saveCalibrationDraft(draft, baseState: baseState))) {
       return;
     }
-    _message = '账户余额已校准';
+    _message = '校准草稿已保存';
     _notifyChanged();
-    onLocalMutation?.call('assets.account.calibrate');
   }
 
   Future<void> setDefaultAccount(String accountId) async {
@@ -239,6 +257,11 @@ class AssetStore extends ChangeNotifier {
       _notifyMessageChanged();
     }
   }
+
+  static String _dayKey(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-'
+      '${value.month.toString().padLeft(2, '0')}-'
+      '${value.day.toString().padLeft(2, '0')}';
 
   static String _monthKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}';

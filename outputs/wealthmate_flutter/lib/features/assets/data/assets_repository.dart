@@ -42,23 +42,42 @@ class AssetsRepository {
     );
   }
 
+  Future<FinanceState> saveCalibrationDraft(CalibrationDraft draft,
+      {FinanceState? baseState}) {
+    // A draft is local intent only: no account upsert, no balance change.
+    return session.write(
+      (current) => AssetRules.upsertCalibrationDraft(current, draft),
+      initialState: baseState,
+    );
+  }
+
   Future<FinanceState> saveExchangeRate(ExchangeRateSnapshot snapshot,
       {FinanceState? baseState}) {
+    final base = snapshot.baseCurrency.toUpperCase();
     return session.write(
       (current) => AssetRules.applyExchangeRate(current, snapshot),
-      deriveOperations: (current, next) => next.accounts
-          .where((account) =>
-              account.isActive &&
-              account.currency.toUpperCase() == snapshot.baseCurrency &&
-              snapshot.quoteCurrency == 'CNY')
-          .map((account) => SyncOperation(
-              clientOpId:
-                  'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
-              entity: 'accounts',
-              entityId: account.id,
-              type: SyncOperationType.upsert,
-              payload: account.toJson(),
-              createdAt: DateTime.now().toIso8601String())),
+      deriveOperations: (current, next) {
+        final before = {
+          for (final account in current.accounts) account.id: account,
+        };
+        // Only accounts whose CNY opening snapshot is filled for the first
+        // time produce an operation; a refresh never rewrites landed values.
+        return next.accounts
+            .where((account) =>
+                account.isActive &&
+                account.currency.toUpperCase() == base &&
+                snapshot.quoteCurrency == 'CNY' &&
+                account.openingCnyAmount != null &&
+                before[account.id]?.openingCnyAmount == null)
+            .map((account) => SyncOperation(
+                clientOpId:
+                    'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
+                entity: 'accounts',
+                entityId: account.id,
+                type: SyncOperationType.upsert,
+                payload: account.toJson(),
+                createdAt: DateTime.now().toIso8601String()));
+      },
       initialState: baseState,
     );
   }

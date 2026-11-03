@@ -79,7 +79,7 @@ void main() {
   });
 
   test(
-      'UR-018 HKD then USD then HKD queues each account snapshot without reverting other currency',
+      'UR-018 HKD then USD then HKD fills each snapshot once and freezes the landed HKD value',
       () async {
     final memory = Memory();
     final store = makeStore(memory, const FinanceState(accounts: accounts));
@@ -93,14 +93,16 @@ void main() {
     final hkd = state.accounts.firstWhere((a) => a.id == 'hkd');
     final usd = state.accounts.firstWhere((a) => a.id == 'usd');
     expect(hkd.openingBalance, 100);
-    expect(hkd.openingCnyAmount, 91);
+    // 1.0.10 stopgap: a later rate refresh no longer revalues a landed
+    // snapshot (previously this became 91 and queued a second upsert).
+    expect(hkd.openingCnyAmount, 90);
     expect(usd.openingBalance, 50);
     expect(usd.openingCnyAmount, 350);
     final queued = await LocalRepository(memory).loadQueue();
-    // The established queue coalesces pending mutations per entity.
+    // Only the first-time fills were queued; the HKD refresh added nothing.
     expect(queued, hasLength(2));
     expect(queued.map((op) => op.entityId), ['hkd', 'usd']);
-    expect(queued.map((op) => op.payload['opening_cny_amount']), [91, 350]);
+    expect(queued.map((op) => op.payload['opening_cny_amount']), [90, 350]);
     expect(queued.first.payload['server_version'], 4);
   });
 

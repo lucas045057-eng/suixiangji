@@ -198,17 +198,39 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   Future<void> _calibrateBalance(
       BuildContext context, double currentBalance) async {
     var input = '';
-    final targetBalance = await showDialog<double>(
+    final isForeign = _account.currency.toUpperCase() != 'CNY';
+    final targetCny = await showDialog<double>(
         context: context,
         builder: (dialogContext) => AlertDialog(
                 title: const Text('余额校准'),
-                content: TextField(
-                    autofocus: true,
-                    onChanged: (value) => input = value,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                        labelText: '校准后余额', hintText: '请输入当前实际余额')),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('当前计算余额 ${money(currentBalance)}'),
+                    const SizedBox(height: 12),
+                    TextField(
+                        autofocus: true,
+                        onChanged: (value) => input = value,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: '人民币账面余额',
+                            hintText: '请输入实际人民币账面余额')),
+                    const SizedBox(height: 12),
+                    const Text(
+                      '新版校准语义准备中，当前保存为本地草稿，不会改动账户余额。',
+                      style: TextStyle(color: paInkFaint, fontSize: 12),
+                    ),
+                    if (isForeign) ...[
+                      const SizedBox(height: 4),
+                      const Text(
+                        '校准的是人民币账面额，不改变原币初始余额。',
+                        style: TextStyle(color: paInkFaint, fontSize: 12),
+                      ),
+                    ],
+                  ],
+                ),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialogContext),
@@ -218,26 +240,16 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                           dialogContext, double.tryParse(input.trim())),
                       child: const Text('保存校准'))
                 ]));
-    if (targetBalance == null || !targetBalance.isFinite) {
-      if (mounted) _showMessage('请输入有效的校准后余额');
+    if (targetCny == null || !targetCny.isFinite) {
+      if (mounted) _showMessage('请输入有效的人民币账面余额');
       return;
     }
     final currentAccount = widget.store.accounts
         .where((item) => item.id == widget.account.id)
         .firstOrNull;
     if (currentAccount == null) return;
-    await widget.store
-        .calibrateBalance(currentAccount, targetBalance - currentBalance);
-    final calibrated = widget.store.accounts
-        .where((item) => item.id == widget.account.id)
-        .firstOrNull;
-    if (calibrated != null) {
-      _account = calibrated;
-      openingController.text = calibrated.openingBalance.toString();
-    }
-    if (mounted && widget.store.message != '账户余额已校准') {
-      _showMessage(widget.store.message ?? '余额校准失败');
-    }
+    await widget.store.calibrateBalance(currentAccount, targetCny);
+    if (mounted) _showMessage(widget.store.message ?? '校准草稿已保存');
   }
 
   static String _accountKindLabel(AccountKind value) => const {
