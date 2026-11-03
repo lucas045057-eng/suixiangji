@@ -97,9 +97,11 @@ def test_fx_and_net_worth_roundtrip_are_tenant_scoped(api,target_api):
         db.add(ExchangeRate(base_currency='USD',quote_currency='CNY',rate=7,rate_date=D,source='cache'))
         db.add(ExchangeRate(base_currency='EUR',quote_currency='CNY',rate=8,rate_date=D,source='unrelated'))
         db.add(UserExchangeRate(user_id='other',base_currency='GBP',quote_currency='CNY',rate=9,rate_date=D,source='private'))
+    account(client,currency='USD',opening_rate_date=D.isoformat(),opening_rate_source='cache')
+    # Financial writes invalidate old snapshots; seed the backup cache after the write.
+    with sessions.begin() as db:
         db.add(NetWorthSnapshot(user_id='u',month='2026-09',total_assets_cny=700,
                                total_liabilities_cny=0,net_worth_cny=700,pending_conversion_count=0))
-    account(client,currency='USD',opening_rate_date=D.isoformat(),opening_rate_source='cache')
     source=export(client)
     assert len(source['exchange_rates'])==1 and source['exchange_rates'][0]['base_currency']=='USD'
     assert source['net_worth_snapshots'][0]['net_worth_cny']=='700.000000'

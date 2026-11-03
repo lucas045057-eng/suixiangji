@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..core.dependencies import get_current_user
 from ..db import get_db
 from ..models import User
+from ..core.protocol import adjustment_view
 from . import service as insights_service
 
 
@@ -33,8 +34,13 @@ def stats(
 async def monthly_report(
     month: str,
     force: bool = False,
+    include_adjustments: bool = Depends(adjustment_view),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    return await insights_service.monthly_report(db, user, month, force=force)
+    try:
+        return await insights_service.monthly_report(db, user, month, force=force,
+                                                      include_adjustments=include_adjustments)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 

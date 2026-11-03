@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 
 from ..core.dependencies import get_current_user
 from ..db import get_db
-from ..core.protocol import adjustment_view
+from ..core.protocol import adjustment_view, sync_protocol
 from ..models import User
 from . import service as assets_service
 from .schemas import AccountIn, AccountPatch, RateIn, CalibrationIn, ReverseCalibrationIn
-from . import calibration
+from . import calibration, basis
 
 
 router = APIRouter()
@@ -85,8 +85,10 @@ def _calibration_response(command, *args):
         return command(*args)
     except HTTPException as exc:
         if isinstance(exc.detail, dict) and "code" in exc.detail:
-            return JSONResponse(status_code=exc.status_code,
-                                content={"code": exc.detail["code"], "detail": exc.detail["message"]})
+            content = dict(exc.detail)
+            if "message" in content:
+                content["detail"] = content.pop("message")
+            return JSONResponse(status_code=exc.status_code, content=content)
         raise
 
 
@@ -100,3 +102,10 @@ def calibrate_account(account_id: str, payload: CalibrationIn,
 def reverse_calibration(account_id: str, transaction_id: str, payload: ReverseCalibrationIn,
                         db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return _calibration_response(calibration.reverse, db, user, account_id, transaction_id, payload)
+
+
+@router.get("/assets/accounts/{account_id}/balance-basis")
+def balance_basis(account_id: str, effective_on: date | None = None,
+                  protocol: int = Depends(sync_protocol), db: Session = Depends(get_db),
+                  user: User = Depends(get_current_user)):
+    return _calibration_response(lambda: basis.issue(db, user, account_id, effective_on, protocol=protocol))

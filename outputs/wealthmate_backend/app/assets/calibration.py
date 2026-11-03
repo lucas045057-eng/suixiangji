@@ -8,7 +8,7 @@ from ..models import Account, Transaction, SyncOperation
 from ..ledger.schemas import AdjustmentIn
 from ..ledger.domain import normalise_transaction_payload
 from ..ledger.service import transaction_json
-from .replay import account_balance
+from . import basis
 
 
 def conflict(code, message):
@@ -40,8 +40,12 @@ def _replay(db, user, account_id, payload, original_id=None):
                     or (original_id is not None and "effective_on" not in payload.model_fields_set)))
     if matches and original_id is None:
         meta = row.adjustment_meta
-        matches = (Decimal(meta["target_cny"]) == payload.target_cny
-                   and Decimal(meta["basis_balance_cny"]) == payload.expected_current_cny)
+        matches = Decimal(meta["target_cny"]) == payload.target_cny
+        if payload.basis_token is not None:
+            matches = matches and meta.get("basis_token_hash") == basis.fingerprint(payload.basis_token)
+        else:
+            matches = (matches and meta.get("basis_token_hash") is None
+                       and Decimal(meta["basis_balance_cny"]) == payload.expected_current_cny)
     if not matches:
         conflict("operation_mismatch", "Operation ID already used for a different command")
     return transaction_json(row)
@@ -77,12 +81,17 @@ def calibrate(db, user, account_id, payload):
             db.commit()
             return replay
         account = _active_account(db, user, account_id)
-        rows = db.query(Transaction).filter(Transaction.user_id == user.id,
-            Transaction.deleted_at.is_(None), Transaction.occurred_on <= payload.effective_on).all()
-        current, pending = account_balance(account, rows)
-        if pending:
-            conflict("conversion_pending", "Complete missing CNY snapshots before calibration")
-        if current != payload.expected_current_cny:
+        claims = basis.verify(payload.basis_token, user.id, account_id, payload.effective_on) if payload.basis_token else None
+        try:
+            current, digest = basis.financial_basis(db, user, account, payload.effective_on)
+        except HTTPException as exc:
+            if claims is not None and isinstance(exc.detail, dict) and exc.detail.get("code") in {"conversion_pending", "basis_out_of_range"}:
+                conflict("balance_changed", "Account financial basis changed; obtain a new basis")
+            raise
+        if claims is not None:
+            if claims["digest"] != digest or Decimal(claims["balance_cny"]) != current:
+                conflict("balance_changed", "Account balance changed; obtain a new basis before calibrating")
+        elif current != payload.expected_current_cny:
             conflict("balance_changed", "Account balance changed; reload before calibrating")
         delta = payload.target_cny - current
         if delta == 0:
@@ -90,6 +99,9 @@ def calibrate(db, user, account_id, payload):
         meta = dict(reason="balance_calibration", target_cny=str(payload.target_cny),
             basis_balance_cny=str(current), effective_on=payload.effective_on.isoformat(),
             captured_at=datetime.now(timezone.utc).isoformat())
+        if claims is not None:
+            meta.update(basis_token_hash=basis.fingerprint(payload.basis_token), basis_digest=digest,
+                        basis_version=basis.BASIS_VERSION)
         return _append(db, user, account_id, payload, delta, meta)
     except BaseException:
         db.rollback()

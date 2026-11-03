@@ -26,7 +26,7 @@ async def run_monthly_report_job() -> None:
                 month,
                 model_factory=configured_model,
             )
-        db.commit()
+            db.commit()
     finally:
         db.close()
 

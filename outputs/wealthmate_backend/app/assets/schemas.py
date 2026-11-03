@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
 class AccountIn(BaseModel):
@@ -59,8 +59,22 @@ class CalibrationIn(BaseModel):
     client_op_id: str = Field(min_length=1, max_length=128)
     adjustment_id: str = Field(min_length=1, max_length=64)
     target_cny: Decimal = Field(allow_inf_nan=False, gt=-10**14, lt=10**14, decimal_places=2)
-    expected_current_cny: Decimal = Field(allow_inf_nan=False, gt=-10**14, lt=10**14, decimal_places=6)
+    expected_current_cny: Decimal | None = Field(default=None, allow_inf_nan=False, gt=-10**14, lt=10**14, decimal_places=6)
+    basis_token: str | None = Field(default=None, min_length=1, max_length=4096)
     effective_on: date
+
+    @model_validator(mode="before")
+    @classmethod
+    def token_is_authoritative(cls, values):
+        if isinstance(values, dict) and values.get("basis_token") is not None:
+            return {**values, "expected_current_cny": None}
+        return values
+
+    @model_validator(mode="after")
+    def require_basis(self):
+        if self.basis_token is None and self.expected_current_cny is None:
+            raise ValueError("basis_token or expected_current_cny is required")
+        return self
 
     @field_validator("effective_on", mode="before")
     @classmethod

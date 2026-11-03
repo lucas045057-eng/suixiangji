@@ -151,6 +151,7 @@ async def monthly_report(
     month: str,
     *,
     force: bool = False,
+    include_adjustments: bool = False,
     model_factory: Callable[[], ModelAdapter] | None = None,
 ) -> dict[str, Any]:
     from ..models import AgentLog, MonthlyReport
@@ -160,7 +161,8 @@ async def monthly_report(
         MonthlyReport.month == month,
     ).first()
     if existing and not force:
-        return {
+        snapshot = _save_net_worth_snapshot(db, user, month)
+        result = {
             "id": existing.id,
             "month": existing.month,
             "metrics": existing.metrics,
@@ -168,6 +170,10 @@ async def monthly_report(
             "ai_status": existing.ai_status,
             "generated_at": existing.created_at,
         }
+        if include_adjustments:
+            result["net_worth_snapshot"] = snapshot
+        db.commit()
+        return result
     metrics = stats(db, user, month=month)
     prior_report = db.query(MonthlyReport).filter(
         MonthlyReport.user_id == user.id,
@@ -197,6 +203,8 @@ async def monthly_report(
                 status="unavailable",
                 result_summary="Provider unavailable; sensitive error details omitted",
             ))
+    snapshot = _save_net_worth_snapshot(db, user, month)
+    existing = db.query(MonthlyReport).filter_by(user_id=user.id, month=month).populate_existing().first()
     stored_metrics = json_metrics(metrics)
     if existing:
         existing.metrics = stored_metrics
@@ -212,9 +220,8 @@ async def monthly_report(
             ai_status=ai_status,
         )
         db.add(row)
-    _save_net_worth_snapshot(db, user, month)
     db.commit()
-    return {
+    result = {
         "id": row.id,
         "month": row.month,
         "metrics": metrics,
@@ -222,27 +229,30 @@ async def monthly_report(
         "ai_status": ai_status,
         "generated_at": row.created_at,
     }
+    if include_adjustments:
+        result["net_worth_snapshot"] = snapshot
+    return result
 
 
-def _save_net_worth_snapshot(db: Session, user: User, month: str) -> None:
-    from ..assets.service import wealth
+def _save_net_worth_snapshot(db: Session, user: User, month: str) -> dict:
+    from ..assets.service import wealth_snapshot
     from ..models import NetWorthSnapshot
+    from ..core.financial_lock import lock_current_user
 
-    wealth_data = wealth(db, user)
-    snapshot = db.query(NetWorthSnapshot).filter(
-        NetWorthSnapshot.user_id == user.id,
-        NetWorthSnapshot.month == month,
-    ).first()
-    if snapshot:
-        return
-    db.add(NetWorthSnapshot(
-        user_id=user.id,
-        month=month,
-        total_assets_cny=wealth_data["total_assets"],
-        total_liabilities_cny=wealth_data["total_liabilities"],
-        net_worth_cny=wealth_data["net_worth"],
-        pending_conversion_count=wealth_data["pending_conversion_count"],
-    ))
+    end = _month_bounds(month)[1]
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    state = wealth_snapshot(db, user, as_of_date=end, include_adjustments=True)
+    snapshot = db.query(NetWorthSnapshot).filter_by(user_id=user.id, month=month).populate_existing().first()
+    values = dict(total_assets_cny=state["total_assets"], total_liabilities_cny=state["total_liabilities"],
+                  net_worth_cny=state["net_worth"], pending_conversion_count=state["pending_conversion_count"])
+    if snapshot is None:
+        snapshot = NetWorthSnapshot(user_id=user.id, month=month, **values)
+        db.add(snapshot)
+    else:
+        for key, value in values.items():
+            setattr(snapshot, key, value)
+    return json_metrics(dict(as_of_date=end, valuation_mode="frozen_cny_book_value",
+                             excludes_later_adjustments=True, **values))
 
 
 async def scheduled_monthly_report(
@@ -252,7 +262,7 @@ async def scheduled_monthly_report(
     *,
     model_factory: Callable[[], ModelAdapter] | None = None,
 ) -> None:
-    """Scheduler-facing operation; it preserves the existing outer transaction."""
+    """Scheduler operation; the caller commits each user before the next model call."""
     from ..models import AgentLog, MonthlyReport
 
     metrics = stats(db, user, month=month)
@@ -284,6 +294,8 @@ async def scheduled_monthly_report(
                 status="unavailable",
                 result_summary="Provider unavailable; sensitive error details omitted",
             ))
+    _save_net_worth_snapshot(db, user, month)
+    existing = db.query(MonthlyReport).filter_by(user_id=user.id, month=month).populate_existing().first()
     stored_metrics = json_metrics(metrics)
     if existing:
         existing.metrics = stored_metrics
@@ -297,4 +309,3 @@ async def scheduled_monthly_report(
             narrative=narrative,
             ai_status=ai_status,
         ))
-    _save_net_worth_snapshot(db, user, month)

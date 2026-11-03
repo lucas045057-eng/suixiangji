@@ -129,6 +129,10 @@ def _verify_restored(db, user, payload):
 
 
 def restore_backup(payload, db, user, *, protocol=1):
+    """Same restore_id: zero writes. New ID: reuse business rows, add one receipt.
+
+    Mutable-row versions can advance for a new ID; accepted adjustments stay immutable.
+    """
     from .service import (_validate_payload_limits, _content_hash, _precheck_records,
                           _apply_categories, _apply_budgets, _apply_profile, _invalidate_derived_data)
     _validate_payload_limits(payload)

@@ -11,7 +11,7 @@ from ..services.exchange import fetch_frankfurter_rate
 from .domain import date_value, json_value, money, cny_value
 from .schemas import AccountIn, AccountPatch, RateIn
 from .names import normalize_account_name
-from .replay import account_balance
+from .replay import replay, decimal_text
 from ..core.financial_lock import lock_current_user
 
 
@@ -172,46 +172,72 @@ def delete_account(db: Session, user: User, account_id: str) -> dict:
     }
 
 
-def wealth(db: Session, user: User, *, as_of_date: date | None = None, include_adjustments: bool = False) -> dict:
-    accounts = (
-        db.query(Account)
-        .filter(Account.user_id == user.id, Account.deleted_at.is_(None), Account.archived_at.is_(None))
-        .all()
-    )
+def wealth_snapshot(db: Session, user: User, *, as_of_date: date | None = None,
+                    include_adjustments: bool = True) -> dict:
+    """Raw Decimal snapshot shared by the API and month-end reports."""
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0, shared=True)
+    accounts = db.query(Account).filter(Account.user_id == user.id).populate_existing().all()
+    def active_at(stamp):
+        if stamp is None:
+            return True
+        if as_of_date is None:
+            return False
+        day = stamp.astimezone(timezone.utc).date() if stamp.tzinfo is not None else stamp.date()
+        return day > as_of_date
+    accounts = [a for a in accounts if active_at(a.deleted_at) and active_at(a.archived_at)]
     query = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.deleted_at.is_(None))
     if as_of_date is not None:
         query = query.filter(Transaction.occurred_on <= as_of_date)
     if not include_adjustments:
         query = query.filter(Transaction.kind != "adjustment")
-    rows = query.all()
+    rows = query.populate_existing().all()
     details = []
-    total_assets = Decimal("0")
-    total_liabilities = Decimal("0")
-    pending = 0
+    assets = liabilities = Decimal(0)
+    asset_pending = liability_pending = 0
     for account in accounts:
-        balance, account_pending_count = account_balance(account, rows, include_adjustments=include_adjustments)
-        account_pending = account_pending_count > 0
-        pending += account_pending_count
-        detail = {
-            **account_json(account),
-            "cny_balance": money(balance),
-            "conversion_status": "pending" if account_pending else "ready",
-        }
-        details.append(detail)
+        state = replay(account, rows, as_of_date=as_of_date, include_adjustments=include_adjustments,
+                       resolve_stored_rates=include_adjustments)
+        details.append((account, state))
         if account.kind == "liability":
-            total_liabilities += balance
+            liabilities += state.balance
+            liability_pending += state.pending
         else:
-            total_assets += balance
-    return json_value(
-        {
-            "total_assets": money(total_assets),
-            "total_liabilities": money(total_liabilities),
-            "net_worth": money(total_assets - total_liabilities),
-            "pending_conversion_count": pending,
-            "accounts": details,
-            "server_version": user.sync_version,
-        }
-    )
+            assets += state.balance
+            asset_pending += state.pending
+    pending = asset_pending + liability_pending
+    return dict(total_assets=None if asset_pending else assets,
+        total_liabilities=None if liability_pending else liabilities,
+        net_worth=None if pending else assets-liabilities,
+        known_total_assets=assets, known_total_liabilities=liabilities,
+        pending_conversion_count=pending, details=details, server_version=user.sync_version)
+
+
+def wealth(db: Session, user: User, *, as_of_date: date | None = None, include_adjustments: bool = False) -> dict:
+    state = wealth_snapshot(db, user, as_of_date=as_of_date, include_adjustments=include_adjustments)
+    details = []
+    for account, balance in state["details"]:
+        detail = {**account_json(account),
+            "cny_balance": None if include_adjustments and balance.pending else money(balance.balance),
+            "conversion_status": "pending" if balance.pending else "ready"}
+        if include_adjustments:
+            detail.update(cny_balance_exact=None if balance.pending else decimal_text(balance.balance),
+                          known_cny_balance=money(balance.balance), pending_conversion_count=balance.pending)
+        details.append(detail)
+    if include_adjustments:
+        result = {key: money(state[key]) if state[key] is not None else None
+                  for key in ("total_assets", "total_liabilities", "net_worth")}
+        result.update(as_of_date=as_of_date, excludes_later_adjustments=as_of_date is not None,
+            valuation_mode="frozen_cny_book_value",
+            known_total_assets=money(state["known_total_assets"]),
+            known_total_liabilities=money(state["known_total_liabilities"]))
+    else:
+        # Preserve the legacy response shape and its partial-total convention.
+        result = dict(total_assets=money(state["known_total_assets"]),
+            total_liabilities=money(state["known_total_liabilities"]),
+            net_worth=money(state["known_total_assets"]-state["known_total_liabilities"]))
+    result.update(pending_conversion_count=state["pending_conversion_count"], accounts=details,
+                  server_version=state["server_version"])
+    return json_value(result)
 
 
 async def exchange_rate(
