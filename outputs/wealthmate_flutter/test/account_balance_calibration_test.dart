@@ -59,6 +59,31 @@ http.Response _json(int status, Map<String, Object?> body) => http.Response(
       headers: const {'content-type': 'application/json; charset=utf-8'},
     );
 
+/// Issues a deterministic basis token for the requested account/date.
+http.Response _basisResponse(
+  http.Request request, {
+  String balanceCny = '80.000000',
+  String token = 'b1.test.payload',
+  String? expiresAt = '2030-01-01T00:00:00+00:00',
+}) {
+  final accountId = request.url.pathSegments[2];
+  final date = request.url.queryParameters['effective_on'] ?? '2026-09-15';
+  return _json(200, {
+    'account_id': accountId,
+    'effective_on': date,
+    'balance_cny': balanceCny,
+    'basis_version': 1,
+    'basis_token': token,
+    'ttl_seconds': 600,
+    'expires_at': expiresAt ??
+        DateTime.now()
+            .toUtc()
+            .add(const Duration(minutes: 10))
+            .toIso8601String(),
+    'server_version': 9,
+  });
+}
+
 /// Echoes an authoritative adjustment shaped like `transaction_json`.
 http.Response _adjustmentResponse(
   http.Request request,
@@ -115,7 +140,8 @@ const _expense = FinanceTransaction(
 );
 
 void main() {
-  test('calibration draft allows zero and negative targets and rejects bad input',
+  test(
+      'calibration draft allows zero and negative targets and rejects bad input',
       () {
     const account = Account(
       id: 'usd',
@@ -171,11 +197,12 @@ void main() {
     expect(restoredDraft.expectedCurrentCny, 80.0);
     expect(restoredDraft.effectiveOn, '2026-11-02');
     expect(restoredDraft.createdAt, '2026-11-03T09:30:00.000');
-    expect(state.copyWith(calibrationDrafts: const []).calibrationDrafts,
-        isEmpty);
+    expect(
+        state.copyWith(calibrationDrafts: const []).calibrationDrafts, isEmpty);
   });
 
-  test('offline calibration keeps an unsubmitted draft and never changes balance',
+  test(
+      'offline calibration keeps an unsubmitted draft and never changes balance',
       () async {
     final store = _store(const FinanceState(
       currentMonth: '2026-09',
@@ -212,7 +239,8 @@ void main() {
     expect(store.repository.queue.pending(), isEmpty);
   });
 
-  test('calibration posts the v2 command and adopts the authoritative adjustment',
+  test(
+      'calibration posts the v2 command and adopts the authoritative adjustment',
       () async {
     final requests = <http.Request>[];
     final store = _onlineStore(
@@ -223,6 +251,7 @@ void main() {
       ),
       MockClient((request) async {
         requests.add(request);
+        if (request.method == 'GET') return _basisResponse(request);
         return _adjustmentResponse(request, '45.000000');
       }),
     );
@@ -230,7 +259,12 @@ void main() {
     await store.calibrateBalance(store.accounts.single, 125,
         effectiveOn: '2026-09-15');
 
-    final request = requests.single;
+    expect(requests, hasLength(2));
+    final basisRequest = requests[0];
+    expect(basisRequest.method, 'GET');
+    expect(basisRequest.url.path, '/assets/accounts/cny/balance-basis');
+    expect(basisRequest.url.queryParameters['effective_on'], '2026-09-15');
+    final request = requests[1];
     expect(request.method, 'POST');
     expect(request.url.path, '/assets/accounts/cny/calibration');
     // The protocol header is added once, in the shared transport.
@@ -238,12 +272,14 @@ void main() {
     final body = jsonDecode(request.body) as Map<String, Object?>;
     expect(body['target_cny'], '125.00');
     expect(body['effective_on'], '2026-09-15');
-    expect(body['expected_current_cny'], '80.000000');
+    expect(body['basis_token'], 'b1.test.payload');
+    // With a token the numeric fallback is not sent at all.
+    expect(body.containsKey('expected_current_cny'), isFalse);
     expect(body['client_op_id'], isNotEmpty);
     expect(body['adjustment_id'], isNotEmpty);
 
-    final adjustment = store.state.transactions.firstWhere(
-        (item) => item.type == TransactionType.adjustment);
+    final adjustment = store.state.transactions
+        .firstWhere((item) => item.type == TransactionType.adjustment);
     expect(adjustment.amount, 45);
     expect(adjustment.serverVersion, 5);
     expect(adjustment.adjustmentMeta?['reason'], 'balance_calibration');
@@ -254,7 +290,8 @@ void main() {
     expect(store.message, '余额校准已提交');
   });
 
-  test('409 balance_changed rolls the optimistic row back and asks for a recheck',
+  test(
+      '409 balance_changed rolls the optimistic row back and asks for a recheck',
       () async {
     final requests = <http.Request>[];
     final store = _onlineStore(
@@ -264,6 +301,7 @@ void main() {
       ),
       MockClient((request) async {
         requests.add(request);
+        if (request.method == 'GET') return _basisResponse(request);
         return _json(409, {
           'code': 'balance_changed',
           'detail': 'Account balance changed; reload before calibrating',
@@ -274,11 +312,13 @@ void main() {
     await store.calibrateBalance(store.accounts.single, 125,
         effectiveOn: '2026-09-15');
 
-    expect(requests, hasLength(1));
+    expect(requests, hasLength(2));
+    expect(requests.first.method, 'GET');
+    expect(requests.last.method, 'POST');
     expect(store.state.transactions.single.id, 'existing');
     expect(store.accountBalances.single.balance, 80);
     expect(store.calibrationDraftFor('cny'), isNull);
-    expect(store.message, '账目已变化，请重新核对校准');
+    expect(store.message, '账目已变化，请刷新账目后重新核对校准');
     expect(store.repository.queue.pending(), isEmpty);
   });
 
@@ -356,6 +396,10 @@ void main() {
     final store = _onlineStore(
       const FinanceState(accounts: [usdAccount], transactions: [coffee]),
       MockClient((request) async {
+        // A pre-basis server: the legacy numeric fallback stays usable.
+        if (request.method == 'GET') {
+          return _json(404, {'detail': 'Not Found'});
+        }
         final body = jsonDecode(request.body) as Map<String, Object?>;
         expect(body['expected_current_cny'], '630.000000');
         return _adjustmentResponse(request, '20.000000');

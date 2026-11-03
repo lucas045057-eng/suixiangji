@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import '../../../data/api_client.dart';
+import '../../../domain/cny_amount.dart';
 import '../../../domain/finance_rules.dart';
 import '../../../domain/models.dart';
 import '../data/assets_repository.dart';
@@ -20,6 +21,17 @@ class AssetStore extends ChangeNotifier {
   void Function(FinanceState state)? onStateChanged;
   void Function(String reason)? onLocalMutation;
   void Function(String? message)? onMessageChanged;
+
+  /// Optional pre-flight sync. The calibration contract expects the account to
+  /// be current before a basis token is issued; FinanceStore wires its sync
+  /// pipeline here so the feature itself stays independent of it.
+  Future<void> Function()? beforeCalibration;
+
+  WealthView? _wealthView;
+
+  /// Latest remote V2 wealth snapshot, when explicitly loaded. Local metrics
+  /// remain the default current view.
+  WealthView? get wealthView => _wealthView;
 
   FinanceState get state => _state;
   List<Account> get accounts => List.unmodifiable(_state.accounts);
@@ -54,6 +66,27 @@ class AssetStore extends ChangeNotifier {
     if (notify) {
       onStateChanged?.call(state);
       notifyListeners();
+    }
+  }
+
+  /// Loads the V2 `/wealth` view, optionally as of an explicit business date.
+  ///
+  /// Totals stay null when any entry is pending conversion; the UI must show
+  /// "待换算" instead of treating the missing total as zero.
+  Future<void> loadWealth({String? asOfDate}) async {
+    if (repository.remote == null) {
+      _message = '当前未配置同步服务';
+      _notifyMessageChanged();
+      return;
+    }
+    try {
+      final view = await repository.fetchWealthSnapshot(asOfDate: asOfDate);
+      _wealthView = view;
+      _message = view.hasPending ? '账面净值存在待换算账目' : null;
+      _notifyChanged();
+    } on ApiFailure catch (failure) {
+      _message = failure.detail ?? failure.message;
+      _notifyMessageChanged();
     }
   }
 
@@ -162,10 +195,11 @@ class AssetStore extends ChangeNotifier {
 
   /// Calibrates the account to [targetCny] with an immutable adjustment.
   ///
-  /// The client replays the balance as of the effective date, posts the
-  /// dedicated calibration command, and adopts the authoritative row. A
-  /// rejected command never leaves the optimistic row behind; when the device
-  /// is offline the target is kept as an explicitly unsubmitted draft.
+  /// Online submissions first fetch a server-signed basis token and send it
+  /// with the original target/date; the client never uses its own double
+  /// replay as the authoritative basis. A retry of an unresolved submission
+  /// reuses the persisted token and `client_op_id` verbatim, even when the
+  /// token looks locally expired — only the server may declare it expired.
   Future<void> calibrateBalance(Account account, double targetCny,
       {String? effectiveOn}) async {
     final current =
@@ -185,37 +219,135 @@ class AssetStore extends ChangeNotifier {
       _notifyMessageChanged();
       return;
     }
-    final replay =
-        AssetRules.replayBalance(_state, current, asOfDate: effective);
-    if (replay.pending > 0) {
+
+    final existing = _state.calibrationDraftFor(current.id);
+    final retryExisting = existing != null &&
+        existing.basisToken != null &&
+        existing.clientOpId != null &&
+        existing.adjustmentId != null &&
+        existing.effectiveOn == effective &&
+        (existing.targetCny - draft.targetCny).abs() < 0.005;
+
+    var replay = AssetRules.replayBalance(_state, current, asOfDate: effective);
+
+    if (repository.remote == null) {
+      if (!retryExisting) {
+        if (replay.pending > 0) {
+          _message = '账户存在待换算账目，请先补充汇率';
+          _notifyMessageChanged();
+          return;
+        }
+        if (AssetRules.round6(draft.targetCny - replay.rawCny) == 0) {
+          _message = '余额已一致，无需校准';
+          _notifyMessageChanged();
+          return;
+        }
+      }
+      // Keep the token and operation identity untouched while offline.
+      await _saveUnsubmittedDraft(retryExisting
+          ? existing
+          : draft.copyWith(expectedCurrentCny: replay.rawCny));
+      return;
+    }
+
+    if (retryExisting) {
+      await _submitCalibration(current, existing);
+      return;
+    }
+
+    // Pull the account/ledger up to date before the server signs a basis.
+    try {
+      await beforeCalibration?.call();
+    } catch (_) {
+      // A failed pre-flight sync is not fatal: the basis request below will
+      // either succeed or surface the same outage.
+    }
+    // The pre-flight sync may have replaced the account row and ledger.
+    final syncedAccount =
+        _state.accounts.where((item) => item.id == current.id).firstOrNull ??
+            current;
+    replay =
+        AssetRules.replayBalance(_state, syncedAccount, asOfDate: effective);
+
+    BalanceBasis? basis;
+    try {
+      basis = await repository.fetchBalanceBasis(
+          accountId: current.id, effectiveOn: effective);
+    } on ApiFailure catch (failure) {
+      if (await _handleBasisFetchFailure(failure, draft, replay)) return;
+      // A server that predates the basis endpoint (404) keeps the legacy
+      // numeric path; anything else unrecognised is also treated as legacy
+      // so a transient contract mismatch cannot block calibration entirely.
+      basis = null;
+    }
+
+    if (basis == null && replay.pending > 0) {
       _message = '账户存在待换算账目，请先补充汇率';
       _notifyMessageChanged();
       return;
     }
-    final expected = replay.rawCny;
-    final delta = AssetRules.round6(draft.targetCny - expected);
-    if (delta == 0) {
+
+    final expectedText = basis?.balanceCny ?? replay.rawCny.toStringAsFixed(6);
+    final expectedExact = CnyAmount.tryParse(expectedText);
+    if (expectedExact == null) {
+      _message = '校准基准数据无效，请稍后重试';
+      _notifyMessageChanged();
+      return;
+    }
+    final targetExact = CnyAmount.fromDouble(draft.targetCny);
+    if ((targetExact - expectedExact).isZero) {
       _message = '余额已一致，无需校准';
       _notifyMessageChanged();
       return;
     }
-    final pendingDraft = draft.copyWith(expectedCurrentCny: expected);
-    if (repository.remote == null) {
-      await _saveUnsubmittedDraft(pendingDraft);
-      return;
-    }
 
     final stamp = DateTime.now().microsecondsSinceEpoch;
-    final clientOpId = 'cal-$stamp';
-    final adjustmentId = 'adj-$stamp';
-    final target = draft.targetCny.toStringAsFixed(2);
+    final submission = CalibrationDraft(
+      accountId: current.id,
+      targetCny: draft.targetCny,
+      effectiveOn: effective,
+      createdAt: draft.createdAt,
+      expectedCurrentCny: expectedExact.asDouble,
+      basisToken: basis?.basisToken,
+      basisExpiresAt: basis?.expiresAt,
+      basisBalanceCny: expectedText,
+      clientOpId: 'cal-$stamp',
+      adjustmentId: 'adj-$stamp',
+    );
+    await _submitCalibration(syncedAccount, submission);
+  }
+
+  /// Posts a persisted calibration draft (fresh or retry) and adopts the
+  /// authoritative adjustment. The optimistic row always uses the exact
+  /// six-decimal basis, never a locally replayed double.
+  Future<void> _submitCalibration(
+      Account account, CalibrationDraft submission) async {
+    final basisExact = CnyAmount.tryParse(submission.basisBalanceCny ?? '') ??
+        (submission.expectedCurrentCny == null
+            ? null
+            : CnyAmount.fromDouble(submission.expectedCurrentCny!));
+    if (basisExact == null) {
+      _message = '校准基准数据无效，请稍后重试';
+      _notifyMessageChanged();
+      return;
+    }
+    final targetExact = CnyAmount.fromDouble(submission.targetCny);
+    final delta = (targetExact - basisExact).asDouble;
+    final basisText = basisExact.toFixed6();
+    final effective = submission.effectiveOn;
+    final adjustmentId = submission.adjustmentId ??
+        'adj-${DateTime.now().microsecondsSinceEpoch}';
+    final clientOpId =
+        submission.clientOpId ?? 'cal-${DateTime.now().microsecondsSinceEpoch}';
+    final target = submission.targetCny.toStringAsFixed(2);
+
     final optimistic = FinanceTransaction(
       id: adjustmentId,
       date: effective,
       occurredAt: '${effective}T00:00:00',
       type: TransactionType.adjustment,
       amount: delta,
-      accountId: current.id,
+      accountId: account.id,
       currency: 'CNY',
       cnyAmount: delta,
       exchangeRate: 1,
@@ -223,59 +355,138 @@ class AssetStore extends ChangeNotifier {
       adjustmentMeta: {
         'reason': 'balance_calibration',
         'target_cny': target,
-        'basis_balance_cny': expected.toStringAsFixed(6),
+        'basis_balance_cny': basisText,
         'effective_on': effective,
       },
       clientOpId: clientOpId,
     );
-    if (!await _apply((baseState) => repository.saveLocalAdjustment(optimistic,
-        baseState: baseState))) {
+    if (!await _apply((baseState) =>
+        repository.saveLocalAdjustment(optimistic, baseState: baseState))) {
       return;
     }
     try {
       final authoritative = await repository.remote!.calibrate(
-        accountId: current.id,
+        accountId: account.id,
         clientOpId: clientOpId,
         adjustmentId: adjustmentId,
         targetCny: target,
         effectiveOn: effective,
-        expectedCurrentCny: expected.toStringAsFixed(6),
+        basisToken: submission.basisToken,
+        expectedCurrentCny: submission.basisToken == null ? basisText : null,
       );
       if (!await _apply((baseState) => repository.adoptAdjustment(
             authoritative,
-            accountId: current.id,
+            accountId: account.id,
             optimisticAdjustmentId: adjustmentId,
             optimisticClientOpId: clientOpId,
             baseState: baseState,
           ))) {
         return;
       }
+      _wealthView = null;
       _message = '余额校准已提交';
       _notifyChanged();
       onLocalMutation?.call('assets.account.calibrate');
     } on ApiFailure catch (failure) {
-      if (failure.code == 'balance_changed') {
-        await _discard(adjustmentId);
-        _message = '账目已变化，请重新核对校准';
-        _notifyChanged();
-        onLocalMutation?.call('assets.account.calibrate.conflict');
-      } else if (failure.code == 'balance_unchanged') {
-        await _discard(adjustmentId);
-        _message = '余额已一致，无需校准';
-        _notifyChanged();
-      } else if (failure.code == 'conversion_pending') {
-        await _discard(adjustmentId);
-        _message = '账户存在待换算账目，请先补充汇率';
-        _notifyChanged();
-      } else if (failure.kind == ApiFailureKind.network ||
-          failure.kind == ApiFailureKind.configuration) {
-        await _saveUnsubmittedDraft(pendingDraft, removeAdjustmentId: adjustmentId);
-      } else {
-        await _discard(adjustmentId);
-        _message = _calibrationFailureMessage(failure);
-        _notifyMessageChanged();
-      }
+      await _handleSubmitFailure(failure, submission, adjustmentId);
     }
+  }
+
+  Future<void> _handleSubmitFailure(ApiFailure failure,
+      CalibrationDraft submission, String adjustmentId) async {
+    final code = failure.code;
+    if (code == 'basis_expired' || code == 'invalid_basis_token') {
+      await _discard(adjustmentId);
+      await _renewBasisAfterExpiry(submission);
+      return;
+    }
+    if (failure.kind == ApiFailureKind.network ||
+        failure.kind == ApiFailureKind.configuration) {
+      // Preserve the exact token + operation IDs for a byte-identical retry.
+      await _saveUnsubmittedDraft(submission, removeAdjustmentId: adjustmentId);
+      return;
+    }
+    await _discard(adjustmentId);
+    await _apply((baseState) => repository
+        .clearCalibrationDraft(submission.accountId, baseState: baseState));
+    _message = switch (code) {
+      'balance_changed' => '账目已变化，请刷新账目后重新核对校准',
+      'conversion_pending' => '账户存在待换算账目，请先补充汇率',
+      'basis_scope_mismatch' => '校准基准与账户或日期不匹配，请重新校准',
+      'basis_out_of_range' => '校准金额超出可记录范围',
+      'invalid_effective_on' => '校准日期无效，请选择今天或更早的日期',
+      'operation_mismatch' || 'adjustment_id_used' => '该校准操作已提交过，请重新发起校准',
+      'balance_unchanged' => '余额已一致，无需校准',
+      'account_inactive' => '账户已归档或删除，无法校准',
+      _ => failure.detail ?? failure.message,
+    };
+    _notifyChanged();
+  }
+
+  /// Refetches the basis after the server rejected an expired token. The user
+  /// must confirm the target again; nothing is resubmitted automatically.
+  Future<void> _renewBasisAfterExpiry(CalibrationDraft previous) async {
+    var next = previous.copyWith(clearBasis: true, clearOperation: true);
+    try {
+      final basis = await repository.remote!.fetchBalanceBasis(
+          accountId: previous.accountId, effectiveOn: previous.effectiveOn);
+      final stamp = DateTime.now().microsecondsSinceEpoch;
+      next = next.copyWith(
+        basisToken: basis.basisToken,
+        basisExpiresAt: basis.expiresAt,
+        basisBalanceCny: basis.balanceCny,
+        expectedCurrentCny: CnyAmount.tryParse(basis.balanceCny)?.asDouble,
+        clientOpId: 'cal-$stamp',
+        adjustmentId: 'adj-$stamp',
+      );
+      _message = '校准基准已更新，请核对金额后重新提交';
+    } catch (_) {
+      _message = '校准基准已失效，请重新校准';
+    }
+    await _apply((baseState) =>
+        repository.discardAdjustment('', draft: next, baseState: baseState));
+    _notifyChanged();
+  }
+
+  Future<bool> _handleBasisFetchFailure(ApiFailure failure,
+      CalibrationDraft draft, ({double rawCny, int pending}) replay) async {
+    if (failure.code == 'conversion_pending') {
+      _message = '账户存在待换算账目，请先补充汇率';
+      _notifyMessageChanged();
+      return true;
+    }
+    if (failure.code == 'invalid_effective_on') {
+      _message = '校准日期无效，请选择今天或更早的日期';
+      _notifyMessageChanged();
+      return true;
+    }
+    if (failure.code == 'account_inactive') {
+      _message = '账户已归档或删除，无法校准';
+      _notifyMessageChanged();
+      return true;
+    }
+    if (failure.code == 'basis_out_of_range') {
+      _message = '校准金额超出可记录范围';
+      _notifyMessageChanged();
+      return true;
+    }
+    if (failure.kind == ApiFailureKind.network ||
+        failure.kind == ApiFailureKind.configuration) {
+      if (replay.pending > 0) {
+        _message = '账户存在待换算账目，请先补充汇率';
+        _notifyMessageChanged();
+        return true;
+      }
+      final expected = replay.rawCny;
+      if (AssetRules.round6(draft.targetCny - expected) == 0) {
+        _message = '余额已一致，无需校准';
+        _notifyMessageChanged();
+        return true;
+      }
+      await _saveUnsubmittedDraft(draft.copyWith(expectedCurrentCny: expected));
+      return true;
+    }
+    return false;
   }
 
   /// Reverses an original calibration with a new opposite adjustment.
@@ -293,7 +504,8 @@ class AssetStore extends ChangeNotifier {
     }
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final today = _dayKey(DateTime.now());
-    final effective = original.date.compareTo(today) > 0 ? original.date : today;
+    final effective =
+        original.date.compareTo(today) > 0 ? original.date : today;
     try {
       final reversal = await repository.remote!.reverseCalibration(
         accountId: accountId,
@@ -340,16 +552,8 @@ class AssetStore extends ChangeNotifier {
   }
 
   Future<void> _discard(String adjustmentId) async {
-    await _apply((baseState) => repository.discardAdjustment(adjustmentId,
-        baseState: baseState));
-  }
-
-  String _calibrationFailureMessage(ApiFailure failure) {
-    return switch (failure.code) {
-      'account_inactive' => '账户已归档或删除，无法校准',
-      'operation_mismatch' || 'adjustment_id_used' => '校准操作重复，请重试',
-      _ => failure.detail ?? failure.message,
-    };
+    await _apply((baseState) =>
+        repository.discardAdjustment(adjustmentId, baseState: baseState));
   }
 
   Future<void> setDefaultAccount(String accountId) async {

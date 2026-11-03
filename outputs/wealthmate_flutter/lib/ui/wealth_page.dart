@@ -61,6 +61,10 @@ class WealthPage extends StatelessWidget {
                                         _summary('负债', metrics.liabilityTotal)
                                       ]),
                                     ]))),
+                        if (store.wealthView != null) ...[
+                          const SizedBox(height: 16),
+                          _remoteSnapshot(store.wealthView!),
+                        ],
                         const SizedBox(height: 16),
                         _accountSection(context, '资产账户', assets,
                             positive: true),
@@ -80,9 +84,47 @@ class WealthPage extends StatelessWidget {
                                         ExchangeRatesPage(store: store))),
                             icon: const Icon(Icons.currency_exchange),
                             label: const Text('管理汇率')),
+                        const SizedBox(height: 8),
+                        OutlinedButton.icon(
+                            onPressed: store.repository.remote == null
+                                ? null
+                                : () => store.loadWealth(),
+                            icon: const Icon(Icons.cloud_download_outlined),
+                            label: const Text('获取远程净值快照')),
                       ])));
         });
   }
+
+  Widget _remoteSnapshot(WealthView view) => Card(
+      child: Padding(
+          padding: const EdgeInsets.all(20),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                view.asOfDate == null
+                    ? '远程账面快照'
+                    : '远程账面快照 · 截至 ${view.asOfDate}',
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Text(view.netWorth == null ? '待换算' : money(view.netWorth!),
+                style: const TextStyle(
+                    color: paInk,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: paTabularFigures)),
+            if (view.hasPending) ...[
+              const SizedBox(height: 6),
+              const Text('部分账目缺少汇率快照，合计暂不可用；不会按 0 计入。',
+                  style: TextStyle(color: paInkSub, fontSize: 10)),
+              for (final account
+                  in view.accounts.where((item) => item.isPending))
+                Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text('${account.name} · ${account.displayBalance}',
+                        style: const TextStyle(color: paWarn, fontSize: 11))),
+            ],
+          ])));
 
   Widget _summary(String label, double value) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -132,8 +174,7 @@ class WealthPage extends StatelessWidget {
                           const SizedBox(width: 10),
                           Expanded(
                               child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                 Text(item.account.name,
                                     maxLines: 1,
@@ -143,8 +184,7 @@ class WealthPage extends StatelessWidget {
                                         fontSize: 12.5,
                                         fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 2),
-                                Text(
-                                    '${item.account.currency} · 可编辑配置或校准余额',
+                                Text('${item.account.currency} · 可编辑配置或校准余额',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

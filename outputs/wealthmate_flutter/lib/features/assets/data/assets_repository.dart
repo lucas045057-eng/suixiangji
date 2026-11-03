@@ -1,5 +1,6 @@
 import '../../../core/database/local_state_session.dart';
 import '../../../core/network/api_session.dart';
+import '../../../core/network/api_transport.dart';
 import '../../../data/sync_queue.dart';
 import '../../../domain/models.dart';
 import '../domain/asset_rules.dart';
@@ -25,16 +26,36 @@ class AssetsRepository {
 
   Future<FinanceState?> load() => session.load();
 
+  /// Fetches the server-signed calibration basis; the store persists the
+  /// token together with the original target and effective date.
+  Future<BalanceBasis> fetchBalanceBasis({
+    required String accountId,
+    required String effectiveOn,
+  }) {
+    final source = remote;
+    if (source == null) {
+      throw const ApiFailure(ApiFailureKind.configuration, '当前未配置同步服务');
+    }
+    return source.fetchBalanceBasis(
+        accountId: accountId, effectiveOn: effectiveOn);
+  }
+
+  Future<WealthView> fetchWealthSnapshot({String? asOfDate}) {
+    final source = remote;
+    if (source == null) {
+      throw const ApiFailure(ApiFailureKind.configuration, '当前未配置同步服务');
+    }
+    return source.fetchWealthSnapshot(asOfDate: asOfDate);
+  }
+
   Future<FinanceState> saveAccount(Account account, {FinanceState? baseState}) {
     return session.write(
       (current) => AssetRules.upsertAccount(current, account),
       deriveOperations: (current, next) {
-        final previous = current.accounts
-            .where((item) => item.id == account.id)
-            .firstOrNull;
-        final saved = next.accounts
-            .where((item) => item.id == account.id)
-            .firstOrNull;
+        final previous =
+            current.accounts.where((item) => item.id == account.id).firstOrNull;
+        final saved =
+            next.accounts.where((item) => item.id == account.id).firstOrNull;
         if (saved == null) return const <SyncOperation>[];
         final timestamp = DateTime.now().toIso8601String();
         final operations = <SyncOperation>[
@@ -55,8 +76,8 @@ class AssetsRepository {
         // The local default changed (including clearing it): persist the
         // preference entity so the server owns the authoritative choice.
         if (next.defaultAccountId != current.defaultAccountId) {
-          operations.add(_preferenceOperation(
-              current, next.defaultAccountId, timestamp));
+          operations.add(
+              _preferenceOperation(current, next.defaultAccountId, timestamp));
         }
         return operations;
       },
@@ -73,8 +94,8 @@ class AssetsRepository {
           return const <SyncOperation>[];
         }
         return [
-          _preferenceOperation(current, next.defaultAccountId,
-              DateTime.now().toIso8601String()),
+          _preferenceOperation(
+              current, next.defaultAccountId, DateTime.now().toIso8601String()),
         ];
       },
       initialState: baseState,
@@ -88,8 +109,7 @@ class AssetsRepository {
       FinanceState current, String? defaultAccountId, String createdAt) {
     final preference = current.preference;
     return SyncOperation(
-      clientOpId:
-          'preference:${DateTime.now().microsecondsSinceEpoch}',
+      clientOpId: 'preference:${DateTime.now().microsecondsSinceEpoch}',
       entity: 'user_preferences',
       entityId: UserPreference.singletonId,
       type: SyncOperationType.upsert,
@@ -105,6 +125,20 @@ class AssetsRepository {
     // A draft is local intent only: no account upsert, no balance change.
     return session.write(
       (current) => AssetRules.upsertCalibrationDraft(current, draft),
+      initialState: baseState,
+    );
+  }
+
+  /// Drops an unsubmitted calibration draft for [accountId]. Used when the
+  /// server declared the submission terminal (balance changed, scope mismatch)
+  /// so a stale token cannot be retried by accident.
+  Future<FinanceState> clearCalibrationDraft(String accountId,
+      {FinanceState? baseState}) {
+    return session.write(
+      (current) => current.copyWith(
+          calibrationDrafts: current.calibrationDrafts
+              .where((draft) => draft.accountId != accountId)
+              .toList()),
       initialState: baseState,
     );
   }
@@ -150,9 +184,10 @@ class AssetsRepository {
         return AssetRules.upsertTransaction(
           current.copyWith(transactions: retained),
           adjustment,
-        ).copyWith(calibrationDrafts: current.calibrationDrafts
-            .where((draft) => draft.accountId != accountId)
-            .toList());
+        ).copyWith(
+            calibrationDrafts: current.calibrationDrafts
+                .where((draft) => draft.accountId != accountId)
+                .toList());
       },
       initialState: baseState,
     );

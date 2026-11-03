@@ -100,6 +100,10 @@ class FinanceStore extends ChangeNotifier {
       postConfirm: null,
     );
     unawaited(quickEntry.loadCloudPreference());
+    // The calibration contract wants the account current before the server
+    // signs a basis token. The feature store only knows the callback, so the
+    // orchestration stays here.
+    assets.beforeCalibration = sync;
     if (!identical(budget.repository.session, repository.session)) {
       throw ArgumentError.value(
         budgetStore,

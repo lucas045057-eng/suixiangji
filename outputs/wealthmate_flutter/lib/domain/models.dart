@@ -490,6 +490,11 @@ class CalibrationDraft {
     required this.effectiveOn,
     required this.createdAt,
     this.expectedCurrentCny,
+    this.basisToken,
+    this.basisExpiresAt,
+    this.basisBalanceCny,
+    this.clientOpId,
+    this.adjustmentId,
   });
 
   final String accountId;
@@ -500,12 +505,33 @@ class CalibrationDraft {
   /// The raw six-decimal balance the target was compared against, when known.
   final double? expectedCurrentCny;
 
+  /// Server-issued short-lived proof of the balance at [effectiveOn]. It is
+  /// persisted verbatim and re-sent unchanged on retry; the client must not
+  /// refresh it just because a local timeout elapsed.
+  final String? basisToken;
+  final String? basisExpiresAt;
+
+  /// The authoritative six-decimal balance carried by [basisToken].
+  final String? basisBalanceCny;
+
+  /// The operation identity is persisted with the token so an ambiguous
+  /// outage can be retried with the same `client_op_id`.
+  final String? clientOpId;
+  final String? adjustmentId;
+
   CalibrationDraft copyWith({
     String? accountId,
     double? targetCny,
     String? effectiveOn,
     String? createdAt,
     double? expectedCurrentCny,
+    String? basisToken,
+    String? basisExpiresAt,
+    String? basisBalanceCny,
+    String? clientOpId,
+    String? adjustmentId,
+    bool clearBasis = false,
+    bool clearOperation = false,
   }) =>
       CalibrationDraft(
         accountId: accountId ?? this.accountId,
@@ -513,6 +539,14 @@ class CalibrationDraft {
         effectiveOn: effectiveOn ?? this.effectiveOn,
         createdAt: createdAt ?? this.createdAt,
         expectedCurrentCny: expectedCurrentCny ?? this.expectedCurrentCny,
+        basisToken: clearBasis ? null : (basisToken ?? this.basisToken),
+        basisExpiresAt:
+            clearBasis ? null : (basisExpiresAt ?? this.basisExpiresAt),
+        basisBalanceCny:
+            clearBasis ? null : (basisBalanceCny ?? this.basisBalanceCny),
+        clientOpId: clearOperation ? null : (clientOpId ?? this.clientOpId),
+        adjustmentId:
+            clearOperation ? null : (adjustmentId ?? this.adjustmentId),
       );
 
   Map<String, Object?> toJson() => {
@@ -521,6 +555,11 @@ class CalibrationDraft {
         'effective_on': effectiveOn,
         'created_at': createdAt,
         'expected_current_cny': expectedCurrentCny,
+        if (basisToken != null) 'basis_token': basisToken,
+        if (basisExpiresAt != null) 'basis_expires_at': basisExpiresAt,
+        if (basisBalanceCny != null) 'basis_balance_cny': basisBalanceCny,
+        if (clientOpId != null) 'client_op_id': clientOpId,
+        if (adjustmentId != null) 'adjustment_id': adjustmentId,
       };
 
   factory CalibrationDraft.fromJson(Map<String, Object?> json) =>
@@ -530,6 +569,49 @@ class CalibrationDraft {
         effectiveOn: json['effective_on'] as String? ?? '',
         createdAt: json['created_at'] as String? ?? '',
         expectedCurrentCny: _jsonDouble(json['expected_current_cny']),
+        basisToken: json['basis_token'] as String?,
+        basisExpiresAt: json['basis_expires_at'] as String?,
+        basisBalanceCny: json['basis_balance_cny'] as String?,
+        clientOpId: json['client_op_id'] as String?,
+        adjustmentId: json['adjustment_id'] as String?,
+      );
+}
+
+/// Server-issued proof of an account's CNY book balance on a business date.
+///
+/// The token is opaque to the client: persist and resend it, never decode it
+/// or recompute the digest. `balance_cny` is the six-decimal source of truth
+/// for the calibration target comparison.
+class BalanceBasis {
+  const BalanceBasis({
+    required this.accountId,
+    required this.effectiveOn,
+    required this.balanceCny,
+    required this.basisVersion,
+    required this.basisToken,
+    required this.ttlSeconds,
+    this.expiresAt,
+    this.serverVersion,
+  });
+
+  final String accountId;
+  final String effectiveOn;
+  final String balanceCny;
+  final int basisVersion;
+  final String basisToken;
+  final int ttlSeconds;
+  final String? expiresAt;
+  final int? serverVersion;
+
+  factory BalanceBasis.fromJson(Map<String, Object?> json) => BalanceBasis(
+        accountId: json['account_id']! as String,
+        effectiveOn: json['effective_on']! as String,
+        balanceCny: json['balance_cny']?.toString() ?? '',
+        basisVersion: (json['basis_version'] as num?)?.toInt() ?? 1,
+        basisToken: json['basis_token']! as String,
+        ttlSeconds: (json['ttl_seconds'] as num?)?.toInt() ?? 600,
+        expiresAt: json['expires_at'] as String?,
+        serverVersion: (json['server_version'] as num?)?.toInt(),
       );
 }
 
@@ -1306,4 +1388,109 @@ class FinanceMetrics {
 
   /// Backward-compatible alias for consumers that used the original name.
   double get liabilities => liabilityTotal;
+}
+
+/// One account row of the V2 `/wealth` response.
+///
+/// `cny_balance` is null when any entry lacks a usable CNY snapshot. It is a
+/// genuine unknown, never zero: `displayBalance` keeps that distinction.
+class WealthAccountView {
+  const WealthAccountView({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.currency,
+    required this.cnyBalance,
+    required this.cnyBalanceExact,
+    required this.conversionStatus,
+    this.pendingConversionCount = 0,
+  });
+
+  final String id;
+  final String name;
+  final AccountType type;
+  final String currency;
+  final double? cnyBalance;
+  final String? cnyBalanceExact;
+  final String conversionStatus;
+  final int pendingConversionCount;
+
+  bool get isPending =>
+      cnyBalance == null ||
+      cnyBalanceExact == null ||
+      conversionStatus == 'pending';
+
+  String get displayBalance =>
+      isPending ? '待换算' : (cnyBalanceExact ?? cnyBalance!.toStringAsFixed(2));
+
+  factory WealthAccountView.fromJson(Map<String, Object?> json) =>
+      WealthAccountView(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        type: accountTypeFromJson(json['type'] ?? json['kind']),
+        currency: json['currency'] as String? ?? 'CNY',
+        cnyBalance: _jsonDouble(json['cny_balance']),
+        cnyBalanceExact: json['cny_balance_exact'] as String?,
+        conversionStatus: json['conversion_status'] as String? ?? 'ready',
+        pendingConversionCount:
+            (json['pending_conversion_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// V2 wealth snapshot as of an explicit business date.
+///
+/// Totals are null when any account is pending conversion. The `known_*`
+/// values are partial sums and must not be shown as if they were complete.
+class WealthView {
+  const WealthView({
+    this.asOfDate,
+    this.excludesLaterAdjustments = false,
+    this.valuationMode,
+    this.totalAssets,
+    this.totalLiabilities,
+    this.netWorth,
+    this.knownTotalAssets,
+    this.knownTotalLiabilities,
+    this.pendingConversionCount = 0,
+    this.accounts = const <WealthAccountView>[],
+    this.serverVersion = 0,
+  });
+
+  final String? asOfDate;
+  final bool excludesLaterAdjustments;
+  final String? valuationMode;
+  final double? totalAssets;
+  final double? totalLiabilities;
+  final double? netWorth;
+  final double? knownTotalAssets;
+  final double? knownTotalLiabilities;
+  final int pendingConversionCount;
+  final List<WealthAccountView> accounts;
+  final int serverVersion;
+
+  bool get hasPending => netWorth == null || pendingConversionCount > 0;
+
+  /// Totals are intentionally null while pending; callers must not coerce
+  /// them to zero.
+  String get netWorthDisplay =>
+      netWorth == null ? '待换算' : netWorth!.toStringAsFixed(2);
+
+  factory WealthView.fromJson(Map<String, Object?> json) => WealthView(
+        asOfDate: json['as_of_date'] as String?,
+        excludesLaterAdjustments: json['excludes_later_adjustments'] == true,
+        valuationMode: json['valuation_mode'] as String?,
+        totalAssets: _jsonDouble(json['total_assets']),
+        totalLiabilities: _jsonDouble(json['total_liabilities']),
+        netWorth: _jsonDouble(json['net_worth']),
+        knownTotalAssets: _jsonDouble(json['known_total_assets']),
+        knownTotalLiabilities: _jsonDouble(json['known_total_liabilities']),
+        pendingConversionCount:
+            (json['pending_conversion_count'] as num?)?.toInt() ?? 0,
+        accounts: ((json['accounts'] as List<Object?>?) ?? const [])
+            .whereType<Map>()
+            .map((item) =>
+                WealthAccountView.fromJson(item.cast<String, Object?>()))
+            .toList(growable: false),
+        serverVersion: (json['server_version'] as num?)?.toInt() ?? 0,
+      );
 }
