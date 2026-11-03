@@ -64,7 +64,8 @@ def restore_postgres_case():
                 Category,
                 User,
             ):
-                db.execute(delete(model).where(model.user_id == user_id))
+                owner_column = User.id if model is User else model.user_id
+                db.execute(delete(model).where(owner_column == user_id))
             db.commit()
         engine.dispose()
 
