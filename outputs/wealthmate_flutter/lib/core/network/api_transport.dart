@@ -3,6 +3,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../sync/sync_protocol.dart';
+
 enum ApiFailureKind {
   cancelled,
   configuration,
@@ -44,6 +46,14 @@ class ApiFailure implements Exception {
   /// upgrade prompt; null when the server did not send a usable value.
   final int? minProtocol;
 
+  /// True when this build is actually below the server's requirement. A 426
+  /// whose `min_protocol` this client already speaks must not raise a sticky
+  /// upgrade gate; it is a server-side capability problem, not an app upgrade.
+  bool get clientNeedsUpgrade =>
+      kind == ApiFailureKind.upgradeRequired &&
+      (minProtocol == null ||
+          minProtocol! > kSupportedSyncProtocolVersion);
+
   @override
   String toString() => message;
 }
@@ -82,7 +92,7 @@ class ApiTransport {
     // balances, so it must not be scattered across repositories.
     final headers = <String, String>{
       'content-type': 'application/json',
-      'X-Wealthmate-Sync-Protocol': '2',
+      'X-Wealthmate-Sync-Protocol': '$kSupportedSyncProtocolVersion',
     };
     final token = tokenProvider();
     if (includeAuth && token != null && token.isNotEmpty) {
@@ -175,9 +185,15 @@ class ApiTransport {
 
   static String? upgradeMessage(ApiFailureKind kind, int? minProtocol) {
     if (kind != ApiFailureKind.upgradeRequired) return null;
-    return minProtocol == null
-        ? '客户端协议版本过低，请升级应用后再同步'
-        : '客户端协议版本过低，请升级到支持协议 v$minProtocol 的版本后再同步';
+    if (minProtocol == null) {
+      return '客户端协议版本过低，请升级应用后再同步';
+    }
+    if (minProtocol > kSupportedSyncProtocolVersion) {
+      return '客户端需升级：服务端要求协议 v$minProtocol，'
+          '当前客户端支持至 v$kSupportedSyncProtocolVersion';
+    }
+    return '服务端要求更高协议（v$minProtocol），客户端已支持 '
+        'v$kSupportedSyncProtocolVersion；请稍后重试或联系服务提供方';
   }
 
   static ApiFailure _baseFailureForStatus(int statusCode, String path) {

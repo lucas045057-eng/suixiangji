@@ -21,6 +21,7 @@ import '../features/insights/data/insights_remote_data_source.dart';
 import '../features/insights/data/insights_repository.dart';
 import '../features/insights/state/insights_store.dart';
 import '../core/sync/sync_scheduler.dart';
+import '../core/sync/sync_protocol.dart';
 
 class FinanceStore extends ChangeNotifier {
   FinanceStore({
@@ -601,15 +602,19 @@ class FinanceStore extends ChangeNotifier {
 
   void _publishLocalMutation(String reason) {
     onLocalMutation?.call(reason);
-    if (repository.api != null && !_state.syncState.needsUpgrade) {
+    if (repository.api != null &&
+        !_state.syncState.requiresUpgrade(kSupportedSyncProtocolVersion)) {
       unawaited(requestSync(reason));
     }
   }
 
   String _syncMessage() {
-    final upgrade = _state.syncState.upgradeRequiredProtocol;
+    final upgrade = _state.syncState.requiresUpgrade(kSupportedSyncProtocolVersion)
+        ? _state.syncState.upgradeRequiredProtocol
+        : null;
     if (upgrade != null) {
-      return '客户端协议版本过低，请升级到支持协议 v$upgrade 的版本后重试';
+      return '客户端需升级：服务端要求协议 v$upgrade，'
+          '当前客户端支持至 v$kSupportedSyncProtocolVersion';
     }
     final error = _state.syncState.error;
     if (error != null) return error;
@@ -623,7 +628,9 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<bool> _runSyncPipeline() async {
-    if (_state.syncState.needsUpgrade && !_upgradeRetryRequested) {
+    if (_state.syncState
+            .requiresUpgrade(kSupportedSyncProtocolVersion) &&
+        !_upgradeRetryRequested) {
       // 426 gate: keep local data and the queue, stop automatic retries.
       _message = _syncMessage();
       notifyListeners();

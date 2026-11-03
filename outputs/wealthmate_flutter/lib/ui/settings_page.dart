@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/config/app_config.dart';
+import '../core/sync/sync_protocol.dart';
 import '../domain/models.dart';
 import '../features/app_update/state/app_update_store.dart';
 import '../features/auth/state/auth_store.dart';
@@ -94,13 +95,16 @@ class SettingsPage extends StatelessWidget {
                   Card(
                       child: Column(children: [
                     ListTile(
-                        leading: Icon(store.state.syncState.needsUpgrade
+                        leading: Icon(store.state.syncState.requiresUpgrade(
+                                kSupportedSyncProtocolVersion)
                             ? Icons.system_update_alt_rounded
                             : Icons.sync_rounded),
-                        title: Text(store.state.syncState.needsUpgrade
+                        title: Text(store.state.syncState.requiresUpgrade(
+                                kSupportedSyncProtocolVersion)
                             ? '需要升级客户端后同步'
                             : '同步状态'),
-                        subtitle: Text(store.state.syncState.needsUpgrade
+                        subtitle: Text(store.state.syncState.requiresUpgrade(
+                                kSupportedSyncProtocolVersion)
                             ? '服务器要求协议 v${store.state.syncState.upgradeRequiredProtocol} 或更高。'
                                 '本地数据与待同步队列已保留，升级应用后点右侧重试。'
                             : (store.state.syncState.error ??
@@ -108,7 +112,8 @@ class SettingsPage extends StatelessWidget {
                                     ? '未同步 · 离线演示/待配置'
                                     : '最近同步 ${store.state.syncState.lastSyncedAt}'))),
                         trailing: IconButton(
-                            tooltip: store.state.syncState.needsUpgrade
+                            tooltip: store.state.syncState.requiresUpgrade(
+                                    kSupportedSyncProtocolVersion)
                                 ? '升级后重试同步'
                                 : '立即同步',
                             onPressed: store.sync,

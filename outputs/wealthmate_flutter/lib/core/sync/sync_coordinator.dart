@@ -654,9 +654,12 @@ class SyncCoordinator {
     }
     try {
       final conflictOperations = _pendingConflictOperations(state);
-      // Upgrading from a build that never saw adjustments must re-read the
-      // whole account history: its old cursor already skipped those rows.
-      final needsFullPull = state.financialSchemaVersion < 2;
+      // Upgrading from a build that never saw adjustments (1) or category
+      // versions (2) must re-read the whole history: its old cursor already
+      // skipped those rows. Version 3 backfills Category.serverVersion so the
+      // next category edit carries a real CAS baseline instead of silently
+      // overwriting another device.
+      final needsFullPull = state.financialSchemaVersion < 3;
       final pullSince = needsFullPull
           ? 0
           : conflictOperations.isEmpty
@@ -736,7 +739,7 @@ class SyncCoordinator {
           }
         }
         return nextState.copyWith(
-            financialSchemaVersion: 2,
+            financialSchemaVersion: 3,
             syncState: SyncState(
           serverVersion: max(minimumServerVersion,
               max(base.syncState.serverVersion, remote.serverVersion)),
@@ -757,16 +760,21 @@ class SyncCoordinator {
     if (isCurrent != null && !isCurrent()) return Future.value(state);
     return session.write((current) {
       final base = _mergeCurrentWithRequested(current, state);
-      // 426 is sticky: automatic sync stays gated until an explicit retry
-      // succeeds. Other failures leave an existing gate untouched.
-      final minProtocol = failure?.kind == ApiFailureKind.upgradeRequired
-          ? (failure?.minProtocol ?? 1)
-          : null;
+      // 426 is sticky only when this build is actually below the server's
+      // requirement. A capable client keeps retrying; a stale persisted gate
+      // is cleared here instead of trapping the user forever.
+      final upgradeFailure =
+          failure?.kind == ApiFailureKind.upgradeRequired;
+      final needsClientUpgrade =
+          upgradeFailure && failure!.clientNeedsUpgrade;
       return base.copyWith(
           syncState: base.syncState.copyWith(
               isSyncing: false,
               error: message,
-              upgradeRequiredProtocol: minProtocol));
+              upgradeRequiredProtocol: needsClientUpgrade
+                  ? (failure.minProtocol ?? 1)
+                  : null,
+              clearUpgradeRequired: upgradeFailure && !needsClientUpgrade));
     }, initialState: state);
   }
 
@@ -972,8 +980,7 @@ class SyncCoordinator {
       // authoritative watermark so the serialized drain can submit it in the
       // next round instead of treating it as the same stale conflict again.
       for (final pending in pendingAtRecovery) {
-        if (!isProtected(pending.entity, pending.entityId) ||
-            pending.entity == 'categories') {
+        if (!isProtected(pending.entity, pending.entityId)) {
           continue;
         }
         final canonical = canonicalBudgets[pending.entityId];
@@ -993,7 +1000,7 @@ class SyncCoordinator {
       }
       final hasPending = queue.pending().isNotEmpty;
       return merged.copyWith(
-          financialSchemaVersion: 2,
+          financialSchemaVersion: 3,
           conflicts: remainingConflicts,
           syncState: SyncState(
             serverVersion: nextVersion,

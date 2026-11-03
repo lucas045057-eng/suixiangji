@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:wealthmate_flutter/core/database/local_state_session.dart';
 import 'package:wealthmate_flutter/core/network/api_transport.dart';
 import 'package:wealthmate_flutter/core/sync/sync_coordinator.dart';
+import 'package:wealthmate_flutter/core/sync/sync_protocol.dart';
 import 'package:wealthmate_flutter/core/sync/sync_remote_data_source.dart';
 import 'package:wealthmate_flutter/data/api_client.dart';
 import 'package:wealthmate_flutter/data/finance_repository.dart';
@@ -117,6 +118,42 @@ Account _cash({int? serverVersion, String name = '现金'}) => Account(
       type: AccountType.asset,
       serverVersion: serverVersion,
     );
+
+Map<String, Object?> _v2Success(List<SyncOperation> operations,
+    {int version = 12}) =>
+    {
+      'results': [
+        for (final operation in operations)
+          {
+            'op_id': operation.clientOpId,
+            'entity': operation.entity,
+            'id': operation.entityId,
+            'status': 'applied',
+            'fields_applied': const <Object?>[],
+            'row': operation.entity == 'user_preferences'
+                ? {
+                    'id': 'self',
+                    'default_account_id': 'cash',
+                    'server_version': version,
+                    'updated_at': '2026-11-03T07:00:00',
+                  }
+                : operation.entity == 'transactions'
+                    ? {
+                        ...operation.payload,
+                        'server_version': version,
+                      }
+                    : operation.entity == 'categories'
+                        ? {
+                            ...operation.payload,
+                            'server_version': version,
+                          }
+                        : _cash(serverVersion: version).toJson(),
+          },
+      ],
+      'rejected': const <Object?>[],
+      'conflicts': const <Object?>[],
+      'server_version': version,
+    };
 
 void main() {
   group('V2 request envelope', () {
@@ -615,6 +652,203 @@ void main() {
         'preferences': const <Object?>[],
       });
       expect(empty.preference, isNull);
+    });
+  });
+
+  group('O-2 category version', () {
+    test('editing a synced category carries base_version and its snapshot',
+        () async {
+      final session = _session();
+      final repository = LedgerRepository(session: session);
+      final state = FinanceState(
+        categories: const [Category(id: 'food', name: '餐饮', serverVersion: 9)],
+        syncState: const SyncState(serverVersion: 10),
+      );
+
+      // The caller deliberately omits the version: the repository restores it.
+      await repository.saveCategory(
+          const Category(id: 'food', name: '吃饭'), baseState: state);
+
+      final operation = session.queue.pending().single;
+      expect(operation.baseVersion, 9);
+      expect(operation.payload['server_version'], 9);
+      expect(operation.base?['name'], '餐饮');
+      expect(operation.base?['server_version'], 9);
+    });
+
+    test('a brand-new category submits without a fabricated baseline',
+        () async {
+      final session = _session();
+      final repository = LedgerRepository(session: session);
+
+      await repository.saveCategory(
+          const Category(id: 'new', name: '新分类'), baseState: const FinanceState());
+
+      final operation = session.queue.pending().single;
+      expect(operation.baseVersion, isNull);
+      expect(operation.base, isNull);
+    });
+
+    test('an upgraded install backfills category versions with one full pull',
+        () async {
+      final session = _session();
+      final state = FinanceState(
+        categories: const [Category(id: 'food', name: '餐饮')],
+        financialSchemaVersion: 2,
+        syncState: const SyncState(serverVersion: 10),
+      );
+      final api = _ScriptedApi(
+        pull: const PullResult(
+          transactions: [],
+          accounts: [],
+          categories: [Category(id: 'food', name: '餐饮', serverVersion: 9)],
+          budgets: [],
+          serverVersion: 11,
+        ),
+      );
+
+      final result = await _coordinator(session, api).pullChanges(state);
+
+      expect(api.pulledSince, 0);
+      expect(result.financialSchemaVersion, 3);
+      expect(result.categories.single.serverVersion, 9);
+    });
+
+    test('a serial second-device rename hits conflicts and adopts the row',
+        () async {      final session = _session();
+      final repository = LedgerRepository(session: session);
+      final state = FinanceState(
+        categories: const [Category(id: 'food', name: '餐饮', serverVersion: 9)],
+        syncState: const SyncState(serverVersion: 10),
+      );
+      await repository.saveCategory(
+          const Category(id: 'food', name: '吃饭', serverVersion: 9),
+          baseState: state);
+      final before = (await session.load())!;
+      final operation = session.queue.pending().single;
+
+      final api = _ScriptedApi();
+      api.onPush = (_) async => {
+            'server_version': 11,
+            'results': const <Object?>[],
+            'rejected': const <Object?>[],
+            'conflicts': [
+              {
+                'op_id': operation.clientOpId,
+                'entity': 'categories',
+                'id': 'food',
+                'reason': 'version_conflict',
+                'authoritative_row': const Category(
+                        id: 'food', name: '餐饮（新）', serverVersion: 10)
+                    .toJson(),
+              },
+            ],
+          };
+
+      final result = await _coordinator(session, api).pushPending(before);
+
+      expect(session.queue.pending(), isEmpty);
+      expect(result.categories.single.name, '餐饮（新）');
+      expect(result.categories.single.serverVersion, 10);
+      expect(result.syncIssues.single.code, 'version_conflict');
+    });
+  });
+
+  group('O-5 protocol capability', () {
+    test('a client at or above min_protocol is not gated', () async {
+      final session = _session();
+      final assets = AssetsRepository(session: session);
+      final state = FinanceState(
+        accounts: [_cash(serverVersion: 7)],
+        syncState: const SyncState(serverVersion: 10),
+      );
+      await assets.saveAccount(
+          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      final before = (await session.load())!;
+
+      final api = _ScriptedApi();
+      api.onPush = (_) async => throw const ApiFailure(
+            ApiFailureKind.upgradeRequired,
+            '服务端要求更高协议（v2），客户端已支持 v2；请稍后重试',
+            statusCode: 426,
+            code: 'upgrade_required',
+            minProtocol: 2,
+          );
+
+      final result = await _coordinator(session, api).pushPending(before);
+
+      expect(result.syncState.upgradeRequiredProtocol, isNull);
+      expect(result.syncState.needsUpgrade, isFalse);
+      expect(result.syncState.error, contains('服务端要求更高协议'));
+      expect(session.queue.pending(), hasLength(1));
+    });
+
+    test('a stale gate at or below local capability does not block', () {
+      const stale = SyncState(upgradeRequiredProtocol: 2);
+      const real = SyncState(upgradeRequiredProtocol: 3);
+      expect(stale.requiresUpgrade(kSupportedSyncProtocolVersion), isFalse);
+      expect(real.requiresUpgrade(kSupportedSyncProtocolVersion), isTrue);
+    });
+
+    test('transport wording distinguishes client upgrade from server demand',
+        () {
+      final needsUpgrade = ApiTransport.upgradeMessage(
+          ApiFailureKind.upgradeRequired, kSupportedSyncProtocolVersion + 1);
+      final serverDemand = ApiTransport.upgradeMessage(
+          ApiFailureKind.upgradeRequired, kSupportedSyncProtocolVersion);
+
+      expect(needsUpgrade, contains('客户端需升级'));
+      expect(serverDemand, contains('服务端要求更高协议'));
+      expect(serverDemand, contains('客户端已支持'));
+    });
+
+    test('a qualified 426 allows the next automatic sync to retry', () async {
+      final api = _ScriptedApi();
+      api.onPush = (operations) async {
+        if (api.pushCalls == 1) {
+          throw const ApiFailure(
+            ApiFailureKind.upgradeRequired,
+            '服务端要求更高协议（v2），客户端已支持 v2；请稍后重试',
+            statusCode: 426,
+            code: 'upgrade_required',
+            minProtocol: 2,
+          );
+        }
+        return _v2Success(operations);
+      };
+      final repository = FinanceRepository(
+        local: LocalRepository(_MemoryStore()),
+        queue: SyncQueue(),
+        api: api,
+      );
+      await repository.ensureLocalOwner('user');
+      repository.queue.enqueue(SyncOperation(
+        clientOpId: 'account-1',
+        entity: 'accounts',
+        entityId: 'cash',
+        type: SyncOperationType.upsert,
+        payload: _cash(serverVersion: 7).toJson(),
+        createdAt: '2026-11-03T07:00:00Z',
+        baseVersion: 7,
+        base: _cash(serverVersion: 7).toJson(),
+      ));
+      final store = FinanceStore(
+        repository: repository,
+        initialState: FinanceState(
+          accounts: [_cash(serverVersion: 7)],
+          syncState: const SyncState(serverVersion: 10),
+        ),
+      );
+
+      await store.sync();
+      expect(store.state.syncState.needsUpgrade, isFalse);
+      expect(api.pushCalls, 1);
+
+      // Not gated: the next local mutation wakes the pipeline automatically.
+      await store.assets.setDefaultAccount('cash');
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      expect(api.pushCalls, 2);
+      expect(store.state.syncState.needsUpgrade, isFalse);
     });
   });
 

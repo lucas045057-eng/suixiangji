@@ -273,7 +273,7 @@ void main() {
     ));
 
     expect(cursors, [0]);
-    expect(first.financialSchemaVersion, 2);
+    expect(first.financialSchemaVersion, 3);
     expect(first.syncState.serverVersion, 6);
 
     await repository.pullChanges(first);

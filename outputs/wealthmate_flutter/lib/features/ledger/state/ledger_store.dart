@@ -160,6 +160,7 @@ class LedgerStore extends ChangeNotifier {
       name: name,
       active: active,
       type: existing.type,
+      serverVersion: existing.serverVersion,
     );
     final applied = await _apply(
       (baseState) => repository.saveCategory(category, baseState: baseState),

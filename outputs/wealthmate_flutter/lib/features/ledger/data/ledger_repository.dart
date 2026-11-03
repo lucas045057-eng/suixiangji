@@ -68,11 +68,24 @@ class LedgerRepository {
   Future<FinanceState> saveCategory(Category category,
       {FinanceState? baseState}) {
     return session.write(
-      (current) => LedgerRules.upsertCategory(current, category),
-      deriveOperations: (current, _) {
+      (current) {
         final previous = current.categories
             .where((row) => row.id == category.id)
             .firstOrNull;
+        // Editing a synced category must preserve its CAS version even when
+        // the caller reconstructed the object without it.
+        final normalized = category.serverVersion == null &&
+                previous?.serverVersion != null
+            ? category.copyWith(serverVersion: previous!.serverVersion)
+            : category;
+        return LedgerRules.upsertCategory(current, normalized);
+      },
+      deriveOperations: (current, next) {
+        final previous = current.categories
+            .where((row) => row.id == category.id)
+            .firstOrNull;
+        final saved =
+            next.categories.firstWhere((row) => row.id == category.id);
         return [
           SyncOperation(
             clientOpId:
@@ -80,10 +93,9 @@ class LedgerRepository {
             entity: 'categories',
             entityId: category.id,
             type: SyncOperationType.upsert,
-            payload: category.toJson(),
+            payload: saved.toJson(),
             createdAt: DateTime.now().toIso8601String(),
-            // Categories carry no per-record version locally; never fabricate
-            // one. The field snapshot still lets a rejection roll back.
+            baseVersion: previous?.serverVersion,
             base: previous?.toJson(),
           ),
         ];

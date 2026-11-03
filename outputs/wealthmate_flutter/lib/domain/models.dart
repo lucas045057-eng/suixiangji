@@ -190,18 +190,39 @@ class Category {
       {required this.id,
       required this.name,
       this.active = true,
-      this.type = TransactionType.expense});
+      this.type = TransactionType.expense,
+      this.serverVersion});
 
   final String id;
   final String name;
   final bool active;
   final TransactionType type;
 
+  /// Server-assigned version used as the V2 compare-and-set baseline. Null for
+  /// a category that has never been accepted by the server; never fabricated.
+  final int? serverVersion;
+
+  Category copyWith({
+    String? id,
+    String? name,
+    bool? active,
+    TransactionType? type,
+    int? serverVersion,
+  }) =>
+      Category(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        active: active ?? this.active,
+        type: type ?? this.type,
+        serverVersion: serverVersion ?? this.serverVersion,
+      );
+
   Map<String, Object?> toJson() => {
         'id': id,
         'name': name,
         'active': active,
-        'type': transactionTypeToJson(type)
+        'type': transactionTypeToJson(type),
+        'server_version': serverVersion,
       };
 
   factory Category.fromJson(Map<String, Object?> json) => Category(
@@ -209,6 +230,7 @@ class Category {
         name: json['name']! as String,
         active: json['active'] as bool? ?? true,
         type: transactionTypeFromJson(json['type'] ?? json['kind']),
+        serverVersion: (json['server_version'] as num?)?.toInt(),
       );
 }
 
@@ -562,6 +584,13 @@ class SyncState {
 
   bool get needsUpgrade => upgradeRequiredProtocol != null;
 
+  /// Whether this build (at [supportedProtocol]) is still below what the
+  /// server demanded. A persisted requirement at or below the local capability
+  /// is stale and must not block a retry after an app upgrade.
+  bool requiresUpgrade(int supportedProtocol) =>
+      upgradeRequiredProtocol != null &&
+      upgradeRequiredProtocol! > supportedProtocol;
+
   SyncState copyWith(
           {int? serverVersion,
           String? lastSyncedAt,
@@ -759,7 +788,7 @@ class FinanceState {
     // Constructor-built states are current. Persisted states written before
     // 1.1.0 have no marker and read as 1, which forces one full pull so that
     // adjustments skipped by the legacy cursor are not lost.
-    this.financialSchemaVersion = 2,
+    this.financialSchemaVersion = 3,
     this.currentMonth = '',
     this.preferredCurrency = 'CNY',
     this.commonCurrencies = const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],

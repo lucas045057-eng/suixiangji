@@ -5,6 +5,7 @@ import '../features/budget/state/budget_store.dart';
 import '../features/insights/state/insights_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import '../features/quick_entry/state/quick_entry_store.dart';
+import '../core/sync/sync_protocol.dart';
 import '../domain/models.dart';
 import 'theme.dart';
 import 'widgets/draft_confirmation_card.dart';
@@ -64,7 +65,9 @@ class DashboardPage extends StatelessWidget {
   String _syncStatus(FinanceState state) {
     final sync = state.syncState;
     if (sync.isSyncing) return '同步中…';
-    if (sync.needsUpgrade) return '需要升级客户端后同步';
+    if (sync.requiresUpgrade(kSupportedSyncProtocolVersion)) {
+      return '需要升级客户端后同步';
+    }
     if (sync.error != null && sync.error != '离线演示/待配置') return '同步失败';
     if (state.conflicts.isNotEmpty) return '有冲突待处理';
     final pending = ledger.repository.queue.pending().length;
