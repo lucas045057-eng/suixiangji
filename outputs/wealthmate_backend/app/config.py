@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     demo_enabled: bool = False
     environment: Literal["development", "test", "beta", "production"] = "development"
     test_schema_init: bool = False
+    min_client_protocol: int = Field(default=1, ge=1)
     auth_login_limit: int = Field(default=20, ge=1)
     auth_register_limit: int = Field(default=10, ge=1)
     llm_provider: str = "none"

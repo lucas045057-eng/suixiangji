@@ -18,6 +18,7 @@ from ..ledger.service import _save_category
 from ..ledger.service import _save_tx
 from ..ledger.service import _tx_json
 from ..core.financial_lock import lock_current_user as _lock_current_user
+from ..core.protocol import enforce_sync_floor
 from .v1_accounts import normalize_v1_account
 from ..models import Account, Budget, Category, SyncOperation, Transaction, User
 from .conflict import has_newer_server_version
@@ -51,6 +52,7 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
         locked_user = _lock_current_user(db, user.id)
         if (locked_user.auth_version or 0) != verified_auth_version:
             raise HTTPException(status_code=401, detail='登录已失效，请重新登录')
+        enforce_sync_floor(locked_user, 1)
         for operation in ordered_operations:
             # The lookup happens after the User lock, so a retry that waited
             # behind another push observes its committed receipt/version.
@@ -63,6 +65,8 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
                 .execution_options(populate_existing=True)
             ).scalar_one_or_none()
             if previous:
+                if previous.protocol_version != 1:
+                    raise HTTPException(status_code=409, detail="Operation ID belongs to another sync protocol")
                 accepted.append(
                     {
                         "client_op_id": operation.client_op_id,
@@ -186,33 +190,36 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
     }
 
 
-def pull(since_version: int = 0, db: Session | None = None, user: User | None = None, *, include_adjustments: bool = False) -> dict:
+def pull(since_version: int = 0, db: Session | None = None, user: User | None = None, *, include_adjustments: bool = False, protocol: int = 1) -> dict:
     if db is None or user is None:
         raise TypeError("db and user are required")
+    user = _lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    enforce_sync_floor(user, protocol)
+    watermark = user.sync_version
     transactions = (
         db.query(Transaction)
-        .filter(Transaction.user_id == user.id, Transaction.server_version > since_version,
+        .filter(Transaction.user_id == user.id, Transaction.server_version > since_version, Transaction.server_version <= watermark,
                 *([] if include_adjustments else [Transaction.kind != "adjustment"]))
         .order_by(Transaction.server_version.asc())
-        .all()
+        .populate_existing().all()
     )
     accounts = (
         db.query(Account)
-        .filter(Account.user_id == user.id, Account.server_version > since_version)
+        .filter(Account.user_id == user.id, Account.server_version > since_version, Account.server_version <= watermark)
         .order_by(Account.server_version.asc())
-        .all()
+        .populate_existing().all()
     )
     categories = (
         db.query(Category)
-        .filter(Category.user_id == user.id, Category.server_version > since_version)
+        .filter(Category.user_id == user.id, Category.server_version > since_version, Category.server_version <= watermark)
         .order_by(Category.server_version.asc())
-        .all()
+        .populate_existing().all()
     )
     budgets = (
         db.query(Budget)
-        .filter(Budget.user_id == user.id, Budget.server_version > since_version)
+        .filter(Budget.user_id == user.id, Budget.server_version > since_version, Budget.server_version <= watermark)
         .order_by(Budget.server_version.asc())
-        .all()
+        .populate_existing().all()
     )
     return {
         "items": [_tx_json(row) for row in transactions],

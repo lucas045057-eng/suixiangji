@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..models import (
     Account,
+    AccountMutationAudit,
+    UserPreference,
     AgentLog,
     Budget,
     Category,
@@ -204,6 +206,8 @@ def delete_user(db: Session, user: User, payload: DeleteUserIn) -> dict:
     # FK dependents first. Public exchange rates and invitation history remain.
     try:
         for model in (
+            UserPreference,
+            AccountMutationAudit,
             Transaction,
             Budget,
             SyncOperation,

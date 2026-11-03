@@ -34,6 +34,7 @@ class User(Base):
     display_name: Mapped[str] = mapped_column(String(128), default="财富用户")
     quick_memories: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     auth_version: Mapped[int] = mapped_column(Integer, default=0)
+    min_client_protocol: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     sync_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -152,7 +153,18 @@ class SyncOperation(Base):
     entity: Mapped[str] = mapped_column(String(64))
     entity_id: Mapped[str] = mapped_column(String(64))
     server_version: Mapped[int] = mapped_column(Integer)
+    protocol_version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    default_account_id: Mapped[str | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+    server_version: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ExchangeRate(Base):

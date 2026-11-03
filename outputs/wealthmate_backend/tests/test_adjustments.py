@@ -292,7 +292,7 @@ def test_postgres_0006_rerun_preserves_storage(postgres_case):
         before=c.execute(text('SELECT id,sync_version FROM users ORDER BY id')).all()
         with Operations.context(MigrationContext.configure(c)):module.upgrade()
         assert c.execute(text('SELECT id,sync_version FROM users ORDER BY id')).all()==before
-        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0006_v110_adjustments'
+        assert c.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0007_v110_sync_v2'
 
 
 def test_reverse_retry_without_explicit_date_returns_original_after_day_change(api):
