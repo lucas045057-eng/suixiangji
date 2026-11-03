@@ -59,6 +59,11 @@ class LedgerStore extends ChangeNotifier {
   }
 
   Future<void> addTransaction(FinanceTransaction transaction) async {
+    if (transaction.isAdjustment) {
+      _message = '余额校准需通过账户校准流程提交';
+      notifyListeners();
+      return;
+    }
     final applied = await _apply(
       (baseState) =>
           repository.saveTransaction(transaction, baseState: baseState),
@@ -87,6 +92,11 @@ class LedgerStore extends ChangeNotifier {
         .where((item) => item.id == transaction.id)
         .firstOrNull;
     if (existing == null) return;
+    if (existing.isAdjustment) {
+      _message = '余额校准流水不可编辑，请撤销后重新校准';
+      notifyListeners();
+      return;
+    }
     final effective = transaction.copyWith(
       id: existing.id,
       clientOpId: _isPendingCreate(existing)
@@ -107,6 +117,11 @@ class LedgerStore extends ChangeNotifier {
         .where((item) => item.id == transactionId)
         .firstOrNull;
     if (existing == null) return;
+    if (existing.isAdjustment) {
+      _message = '余额校准流水不可删除，请使用撤销校准';
+      notifyListeners();
+      return;
+    }
     final deletedAt = DateTime.now().toIso8601String();
     final applied = await _apply(
       (baseState) => repository.deleteTransaction(

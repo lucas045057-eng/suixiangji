@@ -125,6 +125,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           ]),
           builder: (context, _) => DashboardPage(
             ledger: widget.store.ledger,
+            assets: widget.store.assets,
             insights: widget.store.insights,
             budget: widget.store.budget,
             quickEntry: widget.store.quickEntry,

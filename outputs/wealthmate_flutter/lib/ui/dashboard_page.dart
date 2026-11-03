@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../features/assets/state/asset_store.dart';
 import '../features/budget/state/budget_store.dart';
 import '../features/insights/state/insights_store.dart';
 import '../features/ledger/state/ledger_store.dart';
@@ -24,6 +25,7 @@ class DashboardPage extends StatelessWidget {
     this.budget,
     this.budgetAlerts = const [],
     this.quickEntry,
+    this.assets,
     this.draft,
     required this.isDemoMode,
     this.message,
@@ -43,6 +45,7 @@ class DashboardPage extends StatelessWidget {
   final BudgetStore? budget;
   final List<BudgetAlert> budgetAlerts;
   final QuickEntryStore? quickEntry;
+  final AssetStore? assets;
 
   /// Compatibility inputs for callers that still compose Dashboard directly
   /// through FinanceStore. The AppShell path uses [quickEntry].
@@ -341,11 +344,23 @@ class DashboardPage extends StatelessWidget {
   /// 1px 发丝线行；收入是唯一带色的金额。
   Widget _transactionRow(
       BuildContext context, FinanceTransaction transaction) {
+    final adjustment = transaction.isAdjustment;
     final income = transaction.type == TransactionType.income;
+    final positive = adjustment ? transaction.amount >= 0 : income;
+    final label = adjustment
+        ? adjustmentLabel(transaction)
+        : (transaction.note.isEmpty
+            ? categoryName(ledger.state, transaction.categoryId)
+            : transaction.note);
+    final detail = adjustment
+        ? '${adjustmentReason(transaction)} · ${accountName(ledger.state, transaction.accountId)}'
+        : '${categoryName(ledger.state, transaction.categoryId)} · ${accountName(ledger.state, transaction.accountId)}';
     return InkWell(
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) =>
-              TransactionDetailPage(ledger: ledger, transaction: transaction))),
+          builder: (_) => TransactionDetailPage(
+              ledger: ledger,
+              assets: assets,
+              transaction: transaction))),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 11),
         decoration: const BoxDecoration(
@@ -354,10 +369,7 @@ class DashboardPage extends StatelessWidget {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(
-                  transaction.note.isEmpty
-                      ? categoryName(ledger.state, transaction.categoryId)
-                      : transaction.note,
+              Text(label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -365,17 +377,21 @@ class DashboardPage extends StatelessWidget {
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
-              Text(
-                  '${categoryName(ledger.state, transaction.categoryId)} · ${accountName(ledger.state, transaction.accountId)}',
+              Text(detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: paInkFaint, fontSize: 10.5)),
             ]),
           ),
           const SizedBox(width: 10),
-          Text('${income ? '+' : '-'}${money(transaction.amount)}',
+          Text(
+              adjustment
+                  ? signedMoney(transaction.amount)
+                  : '${income ? '+' : '-'}${money(transaction.amount)}',
               style: TextStyle(
-                  color: income ? paIncome : paExpense,
+                  color: adjustment
+                      ? (positive ? paIncome : paExpense)
+                      : (income ? paIncome : paExpense),
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                   fontFeatures: paTabularFigures)),

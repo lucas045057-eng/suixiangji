@@ -71,7 +71,13 @@ class ApiTransport {
     final uri = Uri.parse(root.endsWith('/')
         ? '${root.substring(0, root.length - 1)}$path'
         : '$root$path');
-    final headers = <String, String>{'content-type': 'application/json'};
+    // Single point that opts every financial REST/sync request into the v2
+    // view. Without it the backend hides adjustment rows from pull and
+    // balances, so it must not be scattered across repositories.
+    final headers = <String, String>{
+      'content-type': 'application/json',
+      'X-Wealthmate-Sync-Protocol': '2',
+    };
     final token = tokenProvider();
     if (includeAuth && token != null && token.isNotEmpty) {
       headers['authorization'] = 'Bearer $token';

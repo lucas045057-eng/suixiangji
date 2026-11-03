@@ -334,12 +334,17 @@ class SyncCoordinator {
     }
     try {
       final conflictOperations = _pendingConflictOperations(state);
-      final pullSince = conflictOperations.isEmpty
-          ? state.syncState.serverVersion
-          : conflictOperations.any((op) => op.entity == 'budgets')
-              ? 0
-              : _minimumConflictBaseVersion(
-                  conflictOperations, state.syncState.serverVersion);
+      // Upgrading from a build that never saw adjustments must re-read the
+      // whole account history: its old cursor already skipped those rows.
+      final needsFullPull = state.financialSchemaVersion < 2;
+      final pullSince = needsFullPull
+          ? 0
+          : conflictOperations.isEmpty
+              ? state.syncState.serverVersion
+              : conflictOperations.any((op) => op.entity == 'budgets')
+                  ? 0
+                  : _minimumConflictBaseVersion(
+                      conflictOperations, state.syncState.serverVersion);
       final remote = await api!.pullChanges(pullSince);
       if (isCurrent != null && !isCurrent()) return state;
       if (conflictOperations.isNotEmpty) {
@@ -397,6 +402,7 @@ class SyncCoordinator {
           }
         }
         return nextState.copyWith(
+            financialSchemaVersion: 2,
             syncState: SyncState(
           serverVersion: max(minimumServerVersion,
               max(base.syncState.serverVersion, remote.serverVersion)),
@@ -643,6 +649,7 @@ class SyncCoordinator {
       }
       final hasPending = queue.pending().isNotEmpty;
       return merged.copyWith(
+          financialSchemaVersion: 2,
           conflicts: remainingConflicts,
           syncState: SyncState(
             serverVersion: nextVersion,

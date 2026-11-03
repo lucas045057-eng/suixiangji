@@ -12,7 +12,7 @@ enum AccountKind {
   other
 }
 
-enum TransactionType { income, expense, transfer }
+enum TransactionType { income, expense, transfer, adjustment }
 
 enum BudgetStatus { healthy, warning, over }
 
@@ -46,10 +46,19 @@ String accountKindToJson(AccountKind value) {
 }
 
 TransactionType transactionTypeFromJson(Object? value) {
+  // Recognise adjustment explicitly. Falling through to expense would turn a
+  // balance correction into a consumption record.
+  if (value == 'adjustment') return TransactionType.adjustment;
   return TransactionType.values.firstWhere(
     (item) => item.name == value,
     orElse: () => TransactionType.expense,
   );
+}
+
+double? _jsonDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value);
+  return null;
 }
 
 String transactionTypeToJson(TransactionType value) => value.name;
@@ -221,6 +230,8 @@ class FinanceTransaction {
     this.exchangeRateDate,
     this.exchangeRateSource,
     this.conversionStatus = 'ready',
+    this.adjustmentMeta,
+    this.reversesTransactionId,
     String? clientOpId,
     this.serverVersion,
     this.updatedAt,
@@ -243,10 +254,21 @@ class FinanceTransaction {
   final String? exchangeRateDate;
   final String? exchangeRateSource;
   final String conversionStatus;
+
+  /// Balance-calibration metadata. Present only on adjustment rows.
+  final Map<String, Object?>? adjustmentMeta;
+
+  /// The original calibration this row reverses, if any.
+  final String? reversesTransactionId;
   final String clientOpId;
   final int? serverVersion;
   final String? updatedAt;
   final String? deletedAt;
+
+  bool get isAdjustment => type == TransactionType.adjustment;
+
+  /// A reversal is itself an adjustment, but it may not be reversed again.
+  bool get isReversal => isAdjustment && reversesTransactionId != null;
 
   FinanceTransaction copyWith({
     String? id,
@@ -265,6 +287,8 @@ class FinanceTransaction {
     String? exchangeRateDate,
     String? exchangeRateSource,
     String? conversionStatus,
+    Map<String, Object?>? adjustmentMeta,
+    String? reversesTransactionId,
     String? clientOpId,
     int? serverVersion,
     String? updatedAt,
@@ -287,6 +311,9 @@ class FinanceTransaction {
       exchangeRateDate: exchangeRateDate ?? this.exchangeRateDate,
       exchangeRateSource: exchangeRateSource ?? this.exchangeRateSource,
       conversionStatus: conversionStatus ?? this.conversionStatus,
+      adjustmentMeta: adjustmentMeta ?? this.adjustmentMeta,
+      reversesTransactionId:
+          reversesTransactionId ?? this.reversesTransactionId,
       clientOpId: clientOpId ?? this.clientOpId,
       serverVersion: serverVersion ?? this.serverVersion,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -308,6 +335,8 @@ class FinanceTransaction {
         'exchange_rate_date': exchangeRateDate,
         'exchange_rate_source': exchangeRateSource,
         'conversion_status': conversionStatus,
+        'adjustment_meta': adjustmentMeta,
+        'reverses_transaction_id': reversesTransactionId,
         'category_id': categoryId,
         'account_id': accountId,
         'from_account_id': fromAccountId,
@@ -325,14 +354,18 @@ class FinanceTransaction {
         date: json['date']! as String,
         occurredAt: json['occurred_at'] as String?,
         type: transactionTypeFromJson(json['type']),
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        amount: _jsonDouble(json['amount']) ?? 0,
         currency: json['currency'] as String? ??
             (json['original_currency'] as String? ?? 'CNY'),
-        cnyAmount: (json['cny_amount'] as num?)?.toDouble(),
-        exchangeRate: (json['exchange_rate'] as num?)?.toDouble(),
+        cnyAmount: _jsonDouble(json['cny_amount']),
+        exchangeRate: _jsonDouble(json['exchange_rate']),
         exchangeRateDate: json['exchange_rate_date'] as String?,
         exchangeRateSource: json['exchange_rate_source'] as String?,
         conversionStatus: json['conversion_status'] as String? ?? 'ready',
+        adjustmentMeta: json['adjustment_meta'] is Map
+            ? (json['adjustment_meta']! as Map).cast<String, Object?>()
+            : null,
+        reversesTransactionId: json['reverses_transaction_id'] as String?,
         categoryId: json['category_id'] as String?,
         accountId: json['account_id'] as String?,
         fromAccountId: json['from_account_id'] as String?,
@@ -426,14 +459,15 @@ class ExchangeRateSnapshot {
 
 /// A locally saved balance-calibration target.
 ///
-/// 1.0.10 only stores the user's intent while the new calibration semantics
-/// are being prepared; it never rewrites an account's opening balance.
+/// It is only written when the adjustment could not be submitted (offline or
+/// a rejected command); a draft never changes a balance by itself.
 class CalibrationDraft {
   const CalibrationDraft({
     required this.accountId,
     required this.targetCny,
     required this.effectiveOn,
     required this.createdAt,
+    this.expectedCurrentCny,
   });
 
   final String accountId;
@@ -441,17 +475,22 @@ class CalibrationDraft {
   final String effectiveOn;
   final String createdAt;
 
+  /// The raw six-decimal balance the target was compared against, when known.
+  final double? expectedCurrentCny;
+
   CalibrationDraft copyWith({
     String? accountId,
     double? targetCny,
     String? effectiveOn,
     String? createdAt,
+    double? expectedCurrentCny,
   }) =>
       CalibrationDraft(
         accountId: accountId ?? this.accountId,
         targetCny: targetCny ?? this.targetCny,
         effectiveOn: effectiveOn ?? this.effectiveOn,
         createdAt: createdAt ?? this.createdAt,
+        expectedCurrentCny: expectedCurrentCny ?? this.expectedCurrentCny,
       );
 
   Map<String, Object?> toJson() => {
@@ -459,14 +498,16 @@ class CalibrationDraft {
         'target_cny': targetCny,
         'effective_on': effectiveOn,
         'created_at': createdAt,
+        'expected_current_cny': expectedCurrentCny,
       };
 
   factory CalibrationDraft.fromJson(Map<String, Object?> json) =>
       CalibrationDraft(
         accountId: json['account_id']! as String,
-        targetCny: (json['target_cny'] as num?)?.toDouble() ?? 0,
+        targetCny: _jsonDouble(json['target_cny']) ?? 0,
         effectiveOn: json['effective_on'] as String? ?? '',
         createdAt: json['created_at'] as String? ?? '',
+        expectedCurrentCny: _jsonDouble(json['expected_current_cny']),
       );
 }
 
@@ -571,6 +612,10 @@ class QuickMemory {
 class FinanceState {
   const FinanceState({
     this.schemaVersion = 1,
+    // Constructor-built states are current. Persisted states written before
+    // 1.1.0 have no marker and read as 1, which forces one full pull so that
+    // adjustments skipped by the legacy cursor are not lost.
+    this.financialSchemaVersion = 2,
     this.currentMonth = '',
     this.preferredCurrency = 'CNY',
     this.commonCurrencies = const ['CNY', 'HKD', 'USD', 'EUR', 'JPY', 'GBP'],
@@ -588,6 +633,7 @@ class FinanceState {
   });
 
   final int schemaVersion;
+  final int financialSchemaVersion;
   final String currentMonth;
   final String preferredCurrency;
   final List<String> commonCurrencies;
@@ -609,6 +655,7 @@ class FinanceState {
 
   FinanceState copyWith({
     int? schemaVersion,
+    int? financialSchemaVersion,
     String? currentMonth,
     String? preferredCurrency,
     List<String>? commonCurrencies,
@@ -626,6 +673,8 @@ class FinanceState {
   }) {
     return FinanceState(
       schemaVersion: schemaVersion ?? this.schemaVersion,
+      financialSchemaVersion:
+          financialSchemaVersion ?? this.financialSchemaVersion,
       currentMonth: currentMonth ?? this.currentMonth,
       preferredCurrency: preferredCurrency ?? this.preferredCurrency,
       commonCurrencies: commonCurrencies ?? this.commonCurrencies,
@@ -645,6 +694,7 @@ class FinanceState {
 
   Map<String, Object?> toJson() => {
         'schema_version': schemaVersion,
+        'financial_schema_version': financialSchemaVersion,
         'current_month': currentMonth,
         'preferred_currency': preferredCurrency,
         'common_currencies': commonCurrencies,
@@ -674,6 +724,8 @@ class FinanceState {
 
   factory FinanceState.fromJson(Map<String, Object?> json) => FinanceState(
         schemaVersion: (json['schema_version'] as num?)?.toInt() ?? 1,
+        financialSchemaVersion:
+            (json['financial_schema_version'] as num?)?.toInt() ?? 1,
         currentMonth: json['current_month'] as String? ?? '',
         preferredCurrency: json['preferred_currency'] as String? ?? 'CNY',
         commonCurrencies:

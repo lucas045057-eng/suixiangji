@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../domain/models.dart';
 import '../domain/transaction_query.dart';
 import '../state/finance_store.dart';
+import '../features/assets/state/asset_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import 'widgets/transaction_form.dart';
 import 'theme.dart';
@@ -13,11 +14,14 @@ class LedgerPage extends StatefulWidget {
   LedgerPage(
       {LedgerStore? ledger,
       FinanceStore? store,
+      AssetStore? assets,
       this.initialQuery = const TransactionQuery(),
       super.key})
-      : ledger = ledger ?? store!.ledger;
+      : ledger = ledger ?? store!.ledger,
+        assets = assets ?? store?.assets;
 
   final LedgerStore ledger;
+  final AssetStore? assets;
   final TransactionQuery initialQuery;
 
   @override
@@ -143,42 +147,64 @@ class _LedgerPageState extends State<LedgerPage> {
   }
 
   Widget _row(BuildContext context, FinanceTransaction transaction) {
+    final adjustment = transaction.isAdjustment;
     final income = transaction.type == TransactionType.income;
+    final positive = adjustment ? transaction.amount >= 0 : income;
+    final label = adjustment
+        ? adjustmentLabel(transaction)
+        : (transaction.note.isEmpty
+            ? categoryName(widget.ledger.state, transaction.categoryId)
+            : transaction.note);
+    final subtitle = adjustment
+        ? '${_whenLabel(transaction)} · ${adjustmentReason(transaction)} · ${accountName(widget.ledger.state, transaction.accountId)}'
+        : '${_whenLabel(transaction)} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}';
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(vertical: 5),
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => TransactionDetailPage(
-              ledger: widget.ledger, transaction: transaction))),
+              ledger: widget.ledger,
+              assets: widget.assets,
+              transaction: transaction))),
       leading: CircleAvatar(
           backgroundColor: paBg,
-          child: Icon(income ? Icons.south_west : Icons.restaurant_outlined,
-              color: income ? paIncome : paInkSub, size: 16)),
-      title: Text(
-          transaction.note.isEmpty
-              ? categoryName(widget.ledger.state, transaction.categoryId)
-              : transaction.note,
+          child: Icon(
+              adjustment
+                  ? Icons.tune
+                  : income
+                      ? Icons.south_west
+                      : Icons.restaurant_outlined,
+              color: adjustment
+                  ? (positive ? paIncome : paWarn)
+                  : (income ? paIncome : paInkSub),
+              size: 16)),
+      title: Text(label,
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-      subtitle: Text(
-          '${_whenLabel(transaction)} · ${categoryName(widget.ledger.state, transaction.categoryId)} · ${accountName(widget.ledger.state, transaction.accountId)} · ${transaction.currency}${transaction.conversionStatus == 'pending' ? ' · 待补充汇率' : ''}',
+      subtitle: Text(subtitle,
           style: const TextStyle(color: paInkFaint, fontSize: 10)),
       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
         Text(
-            '${income ? '+' : '-'}${money(transaction.amount)} ${transaction.currency}',
+            adjustment
+                ? signedMoney(transaction.amount)
+                : '${income ? '+' : '-'}${money(transaction.amount)}',
             style: TextStyle(
-                color: income ? paIncome : paInk,
+                color: adjustment
+                    ? (positive ? paIncome : paWarn)
+                    : (income ? paIncome : paInk),
                 fontWeight: FontWeight.w600,
                 fontSize: 12,
                 fontFeatures: paTabularFigures)),
-        PopupMenuButton<String>(
-            onSelected: (value) async {
-              if (value == 'edit') _openEdit(context, transaction);
-              if (value == 'delete')
-                await widget.ledger.deleteTransaction(transaction.id);
-            },
-            itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'edit', child: Text('编辑')),
-                  PopupMenuItem(value: 'delete', child: Text('删除'))
-                ]),
+        // Adjustments are immutable: they have no edit/delete menu.
+        if (!adjustment)
+          PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'edit') _openEdit(context, transaction);
+                if (value == 'delete')
+                  await widget.ledger.deleteTransaction(transaction.id);
+              },
+              itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'edit', child: Text('编辑')),
+                    PopupMenuItem(value: 'delete', child: Text('删除'))
+                  ]),
       ]),
     );
   }

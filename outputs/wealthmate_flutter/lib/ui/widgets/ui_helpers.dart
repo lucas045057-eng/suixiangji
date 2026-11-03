@@ -47,6 +47,26 @@ String categoryName(FinanceState state, String? id) {
       '待确认';
 }
 
+/// Display label for a balance adjustment row.
+String adjustmentLabel(FinanceTransaction transaction) {
+  if (transaction.isReversal) return '撤销校准';
+  return '余额校准';
+}
+
+/// Human reason from the adjustment metadata, falling back to the row kind.
+String adjustmentReason(FinanceTransaction transaction) {
+  final reason = transaction.adjustmentMeta?['reason'];
+  return switch (reason) {
+    'balance_calibration' => '余额校准',
+    'reversal' => '撤销校准',
+    _ => adjustmentLabel(transaction),
+  };
+}
+
+/// Signed money text with cents; adjustments keep their own sign.
+String signedMoney(double value) =>
+    '${value < 0 ? '-' : '+'}¥${value.abs().toStringAsFixed(2)}';
+
 String accountName(FinanceState state, String? id) {
   return state.accounts
           .where((item) => item.id == id)

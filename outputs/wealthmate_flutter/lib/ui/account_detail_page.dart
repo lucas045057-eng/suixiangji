@@ -138,7 +138,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
               FilledButton(onPressed: _save, child: const Text('保存账户配置')),
               const SizedBox(height: 8),
               OutlinedButton.icon(
-                  onPressed: () => _calibrateBalance(context, balance),
+                  onPressed: () => _calibrateBalance(context),
                   icon: const Icon(Icons.tune),
                   label: const Text('余额校准')),
               const SizedBox(height: 8),
@@ -195,61 +195,95 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _calibrateBalance(
-      BuildContext context, double currentBalance) async {
-    var input = '';
-    final isForeign = _account.currency.toUpperCase() != 'CNY';
-    final targetCny = await showDialog<double>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-                title: const Text('余额校准'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('当前计算余额 ${money(currentBalance)}'),
-                    const SizedBox(height: 12),
-                    TextField(
-                        autofocus: true,
-                        onChanged: (value) => input = value,
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        decoration: const InputDecoration(
-                            labelText: '人民币账面余额',
-                            hintText: '请输入实际人民币账面余额')),
-                    const SizedBox(height: 12),
-                    const Text(
-                      '新版校准语义准备中，当前保存为本地草稿，不会改动账户余额。',
-                      style: TextStyle(color: paInkFaint, fontSize: 12),
-                    ),
-                    if (isForeign) ...[
-                      const SizedBox(height: 4),
-                      const Text(
-                        '校准的是人民币账面额，不改变原币初始余额。',
-                        style: TextStyle(color: paInkFaint, fontSize: 12),
-                      ),
-                    ],
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('取消')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(
-                          dialogContext, double.tryParse(input.trim())),
-                      child: const Text('保存校准'))
-                ]));
-    if (targetCny == null || !targetCny.isFinite) {
-      if (mounted) _showMessage('请输入有效的人民币账面余额');
-      return;
-    }
+  Future<void> _calibrateBalance(BuildContext context) async {
     final currentAccount = widget.store.accounts
         .where((item) => item.id == widget.account.id)
         .firstOrNull;
     if (currentAccount == null) return;
+    final expected = widget.store.expectedBalanceFor(currentAccount);
+    final pendingDraft =
+        widget.store.calibrationDraftFor(currentAccount.id);
+    final isForeign = currentAccount.currency.toUpperCase() != 'CNY';
+    var input = '';
+    final targetCny = await showDialog<double>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+            builder: (dialogContext, setDialogState) {
+              final parsed = double.tryParse(input.trim());
+              final valid = parsed != null && parsed.isFinite;
+              final target = valid ? parsed : null;
+              final delta = target != null && expected != null
+                  ? target - expected
+                  : null;
+              return AlertDialog(
+                  title: const Text('余额校准'),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (expected == null)
+                        const Text('账户存在待换算账目，请先补充汇率后再校准。',
+                            style: TextStyle(color: paWarn, fontSize: 12))
+                      else
+                        Text('校准前账面额 ${money(expected)}'),
+                      if (pendingDraft != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                            '上次校准未提交：目标 ${money(pendingDraft.targetCny)} · ${pendingDraft.effectiveOn}',
+                            style:
+                                const TextStyle(color: paWarn, fontSize: 11)),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                          autofocus: true,
+                          enabled: expected != null,
+                          onChanged: (value) => setDialogState(() => input = value),
+                          keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true, signed: true),
+                          decoration: const InputDecoration(
+                              labelText: '校准后账面余额',
+                              hintText: '请输入实际人民币账面余额')),
+                      if (delta != null && target != null) ...[
+                        const SizedBox(height: 12),
+                        Text('差额 ${signedMoney(delta)}',
+                            style: TextStyle(
+                                color: delta == 0 ? paInkSub : paInk,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 4),
+                        Text('校准后 ${money(target)}',
+                            style: const TextStyle(
+                                color: paInk,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600)),
+                      ],
+                      const SizedBox(height: 12),
+                      const Text('校准会生成一条独立的调整流水，只改账面余额，不计入收支和预算。',
+                          style: TextStyle(color: paInkFaint, fontSize: 12)),
+                      if (isForeign) ...[
+                        const SizedBox(height: 4),
+                        const Text('校准的是人民币账面额，不改变原币初始余额。',
+                            style: TextStyle(color: paInkFaint, fontSize: 12)),
+                      ],
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        child: const Text('取消')),
+                    FilledButton(
+                        onPressed: expected == null || !valid
+                            ? null
+                            : () => Navigator.pop(dialogContext, parsed),
+                        child: const Text('提交校准'))
+                  ]);
+            }));
+    if (targetCny == null || !targetCny.isFinite) {
+      if (mounted && targetCny != null) _showMessage('请输入有效的人民币账面余额');
+      return;
+    }
     await widget.store.calibrateBalance(currentAccount, targetCny);
-    if (mounted) _showMessage(widget.store.message ?? '校准草稿已保存');
+    if (mounted) _showMessage(widget.store.message ?? '校准未完成');
   }
 
   static String _accountKindLabel(AccountKind value) => const {

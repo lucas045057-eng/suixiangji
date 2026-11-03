@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../domain/models.dart';
 import '../state/finance_store.dart';
+import '../features/assets/state/asset_store.dart';
 import '../features/ledger/state/ledger_store.dart';
 import 'theme.dart';
 import 'widgets/transaction_form.dart';
@@ -11,11 +12,14 @@ class TransactionDetailPage extends StatelessWidget {
   TransactionDetailPage(
       {LedgerStore? ledger,
       FinanceStore? store,
+      AssetStore? assets,
       required this.transaction,
       super.key})
-      : ledger = ledger ?? store!.ledger;
+      : ledger = ledger ?? store!.ledger,
+        assets = assets ?? store?.assets;
 
   final LedgerStore ledger;
+  final AssetStore? assets;
   final FinanceTransaction transaction;
 
   @override
@@ -34,6 +38,7 @@ class TransactionDetailPage extends StatelessWidget {
   }
 
   Widget _buildDetail(BuildContext context, FinanceTransaction value) {
+    if (value.isAdjustment) return _buildAdjustment(context, value);
     final isIncome = value.type == TransactionType.income;
     final currency = value.currency.toUpperCase();
     final converted = value.cnyAmount;
@@ -108,6 +113,101 @@ class TransactionDetailPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildAdjustment(BuildContext context, FinanceTransaction value) {
+    final meta = value.adjustmentMeta ?? const <String, Object?>{};
+    final positive = value.amount >= 0;
+    final reversible = !value.isReversal && assets != null;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('账目详情'),
+        actions: [
+          if (reversible)
+            IconButton(
+                onPressed: () => _reverse(context, value),
+                icon: const Icon(Icons.undo),
+                tooltip: '撤销校准'),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(22, 10, 22, 32),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(adjustmentLabel(value),
+                      style: const TextStyle(
+                          color: paInkSub,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 2)),
+                  const SizedBox(height: 8),
+                  Text(signedMoney(value.amount),
+                      style: TextStyle(
+                          color: positive ? paIncome : paExpense,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w300,
+                          letterSpacing: -.6,
+                          fontFeatures: paTabularFigures)),
+                  const SizedBox(height: 6),
+                  const Text('校准只调整账面余额，不计入收入、支出或预算。',
+                      style: TextStyle(color: paInkFaint, fontSize: 10)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Card(
+              child: Column(children: [
+            _detailRow('发生时间', _occurredLabel(value)),
+            _detailRow('账户', accountName(ledger.state, value.accountId)),
+            _detailRow('校准原因', adjustmentReason(value)),
+            if (meta['basis_balance_cny'] != null)
+              _detailRow('校准前账面额', _cnyText(meta['basis_balance_cny'])),
+            if (meta['target_cny'] != null)
+              _detailRow('目标账面额', _cnyText(meta['target_cny'])),
+            _detailRow('生效日期', (meta['effective_on'] ?? value.date).toString()),
+            if (value.isReversal)
+              _detailRow('撤销的原校准', value.reversesTransactionId ?? '-'),
+            _detailRow('备注', value.note.isEmpty ? '无备注' : value.note),
+          ])),
+        ],
+      ),
+    );
+  }
+
+  String _cnyText(Object? value) {
+    final parsed = value is num ? value.toDouble() : double.tryParse('$value');
+    return parsed == null ? '$value' : money(parsed);
+  }
+
+  Future<void> _reverse(
+      BuildContext context, FinanceTransaction value) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+                title: const Text('撤销校准'),
+                content: const Text('将生成一条相反的调整流水，原校准保持不变。'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('取消')),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('确认撤销'))
+                ]));
+    if (confirmed != true || assets == null) return;
+    await assets!.reverseAdjustment(value);
+    final message = assets!.message ?? '撤销失败';
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+    if (message == '校准已撤销') Navigator.pop(context);
   }
 
   Widget _detailRow(String label, String value) => Padding(

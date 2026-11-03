@@ -80,6 +80,14 @@ class _TransactionFormState extends State<TransactionForm> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.initial?.isAdjustment ?? false) {
+      return const SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text('余额校准流水不可编辑，请在详情页撤销后重新校准。'),
+        ),
+      );
+    }
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(

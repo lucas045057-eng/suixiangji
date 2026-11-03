@@ -51,6 +51,52 @@ class AssetsRepository {
     );
   }
 
+  /// Writes an optimistic adjustment locally. It deliberately appends no sync
+  /// operation: the backend rejects adjustments on the normal transaction path.
+  Future<FinanceState> saveLocalAdjustment(FinanceTransaction adjustment,
+      {FinanceState? baseState}) {
+    return session.write(
+      (current) => AssetRules.upsertTransaction(current, adjustment),
+      initialState: baseState,
+    );
+  }
+
+  /// Replaces the optimistic row with the authoritative adjustment and clears
+  /// the account's pending draft in the same write.
+  Future<FinanceState> adoptAdjustment(
+    FinanceTransaction adjustment, {
+    required String accountId,
+    FinanceState? baseState,
+  }) {
+    return session.write(
+      (current) => AssetRules.upsertTransaction(
+        current,
+        adjustment,
+      ).copyWith(calibrationDrafts: current.calibrationDrafts
+          .where((draft) => draft.accountId != accountId)
+          .toList()),
+      initialState: baseState,
+    );
+  }
+
+  /// Removes an unconfirmed optimistic adjustment, optionally keeping the
+  /// target as an explicitly unsubmitted draft.
+  Future<FinanceState> discardAdjustment(
+    String adjustmentId, {
+    CalibrationDraft? draft,
+    FinanceState? baseState,
+  }) {
+    return session.write(
+      (current) {
+        final next = AssetRules.removeTransaction(current, adjustmentId);
+        return draft == null
+            ? next
+            : AssetRules.upsertCalibrationDraft(next, draft);
+      },
+      initialState: baseState,
+    );
+  }
+
   Future<FinanceState> saveExchangeRate(ExchangeRateSnapshot snapshot,
       {FinanceState? baseState}) {
     final base = snapshot.baseCurrency.toUpperCase();
