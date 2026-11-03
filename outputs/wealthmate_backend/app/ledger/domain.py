@@ -44,7 +44,10 @@ def normalise_transaction_payload(
         occurred_at = f"{date_value(occurred).isoformat()}T00:00:00"
     elif isinstance(occurred_at, datetime):
         occurred_at = occurred_at.isoformat()
-    if currency == "CNY" or (cny_amount is None and exchange_rate is not None):
+    if kind == "adjustment":
+        # Signed six-place deltas must never pass through display rounding.
+        conversion_status = payload.get("conversion_status", "ready")
+    elif currency == "CNY" or (cny_amount is None and exchange_rate is not None):
         converted = calculate_cny(
             amount,
             currency,
@@ -63,6 +66,8 @@ def normalise_transaction_payload(
         "id": payload.get("id") or entity_id or str(uuid4()),
         "client_op_id": payload.get("client_op_id") or client_op_id or str(uuid4()),
         "kind": kind,
+        "adjustment_meta": payload.get("adjustment_meta"),
+        "reverses_transaction_id": payload.get("reverses_transaction_id"),
         "amount": amount,
         "currency": currency,
         "cny_amount": Decimal(str(cny_amount)) if cny_amount is not None else None,

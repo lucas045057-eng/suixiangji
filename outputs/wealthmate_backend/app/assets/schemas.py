@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class AccountIn(BaseModel):
@@ -52,3 +52,29 @@ class RateIn(BaseModel):
     rate: Decimal = Field(gt=0)
     rate_date: date
     source: str
+
+
+class CalibrationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_op_id: str = Field(min_length=1, max_length=128)
+    adjustment_id: str = Field(min_length=1, max_length=64)
+    target_cny: Decimal = Field(allow_inf_nan=False, gt=-10**14, lt=10**14, decimal_places=2)
+    expected_current_cny: Decimal = Field(allow_inf_nan=False, gt=-10**14, lt=10**14, decimal_places=6)
+    effective_on: date
+
+    @field_validator("effective_on", mode="before")
+    @classmethod
+    def business_date(cls, value):
+        if isinstance(value, str):
+            value = date.fromisoformat(value)
+        if type(value) is not date or value > date.today():
+            raise ValueError("effective_on must be a non-future business date")
+        return value
+
+
+class ReverseCalibrationIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_op_id: str = Field(min_length=1, max_length=128)
+    adjustment_id: str = Field(min_length=1, max_length=64)
+    effective_on: date = Field(default_factory=date.today)
+    _date = field_validator("effective_on", mode="before")(CalibrationIn.business_date.__func__)

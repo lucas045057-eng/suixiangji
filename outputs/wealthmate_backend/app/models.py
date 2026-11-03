@@ -111,11 +111,18 @@ class Category(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
-    __table_args__ = (UniqueConstraint("user_id", "client_op_id", name="uq_transaction_client_op"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_op_id", name="uq_transaction_client_op"),
+        UniqueConstraint("user_id", "reverses_transaction_id", name="uq_transaction_reversal"),
+        CheckConstraint("kind != 'adjustment' OR (currency = 'CNY' AND amount != 0 AND cny_amount IS NOT NULL AND amount = cny_amount AND exchange_rate IS NOT NULL AND exchange_rate = 1 AND conversion_status = 'ready' AND account_id IS NOT NULL AND category_id IS NULL AND category_name IS NULL AND from_account_id IS NULL AND to_account_id IS NULL AND deleted_at IS NULL AND adjustment_meta IS NOT NULL)", name="ck_transaction_adjustment"),
+        Index("ix_transaction_account_date", "user_id", "account_id", "occurred_on"),
+    )
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     client_op_id: Mapped[str] = mapped_column(String(128))
     kind: Mapped[str] = mapped_column(String(32))
+    adjustment_meta: Mapped[dict[str, Any] | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    reverses_transaction_id: Mapped[str | None] = mapped_column(ForeignKey("transactions.id", name="fk_transaction_reversal"), nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     currency: Mapped[str] = mapped_column(String(16), default="CNY")
     cny_amount: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)

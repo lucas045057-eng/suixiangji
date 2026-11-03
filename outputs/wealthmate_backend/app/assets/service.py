@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -11,6 +11,7 @@ from ..services.exchange import fetch_frankfurter_rate
 from .domain import date_value, json_value, money, cny_value
 from .schemas import AccountIn, AccountPatch, RateIn
 from .names import normalize_account_name
+from .replay import account_balance
 from ..core.financial_lock import lock_current_user
 
 
@@ -171,52 +172,26 @@ def delete_account(db: Session, user: User, account_id: str) -> dict:
     }
 
 
-def wealth(db: Session, user: User) -> dict:
+def wealth(db: Session, user: User, *, as_of_date: date | None = None, include_adjustments: bool = False) -> dict:
     accounts = (
         db.query(Account)
         .filter(Account.user_id == user.id, Account.deleted_at.is_(None), Account.archived_at.is_(None))
         .all()
     )
-    rows = (
-        db.query(Transaction)
-        .filter(Transaction.user_id == user.id, Transaction.deleted_at.is_(None))
-        .all()
-    )
+    query = db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.deleted_at.is_(None))
+    if as_of_date is not None:
+        query = query.filter(Transaction.occurred_on <= as_of_date)
+    if not include_adjustments:
+        query = query.filter(Transaction.kind != "adjustment")
+    rows = query.all()
     details = []
     total_assets = Decimal("0")
     total_liabilities = Decimal("0")
     pending = 0
     for account in accounts:
-        opening = (
-            account.opening_cny_amount
-            if account.currency != "CNY"
-            else account.opening_balance
-        )
-        balance = opening or Decimal("0")
-        account_pending = opening is None
-        if account_pending:
-            pending += 1
-        for row in rows:
-            value = cny_value(row.amount, row.currency, row.cny_amount)
-            if value is None:
-                if (
-                    row.account_id == account.id
-                    or row.from_account_id == account.id
-                    or row.to_account_id == account.id
-                ):
-                    pending += 1
-                    account_pending = True
-                continue
-            if row.kind == "transfer":
-                if row.from_account_id == account.id:
-                    balance -= value
-                if row.to_account_id == account.id:
-                    balance += value
-            elif row.account_id == account.id:
-                if account.kind == "liability":
-                    balance += value if row.kind == "expense" else -value
-                else:
-                    balance += value if row.kind == "income" else -value
+        balance, account_pending_count = account_balance(account, rows, include_adjustments=include_adjustments)
+        account_pending = account_pending_count > 0
+        pending += account_pending_count
         detail = {
             **account_json(account),
             "cny_balance": money(balance),

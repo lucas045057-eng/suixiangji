@@ -176,6 +176,8 @@ def export_backup(db: Session, user: User) -> dict[str, Any]:
             user.id,
             verified_auth_version=user.auth_version or 0,
         )
+        if db.query(Transaction.id).filter(Transaction.user_id == locked_user.id, Transaction.kind == "adjustment").first():
+            raise HTTPException(status_code=409, detail="Adjustment backups require backup schema v3")
         accounts = (
             db.query(Account)
             .filter(Account.user_id == locked_user.id)

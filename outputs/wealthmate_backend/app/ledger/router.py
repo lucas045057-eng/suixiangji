@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from ..core.dependencies import get_current_user
 from ..db import get_db
+from ..core.protocol import adjustment_view
 from ..models import User
 from . import service as ledger_service
 from .schemas import CategoryIn, CategoryPatch, TransactionIn
@@ -52,8 +53,9 @@ def list_transactions(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     include_deleted: bool = False,
+    include_adjustments: bool = Depends(adjustment_view),
 ) -> dict:
-    return ledger_service.list_transactions(db, user, include_deleted=include_deleted)
+    return ledger_service.list_transactions(db, user, include_deleted=include_deleted, include_adjustments=include_adjustments)
 
 
 @router.post("/transactions")

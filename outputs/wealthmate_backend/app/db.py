@@ -40,6 +40,6 @@ def ensure_schema() -> None:
     with engine.connect() as connection:
         if "alembic_version" in inspect(connection).get_table_names():
             versions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
-            if versions == ["0005_v110_account_safety"]:
+            if versions == ["0006_v110_adjustments"]:
                 return
     raise RuntimeError("Database migration required: run alembic upgrade head before starting the API")

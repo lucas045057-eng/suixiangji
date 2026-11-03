@@ -13,7 +13,7 @@ from .schemas import CategoryIn, CategoryPatch, TransactionIn
 
 
 def transaction_json(row: Transaction) -> dict:
-    return json_metrics({
+    result = {
         "id": row.id,
         "date": row.occurred_on,
         "occurred_on": row.occurred_on,
@@ -39,7 +39,13 @@ def transaction_json(row: Transaction) -> dict:
         "deleted_at": row.deleted_at,
         "server_version": row.server_version,
         "updated_at": row.updated_at,
-    })
+    }
+    result.update(adjustment_meta=row.adjustment_meta, reverses_transaction_id=row.reverses_transaction_id)
+    if row.kind == "adjustment":
+        for field in ("amount", "original_amount", "cny_amount"):
+            result[field] = format(result[field], ".6f")
+        result["exchange_rate"] = "1"
+    return json_metrics(result)
 
 
 def category_json(row: Category) -> dict:
@@ -55,6 +61,8 @@ def category_json(row: Category) -> dict:
 
 
 def attach_latest_rate(db: Session, values: dict) -> dict:
+    if (values.get("kind") or values.get("type")) == "adjustment":
+        return values
     currency = str(values.get("currency") or values.get("original_currency") or "CNY").upper()
     if currency == "CNY" or values.get("cny_amount") is not None or values.get("exchange_rate") is not None:
         return values
@@ -87,6 +95,8 @@ def save_transaction(
     row = db.get(Transaction, values["id"], populate_existing=True)
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账目不存在")
+    if (row and row.kind == "adjustment") or values["kind"] == "adjustment" or values.get("adjustment_meta") is not None or values.get("reverses_transaction_id") is not None:
+        raise HTTPException(status_code=422, detail="Use the dedicated calibration endpoints for adjustments")
     for field in ("account_id", "from_account_id", "to_account_id"):
         account_id = values.get(field)
         if account_id:
@@ -209,8 +219,10 @@ def archive_category(db: Session, user: User, category_id: str) -> dict:
     return {"id": row.id, "name": row.name, "active": row.active, "type": row.kind, "kind": row.kind}
 
 
-def list_transactions(db: Session, user: User, include_deleted: bool = False) -> dict:
+def list_transactions(db: Session, user: User, include_deleted: bool = False, *, include_adjustments: bool = False) -> dict:
     query = db.query(Transaction).filter(Transaction.user_id == user.id)
+    if not include_adjustments:
+        query = query.filter(Transaction.kind != "adjustment")
     if not include_deleted:
         query = query.filter(Transaction.deleted_at.is_(None))
     rows = query.order_by(Transaction.occurred_on.desc()).all()
@@ -224,6 +236,8 @@ def create_transaction(db: Session, user: User, payload: TransactionIn) -> dict:
         Transaction.client_op_id == payload.client_op_id,
     ).first()
     if existing:
+        if existing.kind == "adjustment":
+            raise HTTPException(status_code=409, detail="client_op_id belongs to a calibration")
         return transaction_json(existing)
     user.sync_version += 1
     values = payload.model_dump()
@@ -272,6 +286,8 @@ def delete_transaction(db: Session, user: User, transaction_id: str) -> dict:
     row = db.get(Transaction, transaction_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账目不存在")
+    if row.kind == "adjustment":
+        raise HTTPException(status_code=422, detail="Adjustments must be reversed, not deleted")
     user.sync_version += 1
     row.deleted_at = datetime.now(timezone.utc)
     row.server_version = user.sync_version

@@ -186,12 +186,13 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
     }
 
 
-def pull(since_version: int = 0, db: Session | None = None, user: User | None = None) -> dict:
+def pull(since_version: int = 0, db: Session | None = None, user: User | None = None, *, include_adjustments: bool = False) -> dict:
     if db is None or user is None:
         raise TypeError("db and user are required")
     transactions = (
         db.query(Transaction)
-        .filter(Transaction.user_id == user.id, Transaction.server_version > since_version)
+        .filter(Transaction.user_id == user.id, Transaction.server_version > since_version,
+                *([] if include_adjustments else [Transaction.kind != "adjustment"]))
         .order_by(Transaction.server_version.asc())
         .all()
     )

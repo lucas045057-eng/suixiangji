@@ -38,7 +38,7 @@ def records(db: Session, user: User) -> list[TransactionRecord]:
             row.occurred_at,
             account_names.get(row.account_id or ""),
         )
-        for row in db.query(Transaction).filter(Transaction.user_id == user.id).all()
+        for row in db.query(Transaction).filter(Transaction.user_id == user.id, Transaction.kind.in_(["income", "expense"])).all()
     ]
 
 

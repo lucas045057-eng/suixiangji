@@ -39,7 +39,7 @@ def monthly_metrics(rows: list[TransactionRecord], month: str) -> dict[str, Any]
     pending = 0
     category_totals: dict[str, Decimal] = {}
     for row in rows:
-        if row.deleted or row.occurred_on.strftime("%Y-%m") != month or row.kind == "transfer":
+        if row.deleted or row.occurred_on.strftime("%Y-%m") != month or row.kind not in {"income", "expense"}:
             continue
         value = cny_value(row.amount, row.currency, row.cny_amount)
         if value is None:
@@ -61,7 +61,7 @@ def monthly_metrics(rows: list[TransactionRecord], month: str) -> dict[str, Any]
         "savings_rate": savings_rate,
         "category_totals": {key: money(value) for key, value in category_totals.items()},
         "pending_conversion_count": pending,
-        "data_sufficient": bool(rows) and pending == 0,
+        "data_sufficient": any(not r.deleted and r.kind in {"income", "expense"} and r.occurred_on.strftime("%Y-%m") == month for r in rows) and pending == 0,
     }
 
 
@@ -107,7 +107,7 @@ def period_metrics(rows: list[TransactionRecord], period: str, start: date, end:
     expense = Decimal("0")
     index = {bucket: position for position, bucket in enumerate(buckets)}
     for row in rows:
-        if row.deleted or row.kind == "transfer":
+        if row.deleted or row.kind not in {"income", "expense"}:
             continue
         occurred = _record_datetime(row)
         if occurred.tzinfo is not None:

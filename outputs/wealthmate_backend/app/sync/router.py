@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..core.dependencies import get_current_user as _user
 from ..db import get_db
+from ..core.protocol import adjustment_view
 from ..models import User
 from . import service
 from .schemas import SyncPushIn
@@ -25,7 +26,8 @@ def sync_push(
 @router.get("/sync/pull")
 def sync_pull(
     since_version: int = 0,
+    include_adjustments: bool = Depends(adjustment_view),
     db: Session = Depends(get_db),
     user: User = Depends(_user),
 ) -> dict:
-    return service.pull(since_version, db, user)
+    return service.pull(since_version, db, user, include_adjustments=include_adjustments)
