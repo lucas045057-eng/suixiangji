@@ -5,7 +5,7 @@ from ..core.dependencies import get_current_user
 from ..db import get_db
 from ..models import User
 from . import service as assets_service
-from .schemas import AccountIn, RateIn
+from .schemas import AccountIn, AccountPatch, RateIn
 
 
 router = APIRouter()
@@ -31,7 +31,7 @@ def create_account(
 @router.patch("/accounts/{account_id}")
 def update_account(
     account_id: str,
-    payload: AccountIn,
+    payload: AccountPatch,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:

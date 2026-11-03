@@ -3,12 +3,15 @@ from decimal import Decimal
 from uuid import uuid4
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..models import Account, ExchangeRate, Transaction, User
 from ..services.exchange import fetch_frankfurter_rate
 from .domain import date_value, json_value, money, cny_value
-from .schemas import AccountIn, RateIn
+from .schemas import AccountIn, AccountPatch, RateIn
+from .names import normalize_account_name
+from ..core.financial_lock import lock_current_user
 
 
 def account_json(row: Account) -> dict:
@@ -43,90 +46,70 @@ def save_account(
     *,
     deleted: bool = False,
     server_version: int | None = None,
-) -> Account:
-    name = str(values.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=422, detail="账户名称不能为空")
-    duplicate = (
-        db.query(Account)
-        .filter(
-            Account.user_id == user.id,
-            Account.deleted_at.is_(None),
-            Account.id != values["id"],
-        )
-        .all()
-    )
-    if any(row.name.strip().casefold() == name.casefold() for row in duplicate):
-        raise HTTPException(status_code=409, detail="账户名称不能重复")
-    currency = str(values.get("currency") or "CNY").upper()
-    opening = Decimal(str(values.get("opening_balance", 0)))
-    opening_cny = values.get("opening_cny_amount")
-    if currency == "CNY":
-        opening_cny = opening
-    elif opening_cny is None:
-        rate = (
-            db.query(ExchangeRate)
-            .filter(
-                ExchangeRate.base_currency == currency,
-                ExchangeRate.quote_currency == "CNY",
-            )
-            .order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc())
-            .first()
-        )
-        if rate:
-            opening_cny = money(opening * rate.rate)
-            values = {
-                **values,
-                "opening_exchange_rate": rate.rate,
-                "opening_rate_date": rate.rate_date,
-                "opening_rate_source": rate.source,
-            }
-    row = db.get(Account, values["id"])
+) -> Account | None:
+    row = db.get(Account, values["id"], populate_existing=True)
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账户不存在")
-    data = {
-        "name": name,
-        "kind": values.get("kind") or values.get("type") or "asset",
-        "account_kind": values.get("account_kind") or "other",
-        "currency": currency,
-        "opening_balance": opening,
-        "opening_cny_amount": (
-            Decimal(str(opening_cny)) if opening_cny is not None else None
-        ),
-        "opening_exchange_rate": (
-            Decimal(str(values["opening_exchange_rate"]))
-            if values.get("opening_exchange_rate") is not None
-            else None
-        ),
-        "opening_rate_date": (
-            date_value(values["opening_rate_date"])
-            if values.get("opening_rate_date")
-            else None
-        ),
-        "opening_rate_source": values.get("opening_rate_source"),
-        "is_liquid": bool(values.get("is_liquid", False)),
-        "is_default_payment": bool(values.get("is_default_payment", False)),
-    }
-    # Missing fields from older clients must not erase newly stored metadata.
-    if 'note' in values:
-        note = str(values['note'] or '').strip()
-        if len(note) > 256:
-            raise HTTPException(status_code=422, detail='账户用途最多256字')
-        data['note'] = note
-    if 'archived_at' in values:
-        raw_archived = values['archived_at']
-        try:
-            data['archived_at'] = (datetime.fromisoformat(raw_archived.replace('Z','+00:00'))
-                if isinstance(raw_archived,str) else raw_archived)
-        except ValueError:
-            raise HTTPException(status_code=422, detail='归档时间无效') from None
-    if not row:
+    if deleted:
+        if row is not None:
+            row.deleted_at = datetime.now(timezone.utc)
+            row.server_version = server_version if server_version is not None else row.server_version
+        return row
+
+    creating = row is None
+    # Schema defaults belong only to creation; a patch must retain absent fields.
+    supplied = {k: v for k, v in values.items() if k in AccountIn.model_fields}
+    supplied.pop("id", None)
+    if "kind" not in supplied and "type" in values:
+        supplied["kind"] = values["type"]
+    if "name" in supplied:
+        supplied["name"] = str(supplied["name"] or "").strip()
+    if "note" in supplied:
+        supplied["note"] = str(supplied["note"] or "").strip()
+    raw_archived = supplied.get("archived_at")
+    if raw_archived is not None and not isinstance(raw_archived, (str, datetime)):
+        raise HTTPException(status_code=422, detail="归档时间无效")
+    try:
+        schema = AccountIn if creating else AccountPatch
+        data = schema(**supplied).model_dump(exclude_unset=not creating)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    data.pop("id", None)
+    name = data.get("name", row.name if row else "")
+    if not name:
+        raise HTTPException(status_code=422, detail="账户名称不能为空")
+    normalized = normalize_account_name(name)
+    # Tombstones restored from backup do not occupy a live name.
+    if (row is None or row.deleted_at is None) and not values.get("deleted_at"):
+        duplicate = db.query(Account).filter(
+            Account.user_id == user.id, Account.deleted_at.is_(None),
+            Account.id != values["id"], Account.normalized_name == normalized,
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="账户名称不能重复")
+    if creating or "name" in data:
+        data["normalized_name"] = normalized
+    currency = str(data.get("currency", row.currency if row else "CNY")).upper()
+    if creating or "currency" in data:
+        data["currency"] = currency
+    opening = data.get("opening_balance", row.opening_balance if row else Decimal(0))
+    if currency == "CNY" and creating:
+        data["opening_cny_amount"] = opening
+    elif creating and data.get("opening_cny_amount") is None:
+        rate = db.query(ExchangeRate).filter(
+            ExchangeRate.base_currency == currency, ExchangeRate.quote_currency == "CNY",
+        ).order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc()).first()
+        if rate:
+            data.update(opening_cny_amount=money(opening * rate.rate),
+                        opening_exchange_rate=rate.rate, opening_rate_date=rate.rate_date,
+                        opening_rate_source=rate.source)
+    if creating:
         row = Account(id=values["id"], user_id=user.id, **data)
         db.add(row)
     else:
         for key, value in data.items():
             setattr(row, key, value)
-    row.deleted_at = datetime.now(timezone.utc) if deleted else None
+    # An ordinary upsert cannot resurrect a tombstone.
     row.server_version = server_version if server_version is not None else row.server_version
     return row
 
@@ -144,6 +127,7 @@ def list_accounts(db: Session, user: User) -> dict:
 
 
 def create_account(db: Session, user: User, payload: AccountIn) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     values = payload.model_dump(exclude_unset=True)
     values["id"] = values.get("id") or str(uuid4())
     user.sync_version += 1
@@ -156,8 +140,9 @@ def update_account(
     db: Session,
     user: User,
     account_id: str,
-    payload: AccountIn,
+    payload: AccountPatch,
 ) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     if payload.id and payload.id != account_id:
         raise HTTPException(status_code=422, detail="账户 ID 不一致")
     existing = db.get(Account, account_id)
@@ -172,12 +157,12 @@ def update_account(
 
 
 def delete_account(db: Session, user: User, account_id: str) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     row = db.get(Account, account_id)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账户不存在")
     user.sync_version += 1
-    row.deleted_at = datetime.now(timezone.utc)
-    row.server_version = user.sync_version
+    save_account(db, user, {"id": account_id}, deleted=True, server_version=user.sync_version)
     db.commit()
     return {
         "deleted": True,

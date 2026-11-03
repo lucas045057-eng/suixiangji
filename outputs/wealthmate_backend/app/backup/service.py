@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..assets.service import save_account
+from ..assets.names import normalize_account_name
 from ..budget.service import budget_with_same_key, save_budget
 from ..ledger.service import (
     attach_latest_rate,
@@ -30,7 +31,7 @@ from ..models import (
     Transaction,
     User,
 )
-from ..sync.service import _lock_current_user
+from ..core.financial_lock import lock_current_user as _lock_current_user
 from .schemas import RestoreIn
 
 
@@ -470,7 +471,7 @@ def _precheck_records(payload: RestoreIn, db: Session, user: User) -> None:
         for field in ("opening_cny_amount", "opening_exchange_rate"):
             _validate_decimal(record.get(field), field=field, index=index)
         active = record.get("deleted_at") is None
-        folded = name.casefold()
+        folded = normalize_account_name(name)
         if active and folded in account_names and account_names[folded] != record["id"]:
             raise HTTPException(status_code=409, detail="备份 accounts 含重复名称")
         if active:
@@ -481,7 +482,7 @@ def _precheck_records(payload: RestoreIn, db: Session, user: User) -> None:
                 .all()
             )
             if any(
-                row.id != record["id"] and row.name.strip().casefold() == folded
+                row.id != record["id"] and normalize_account_name(row.name) == folded
                 for row in existing
             ):
                 raise HTTPException(status_code=409, detail="账户名称不能重复")
@@ -521,7 +522,6 @@ def _apply_accounts(db: Session, user: User, records: list[dict[str, Any]]) -> i
             db,
             user,
             data,
-            deleted=data.get("deleted_at") is not None,
             server_version=user.sync_version,
         )
         row.deleted_at = _restore_deleted_timestamp(data, index=index)

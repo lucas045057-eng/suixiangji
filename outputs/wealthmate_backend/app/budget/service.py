@@ -5,6 +5,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from ..core.financial_lock import lock_current_user
 from ..models import Budget, Category, User
 from .domain import normalise_budget_values, TOTAL_BUDGET_CATEGORY
 from .schemas import BudgetIn, BudgetPatch
@@ -42,7 +43,7 @@ def save_budget(
     *,
     server_version: int | None = None,
 ) -> Budget:
-    row = db.get(Budget, values["id"])
+    row = db.get(Budget, values["id"], populate_existing=True)
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
     existing = budget_with_same_key(db, user, values)
@@ -50,7 +51,7 @@ def save_budget(
         raise HTTPException(status_code=409, detail='该月份和分类已有预算，请编辑已有预算')
     category_id = values.get("category_id")
     if category_id and category_id != TOTAL_BUDGET_CATEGORY:
-        category = db.get(Category, category_id)
+        category = db.get(Category, category_id, populate_existing=True)
         if not category or category.user_id != user.id:
             raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
         if category.kind != 'expense':
@@ -80,7 +81,7 @@ def budget_with_same_key(db: Session, user: User, values: dict) -> Budget | None
         Budget.user_id == user.id,
         Budget.month == values.get('month'),
         Budget.category_id == values.get('category_id'),
-    ).first()
+    ).execution_options(populate_existing=True).first()
 
 
 def list_budgets(db: Session, user: User, month: str | None = None) -> dict:
@@ -96,6 +97,7 @@ def list_budgets(db: Session, user: User, month: str | None = None) -> dict:
 
 
 def create_budget(db: Session, user: User, payload: BudgetIn) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     values = payload.model_dump()
     values["id"] = values.get("id") or str(uuid4())
     existing = budget_with_same_key(db, user, values)
@@ -113,7 +115,8 @@ def update_budget(
     budget_id: str,
     payload: BudgetPatch,
 ) -> dict:
-    row = db.get(Budget, budget_id)
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Budget, budget_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
     values = payload.model_dump(exclude_unset=True)
@@ -125,7 +128,8 @@ def update_budget(
 
 
 def delete_budget(db: Session, user: User, budget_id: str) -> dict:
-    row = db.get(Budget, budget_id)
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Budget, budget_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="预算不存在")
     user.sync_version += 1

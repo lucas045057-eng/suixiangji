@@ -22,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
+from .assets.names import normalize_account_name
 
 
 class User(Base):
@@ -59,6 +60,7 @@ class Account(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(128))
+    normalized_name: Mapped[str] = mapped_column(String(512), default=lambda ctx: normalize_account_name(ctx.get_current_parameters()["name"]))
     note: Mapped[str] = mapped_column(String(256), default='', server_default='')
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     kind: Mapped[str] = mapped_column(String(32), default="asset")
@@ -74,6 +76,26 @@ class Account(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     server_version: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+Index("uq_accounts_user_normalized_name", Account.user_id, Account.normalized_name,
+      unique=True, sqlite_where=Account.deleted_at.is_(None),
+      postgresql_where=Account.deleted_at.is_(None))
+
+
+class AccountMutationAudit(Base):
+    __tablename__ = "account_mutation_audits"
+    __table_args__ = (UniqueConstraint("user_id", "client_op_id", "event_kind",
+                                      name="uq_account_audit_operation_event"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    account_id: Mapped[str] = mapped_column(String(64))
+    client_op_id: Mapped[str] = mapped_column(String(128))
+    event_kind: Mapped[str] = mapped_column(String(64))
+    before_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    after_json: Mapped[dict[str, Any]] = mapped_column(JSON)
+    reason: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Category(Base):

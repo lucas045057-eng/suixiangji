@@ -17,37 +17,12 @@ from ..ledger.service import _normalise_tx_payload
 from ..ledger.service import _save_category
 from ..ledger.service import _save_tx
 from ..ledger.service import _tx_json
+from ..core.financial_lock import lock_current_user as _lock_current_user
+from .v1_accounts import normalize_v1_account
 from ..models import Account, Budget, Category, SyncOperation, Transaction, User
 from .conflict import has_newer_server_version
 from .ordering import order_operations
 from .schemas import SyncPushIn
-
-
-def _lock_current_user(
-    db: Session,
-    user_id: str,
-    *,
-    verified_auth_version: int | None = None,
-) -> User:
-    """Lock and refresh the authoritative User row for one push batch."""
-    locked = db.execute(
-        select(User)
-        .where(User.id == user_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).scalar_one_or_none()
-    if locked is None:
-        raise HTTPException(status_code=401, detail='登录已失效，请重新登录')
-    # The authentication dependency may already have populated this identity
-    # in the Session before the row lock was acquired. Refresh explicitly so
-    # version allocation starts from the value observed after lock wait.
-    db.refresh(locked)
-    if (
-        verified_auth_version is not None
-        and (locked.auth_version or 0) != verified_auth_version
-    ):
-        raise HTTPException(status_code=401, detail='鐧诲綍宸插け鏁堬紝璇烽噸鏂扮櫥褰?')
-    return locked
 
 
 def _current_entity(db: Session, entity: str, entity_id: str, user_id: str):
@@ -139,7 +114,8 @@ def push(payload: SyncPushIn, db: Session, user: User) -> dict:
             elif operation.entity == "accounts":
                 data = dict(operation.payload)
                 data["id"] = operation.entity_id
-                data.setdefault("name", operation.entity_id)
+                if operation.type != "delete":
+                    data = normalize_v1_account(db, locked_user, operation, data, existing)
                 _save_account(
                     db,
                     locked_user,

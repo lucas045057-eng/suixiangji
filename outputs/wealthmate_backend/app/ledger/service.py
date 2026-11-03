@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..assets.domain import money
+from ..core.financial_lock import lock_current_user
 from ..models import Account, Category, ExchangeRate, SyncOperation, Transaction, User
 from .domain import date_value, json_metrics, normalise_transaction_payload
 from .schemas import CategoryIn, CategoryPatch, TransactionIn
@@ -83,18 +84,18 @@ def save_transaction(
 ) -> Transaction:
     if values["kind"] != "transfer" and not values.get("account_id"):
         raise HTTPException(status_code=422, detail="非转账账目必须选择账户")
-    row = db.get(Transaction, values["id"])
+    row = db.get(Transaction, values["id"], populate_existing=True)
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账目不存在")
     for field in ("account_id", "from_account_id", "to_account_id"):
         account_id = values.get(field)
         if account_id:
-            account = db.get(Account, account_id)
+            account = db.get(Account, account_id, populate_existing=True)
             if not account or account.user_id != user.id:
                 raise HTTPException(status_code=422, detail=f"账户不存在: {account_id}")
     category_id = values.get("category_id")
     if category_id:
-        category = db.get(Category, category_id)
+        category = db.get(Category, category_id, populate_existing=True)
         if not category or category.user_id != user.id:
             raise HTTPException(status_code=422, detail=f"分类不存在: {category_id}")
         if values["kind"] != "transfer" and category.kind != values["kind"]:
@@ -123,7 +124,7 @@ def save_category(
     server_version: int | None = None,
     active: bool | None = None,
 ) -> Category:
-    row = db.get(Category, values["id"])
+    row = db.get(Category, values["id"], populate_existing=True)
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="分类不存在")
     if not row:
@@ -152,7 +153,8 @@ def list_categories(db: Session, user: User) -> dict:
 
 
 def create_category(db: Session, user: User, payload: CategoryIn) -> dict:
-    row = db.get(Category, payload.id) if payload.id else None
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Category, payload.id, populate_existing=True) if payload.id else None
     if row and row.user_id != user.id:
         raise HTTPException(status_code=404, detail="分类不存在")
     if not row:
@@ -180,7 +182,8 @@ def update_category(
     category_id: str,
     payload: CategoryPatch,
 ) -> dict:
-    row = db.get(Category, category_id)
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Category, category_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="分类不存在")
     values = payload.model_dump(exclude_unset=True)
@@ -195,7 +198,8 @@ def update_category(
 
 
 def archive_category(db: Session, user: User, category_id: str) -> dict:
-    row = db.get(Category, category_id)
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Category, category_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="分类不存在")
     row.active = False
@@ -214,6 +218,7 @@ def list_transactions(db: Session, user: User, include_deleted: bool = False) ->
 
 
 def create_transaction(db: Session, user: User, payload: TransactionIn) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     existing = db.query(Transaction).filter(
         Transaction.user_id == user.id,
         Transaction.client_op_id == payload.client_op_id,
@@ -246,9 +251,10 @@ def update_transaction(
     transaction_id: str,
     payload: TransactionIn,
 ) -> dict:
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
     if transaction_id != payload.id and payload.id:
         raise HTTPException(status_code=422, detail="账目 ID 不一致")
-    existing = db.get(Transaction, transaction_id)
+    existing = db.get(Transaction, transaction_id, populate_existing=True)
     if not existing or existing.user_id != user.id:
         raise HTTPException(status_code=404, detail="账目不存在")
     user.sync_version += 1
@@ -262,7 +268,8 @@ def update_transaction(
 
 
 def delete_transaction(db: Session, user: User, transaction_id: str) -> dict:
-    row = db.get(Transaction, transaction_id)
+    user = lock_current_user(db, user.id, verified_auth_version=user.auth_version or 0)
+    row = db.get(Transaction, transaction_id, populate_existing=True)
     if not row or row.user_id != user.id:
         raise HTTPException(status_code=404, detail="账目不存在")
     user.sync_version += 1
