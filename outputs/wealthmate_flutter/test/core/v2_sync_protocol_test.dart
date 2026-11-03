@@ -120,7 +120,7 @@ Account _cash({int? serverVersion, String name = '现金'}) => Account(
     );
 
 Map<String, Object?> _v2Success(List<SyncOperation> operations,
-    {int version = 12}) =>
+        {int version = 12}) =>
     {
       'results': [
         for (final operation in operations)
@@ -166,8 +166,8 @@ void main() {
         syncState: const SyncState(serverVersion: 10),
       );
 
-      await repository.saveAccount(
-          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      await repository.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
 
       final operation = session.queue.pending().single;
       expect(operation.entity, 'accounts');
@@ -182,7 +182,8 @@ void main() {
       final session = _session();
       final repository = AssetsRepository(session: session);
 
-      await repository.saveAccount(_cash(name: '现金'), baseState: const FinanceState());
+      await repository.saveAccount(_cash(name: '现金'),
+          baseState: const FinanceState());
 
       final operation = session.queue.pending().single;
       expect(operation.base, isNull);
@@ -195,8 +196,8 @@ void main() {
       final repository = AssetsRepository(session: session);
       final state = FinanceState(
         accounts: [_cash(serverVersion: 7)],
-        preference: const UserPreference(
-            defaultAccountId: 'other', serverVersion: 4),
+        preference:
+            const UserPreference(defaultAccountId: 'other', serverVersion: 4),
       );
 
       final next = await repository.setDefaultAccount('cash', baseState: state);
@@ -222,8 +223,8 @@ void main() {
         accounts: [_cash(serverVersion: 7)],
         syncState: const SyncState(serverVersion: 10),
       );
-      await assets.saveAccount(
-          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      await assets.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
       state = (await session.load())!;
       const transaction = FinanceTransaction(
         id: 'tx-1',
@@ -236,8 +237,8 @@ void main() {
       await ledger.saveTransaction(transaction, baseState: state);
       final before = (await session.load())!;
       final operations = session.queue.pending();
-      expect(operations.map((item) => item.entity),
-          ['accounts', 'transactions']);
+      expect(
+          operations.map((item) => item.entity), ['accounts', 'transactions']);
 
       final api = _ScriptedApi();
       api.onPush = (sent) async => {
@@ -309,7 +310,12 @@ void main() {
                 'status': 'merged',
                 'fields_applied': ['note'],
                 'field_conflicts': [
-                  {'field': 'name', 'base': '现金', 'client': '钱包', 'server': '现金账户'},
+                  {
+                    'field': 'name',
+                    'base': '现金',
+                    'client': '钱包',
+                    'server': '现金账户'
+                  },
                 ],
                 'row': serverRow,
               },
@@ -336,8 +342,8 @@ void main() {
         accounts: [_cash(serverVersion: 7)],
         syncState: const SyncState(serverVersion: 10),
       );
-      await assets.saveAccount(
-          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      await assets.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
       final before = (await session.load())!;
       final operation = session.queue.pending().single;
 
@@ -352,7 +358,8 @@ void main() {
                 'entity': 'accounts',
                 'id': 'cash',
                 'reason': 'version_conflict',
-                'authoritative_row': _cash(serverVersion: 12, name: '现金账户').toJson(),
+                'authoritative_row':
+                    _cash(serverVersion: 12, name: '现金账户').toJson(),
               },
             ],
           };
@@ -434,6 +441,68 @@ void main() {
       );
     });
 
+    test('a 426 without min_protocol keeps the requirement unknown', () async {
+      final client = MockClient((request) async =>
+          http.Response(jsonEncode({'code': 'upgrade_required'}), 426));
+      final transport = ApiTransport(
+        baseUrl: 'http://v2.test',
+        client: client,
+        tokenProvider: () => 'token',
+      );
+
+      await expectLater(
+        transport.requestMap('POST', '/sync/push', body: const {}),
+        throwsA(predicate((error) =>
+            error is ApiFailure &&
+            error.kind == ApiFailureKind.upgradeRequired &&
+            error.minProtocol == null &&
+            error.clientNeedsUpgrade &&
+            error.message.contains('未提供具体版本') &&
+            !error.message.contains('null'))),
+      );
+    });
+
+    test('coordinator persists an unknown requirement without a version',
+        () async {
+      final session = _session();
+      final assets = AssetsRepository(session: session);
+      final state = FinanceState(
+        accounts: [_cash(serverVersion: 7)],
+        syncState: const SyncState(serverVersion: 10),
+      );
+      await assets.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
+      final before = (await session.load())!;
+
+      final api = _ScriptedApi();
+      api.onPush = (_) async => throw ApiFailure(
+            ApiFailureKind.upgradeRequired,
+            syncUpgradeMessage(null),
+            statusCode: 426,
+            code: 'upgrade_required',
+          );
+
+      final result = await _coordinator(session, api).pushPending(before);
+
+      expect(result.syncState.upgradeRequiredProtocol, isNull);
+      expect(result.syncState.upgradeRequiredWithoutVersion, isTrue);
+      expect(result.syncState.needsUpgrade, isTrue);
+      expect(result.syncState.requiresUpgrade(kSupportedSyncProtocolVersion),
+          isTrue);
+      expect(result.syncState.error, contains('未提供具体版本'));
+      expect(result.syncState.error, isNot(contains('null')));
+      expect(result.syncState.upgradeRequirementLabel, isNot(contains('null')));
+      expect(session.queue.pending(), hasLength(1));
+
+      // The unknown gate is sticky across an aggregate restart too.
+      final restored = FinanceState.fromJson(result.toJson());
+      expect(restored.syncState.upgradeRequiredWithoutVersion, isTrue);
+      expect(restored.syncState.upgradeRequiredProtocol, isNull);
+      expect(restored.syncState.needsUpgrade, isTrue);
+      expect(restored.syncState.requiresUpgrade(kSupportedSyncProtocolVersion),
+          isTrue);
+    });
+
     test('coordinator persists the gate and keeps the pending queue', () async {
       final session = _session();
       final assets = AssetsRepository(session: session);
@@ -441,8 +510,8 @@ void main() {
         accounts: [_cash(serverVersion: 7)],
         syncState: const SyncState(serverVersion: 10),
       );
-      await assets.saveAccount(
-          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      await assets.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
       final before = (await session.load())!;
 
       final api = _ScriptedApi();
@@ -552,8 +621,8 @@ void main() {
           accounts: [],
           categories: [],
           budgets: [],
-          preference: UserPreference(
-              defaultAccountId: 'cash', serverVersion: 11),
+          preference:
+              UserPreference(defaultAccountId: 'cash', serverVersion: 11),
           serverVersion: 11,
         ),
       );
@@ -666,8 +735,8 @@ void main() {
       );
 
       // The caller deliberately omits the version: the repository restores it.
-      await repository.saveCategory(
-          const Category(id: 'food', name: '吃饭'), baseState: state);
+      await repository.saveCategory(const Category(id: 'food', name: '吃饭'),
+          baseState: state);
 
       final operation = session.queue.pending().single;
       expect(operation.baseVersion, 9);
@@ -681,8 +750,8 @@ void main() {
       final session = _session();
       final repository = LedgerRepository(session: session);
 
-      await repository.saveCategory(
-          const Category(id: 'new', name: '新分类'), baseState: const FinanceState());
+      await repository.saveCategory(const Category(id: 'new', name: '新分类'),
+          baseState: const FinanceState());
 
       final operation = session.queue.pending().single;
       expect(operation.baseVersion, isNull);
@@ -715,7 +784,8 @@ void main() {
     });
 
     test('a serial second-device rename hits conflicts and adopts the row',
-        () async {      final session = _session();
+        () async {
+      final session = _session();
       final repository = LedgerRepository(session: session);
       final state = FinanceState(
         categories: const [Category(id: 'food', name: '餐饮', serverVersion: 9)],
@@ -738,9 +808,9 @@ void main() {
                 'entity': 'categories',
                 'id': 'food',
                 'reason': 'version_conflict',
-                'authoritative_row': const Category(
-                        id: 'food', name: '餐饮（新）', serverVersion: 10)
-                    .toJson(),
+                'authoritative_row':
+                    const Category(id: 'food', name: '餐饮（新）', serverVersion: 10)
+                        .toJson(),
               },
             ],
           };
@@ -762,8 +832,8 @@ void main() {
         accounts: [_cash(serverVersion: 7)],
         syncState: const SyncState(serverVersion: 10),
       );
-      await assets.saveAccount(
-          _cash(serverVersion: 7, name: '钱包'), baseState: state);
+      await assets.saveAccount(_cash(serverVersion: 7, name: '钱包'),
+          baseState: state);
       final before = (await session.load())!;
 
       final api = _ScriptedApi();
@@ -849,6 +919,66 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 500));
       expect(api.pushCalls, 2);
       expect(store.state.syncState.needsUpgrade, isFalse);
+    });
+
+    test('an unversioned 426 keeps the gate closed with readable text',
+        () async {
+      final api = _ScriptedApi();
+      api.onPush = (operations) async {
+        if (api.pushCalls == 1) {
+          throw ApiFailure(
+            ApiFailureKind.upgradeRequired,
+            syncUpgradeMessage(null),
+            statusCode: 426,
+            code: 'upgrade_required',
+          );
+        }
+        return _v2Success(operations);
+      };
+      final repository = FinanceRepository(
+        local: LocalRepository(_MemoryStore()),
+        queue: SyncQueue(),
+        api: api,
+      );
+      await repository.ensureLocalOwner('user');
+      repository.queue.enqueue(SyncOperation(
+        clientOpId: 'account-1',
+        entity: 'accounts',
+        entityId: 'cash',
+        type: SyncOperationType.upsert,
+        payload: _cash(serverVersion: 7).toJson(),
+        createdAt: '2026-11-03T07:00:00Z',
+        baseVersion: 7,
+        base: _cash(serverVersion: 7).toJson(),
+      ));
+      final store = FinanceStore(
+        repository: repository,
+        initialState: FinanceState(
+          accounts: [_cash(serverVersion: 7)],
+          syncState: const SyncState(serverVersion: 10),
+        ),
+      );
+
+      await store.sync();
+      expect(api.pushCalls, 1);
+      expect(store.state.syncState.upgradeRequiredProtocol, isNull);
+      expect(store.state.syncState.upgradeRequiredWithoutVersion, isTrue);
+      expect(
+          store.state.syncState.requiresUpgrade(kSupportedSyncProtocolVersion),
+          isTrue);
+      expect(store.message, contains('未提供具体版本'));
+      expect(store.message, isNot(contains('null')));
+
+      // The gate stops automatic retries even though the version is unknown.
+      await store.assets.setDefaultAccount('cash');
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      expect(api.pushCalls, 1);
+
+      // Manual retry stays the escape hatch.
+      await store.sync();
+      expect(api.pushCalls, 2);
+      expect(store.state.syncState.needsUpgrade, isFalse);
+      expect(store.state.syncState.upgradeRequiredWithoutVersion, isFalse);
     });
   });
 

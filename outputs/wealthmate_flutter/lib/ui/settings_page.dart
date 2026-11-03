@@ -95,17 +95,17 @@ class SettingsPage extends StatelessWidget {
                   Card(
                       child: Column(children: [
                     ListTile(
-                        leading: Icon(store.state.syncState.requiresUpgrade(
-                                kSupportedSyncProtocolVersion)
+                        leading: Icon(store.state.syncState
+                                .requiresUpgrade(kSupportedSyncProtocolVersion)
                             ? Icons.system_update_alt_rounded
                             : Icons.sync_rounded),
-                        title: Text(store.state.syncState.requiresUpgrade(
-                                kSupportedSyncProtocolVersion)
+                        title: Text(store.state.syncState
+                                .requiresUpgrade(kSupportedSyncProtocolVersion)
                             ? '需要升级客户端后同步'
                             : '同步状态'),
-                        subtitle: Text(store.state.syncState.requiresUpgrade(
-                                kSupportedSyncProtocolVersion)
-                            ? '服务器要求协议 v${store.state.syncState.upgradeRequiredProtocol} 或更高。'
+                        subtitle: Text(store.state.syncState
+                                .requiresUpgrade(kSupportedSyncProtocolVersion)
+                            ? '${store.state.syncState.upgradeRequirementLabel}。'
                                 '本地数据与待同步队列已保留，升级应用后点右侧重试。'
                             : (store.state.syncState.error ??
                                 (store.state.syncState.lastSyncedAt == null
@@ -258,8 +258,7 @@ class SettingsPage extends StatelessWidget {
                     const SizedBox(height: 12),
                     Card(
                         child: ListTile(
-                            leading: const Icon(Icons.logout,
-                                color: paWarn),
+                            leading: const Icon(Icons.logout, color: paWarn),
                             title: const Text('退出登录'),
                             subtitle: const Text('只清除登录凭据，不删除本地财务数据'),
                             onTap: () async {

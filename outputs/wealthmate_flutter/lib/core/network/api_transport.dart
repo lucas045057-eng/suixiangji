@@ -51,8 +51,7 @@ class ApiFailure implements Exception {
   /// upgrade gate; it is a server-side capability problem, not an app upgrade.
   bool get clientNeedsUpgrade =>
       kind == ApiFailureKind.upgradeRequired &&
-      (minProtocol == null ||
-          minProtocol! > kSupportedSyncProtocolVersion);
+      (minProtocol == null || minProtocol! > kSupportedSyncProtocolVersion);
 
   @override
   String toString() => message;
@@ -185,15 +184,7 @@ class ApiTransport {
 
   static String? upgradeMessage(ApiFailureKind kind, int? minProtocol) {
     if (kind != ApiFailureKind.upgradeRequired) return null;
-    if (minProtocol == null) {
-      return '客户端协议版本过低，请升级应用后再同步';
-    }
-    if (minProtocol > kSupportedSyncProtocolVersion) {
-      return '客户端需升级：服务端要求协议 v$minProtocol，'
-          '当前客户端支持至 v$kSupportedSyncProtocolVersion';
-    }
-    return '服务端要求更高协议（v$minProtocol），客户端已支持 '
-        'v$kSupportedSyncProtocolVersion；请稍后重试或联系服务提供方';
+    return syncUpgradeMessage(minProtocol);
   }
 
   static ApiFailure _baseFailureForStatus(int statusCode, String path) {
@@ -272,7 +263,9 @@ class ApiTransport {
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
     if (collapsed.isEmpty) return null;
-    return collapsed.length <= 120 ? collapsed : '${collapsed.substring(0, 120)}…';
+    return collapsed.length <= 120
+        ? collapsed
+        : '${collapsed.substring(0, 120)}…';
   }
 
   static Duration? _retryAfter(Map<String, String> headers) {

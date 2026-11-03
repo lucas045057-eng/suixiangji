@@ -570,26 +570,42 @@ class SyncState {
       this.lastSyncedAt,
       this.isSyncing = false,
       this.error,
-      this.upgradeRequiredProtocol});
+      this.upgradeRequiredProtocol,
+      this.upgradeRequiredWithoutVersion = false});
 
   final int serverVersion;
   final String? lastSyncedAt;
   final bool isSyncing;
   final String? error;
 
-  /// Set when the server answers 426 `upgrade_required`. Automatic sync stays
-  /// gated until the app satisfies [upgradeRequiredProtocol] or the user taps
-  /// the explicit retry entry.
+  /// Set when the server answers 426 `upgrade_required` and named a floor.
+  /// Automatic sync stays gated until the app satisfies it or the user taps
+  /// the explicit retry entry. Never fabricated when the server omitted it.
   final int? upgradeRequiredProtocol;
 
-  bool get needsUpgrade => upgradeRequiredProtocol != null;
+  /// A 426 arrived without a parseable `min_protocol`. The requirement is real
+  /// but its version is unknown, so the gate stays closed rather than silently
+  /// opening. Kept separate from [upgradeRequiredProtocol] so a missing version
+  /// is never rendered as `vnull` and never mistaken for "no gate".
+  final bool upgradeRequiredWithoutVersion;
+
+  bool get needsUpgrade =>
+      upgradeRequiredProtocol != null || upgradeRequiredWithoutVersion;
 
   /// Whether this build (at [supportedProtocol]) is still below what the
   /// server demanded. A persisted requirement at or below the local capability
-  /// is stale and must not block a retry after an app upgrade.
-  bool requiresUpgrade(int supportedProtocol) =>
-      upgradeRequiredProtocol != null &&
-      upgradeRequiredProtocol! > supportedProtocol;
+  /// is stale and must not block a retry after an app upgrade. An unknown
+  /// requirement can never be proven satisfied, so it keeps the gate closed.
+  bool requiresUpgrade(int supportedProtocol) {
+    if (upgradeRequiredWithoutVersion) return true;
+    final required = upgradeRequiredProtocol;
+    return required != null && required > supportedProtocol;
+  }
+
+  /// User-facing requirement text. Never renders a missing version.
+  String get upgradeRequirementLabel => upgradeRequiredProtocol == null
+      ? '服务端要求更高协议版本（未提供具体版本）'
+      : '服务端要求协议 v$upgradeRequiredProtocol 或更高';
 
   SyncState copyWith(
           {int? serverVersion,
@@ -597,15 +613,23 @@ class SyncState {
           bool? isSyncing,
           String? error,
           int? upgradeRequiredProtocol,
+          bool? upgradeRequiredWithoutVersion,
           bool clearUpgradeRequired = false}) =>
       SyncState(
         serverVersion: serverVersion ?? this.serverVersion,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
         isSyncing: isSyncing ?? this.isSyncing,
         error: error,
-        upgradeRequiredProtocol: clearUpgradeRequired
-            ? null
-            : upgradeRequiredProtocol ?? this.upgradeRequiredProtocol,
+        upgradeRequiredProtocol:
+            clearUpgradeRequired || upgradeRequiredWithoutVersion == true
+                ? null
+                : upgradeRequiredProtocol ?? this.upgradeRequiredProtocol,
+        upgradeRequiredWithoutVersion: clearUpgradeRequired
+            ? false
+            : upgradeRequiredWithoutVersion ??
+                (upgradeRequiredProtocol != null
+                    ? false
+                    : this.upgradeRequiredWithoutVersion),
       );
 }
 
@@ -645,25 +669,19 @@ class SyncIssue {
   String get userMessage {
     final label = entityLabel;
     return switch (code) {
-      'financial_conflict' ||
-      'base_field_missing' =>
-        '$label的财务字段已变化，修改未生效',
+      'financial_conflict' || 'base_field_missing' => '$label的财务字段已变化，修改未生效',
       'read_only_field' => '该字段由系统维护，修改已跳过',
       'duplicate_key' => '$label名称或唯一字段重复，修改未生效',
       'dependency_rejected' => '依赖的数据未同步，$label修改已跳过',
-      'invalid_reference' ||
-      'inactive_reference' =>
-        '$label引用的数据不可用，已跳过',
+      'invalid_reference' || 'inactive_reference' => '$label引用的数据不可用，已跳过',
       'invalid_default_account' => '默认账户不可用，已跳过',
       'version_conflict' => '数据已在其他设备更新，已采用服务器版本',
       'balance_changed' => '账目已变化，请重新核对校准',
       'conversion_pending' => '账户存在待换算账目，请先补充汇率',
-      'not_found' || 'forbidden' || 'entity_deleted' =>
-        '$label已不存在或无权访问，已跳过',
+      'not_found' || 'forbidden' || 'entity_deleted' => '$label已不存在或无权访问，已跳过',
       'immutable_adjustment' => '余额校准流水不可修改',
       'operation_mismatch' => '同步操作重复，已跳过',
-      'unsupported_entity' || 'unsupported_field' =>
-        '$label包含不支持的字段，已跳过',
+      'unsupported_entity' || 'unsupported_field' => '$label包含不支持的字段，已跳过',
       'invalid_field' ||
       'invalid_amount' ||
       'invalid_base' ||
@@ -902,6 +920,8 @@ class FinanceState {
             'last_synced_at': syncState.lastSyncedAt,
           if (syncState.upgradeRequiredProtocol != null)
             'upgrade_required_protocol': syncState.upgradeRequiredProtocol,
+          if (syncState.upgradeRequiredWithoutVersion)
+            'upgrade_required_without_version': true,
         },
       };
 
@@ -959,11 +979,11 @@ class FinanceState {
             .map((item) => CalibrationDraft.fromJson(
                 (item! as Map).cast<String, Object?>()))
             .toList(),
-        syncIssues: ((json['sync_issues'] as List<Object?>?) ??
-                const <Object?>[])
-            .map((item) =>
-                SyncIssue.fromJson((item! as Map).cast<String, Object?>()))
-            .toList(),
+        syncIssues:
+            ((json['sync_issues'] as List<Object?>?) ?? const <Object?>[])
+                .map((item) =>
+                    SyncIssue.fromJson((item! as Map).cast<String, Object?>()))
+                .toList(),
         preference: json['preference'] is Map
             ? UserPreference.fromJson(
                 (json['preference']! as Map).cast<String, Object?>())
@@ -978,7 +998,11 @@ class FinanceState {
                 ? ((json['sync_state'] as Map)['upgrade_required_protocol']
                         as num?)
                     ?.toInt()
-                : null),
+                : null,
+            upgradeRequiredWithoutVersion: json['sync_state'] is Map &&
+                (json['sync_state']
+                        as Map)['upgrade_required_without_version'] ==
+                    true),
       );
 }
 
@@ -1006,8 +1030,7 @@ class DraftAmountRange {
   final bool upperInclusive;
 
   bool get isOrdered =>
-      lower < upper ||
-      (lower == upper && lowerInclusive && upperInclusive);
+      lower < upper || (lower == upper && lowerInclusive && upperInclusive);
 
   bool contains(double value) =>
       (lowerInclusive ? value >= lower : value > lower) &&
@@ -1183,8 +1206,7 @@ class AgentDraft {
       missingFacts: missingFacts ?? this.missingFacts,
       source: source ?? this.source,
       isApproximate: isApproximate ?? this.isApproximate,
-      amountRange:
-          clearAmountRange ? null : amountRange ?? this.amountRange,
+      amountRange: clearAmountRange ? null : amountRange ?? this.amountRange,
       evidence: evidence ?? this.evidence,
       derivation: clearDerivation ? null : derivation ?? this.derivation,
     );

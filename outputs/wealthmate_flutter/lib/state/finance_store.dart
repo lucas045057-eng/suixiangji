@@ -609,12 +609,11 @@ class FinanceStore extends ChangeNotifier {
   }
 
   String _syncMessage() {
-    final upgrade = _state.syncState.requiresUpgrade(kSupportedSyncProtocolVersion)
-        ? _state.syncState.upgradeRequiredProtocol
-        : null;
-    if (upgrade != null) {
-      return '客户端需升级：服务端要求协议 v$upgrade，'
-          '当前客户端支持至 v$kSupportedSyncProtocolVersion';
+    final sync = _state.syncState;
+    if (sync.requiresUpgrade(kSupportedSyncProtocolVersion)) {
+      // Unknown requirement (426 without `min_protocol`) still gets readable
+      // text; the helper never renders `vnull`.
+      return syncUpgradeMessage(sync.upgradeRequiredProtocol);
     }
     final error = _state.syncState.error;
     if (error != null) return error;
@@ -628,8 +627,7 @@ class FinanceStore extends ChangeNotifier {
   }
 
   Future<bool> _runSyncPipeline() async {
-    if (_state.syncState
-            .requiresUpgrade(kSupportedSyncProtocolVersion) &&
+    if (_state.syncState.requiresUpgrade(kSupportedSyncProtocolVersion) &&
         !_upgradeRetryRequested) {
       // 426 gate: keep local data and the queue, stop automatic retries.
       _message = _syncMessage();

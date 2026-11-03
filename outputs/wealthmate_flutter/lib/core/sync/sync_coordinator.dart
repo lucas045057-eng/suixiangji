@@ -532,8 +532,8 @@ class SyncCoordinator {
       case 'categories':
         final category = Category.fromJson(row);
         return state.copyWith(categories: [
-          ...state.categories.where(
-              (item) => item.id != operation.entityId && item.id != category.id),
+          ...state.categories.where((item) =>
+              item.id != operation.entityId && item.id != category.id),
           category,
         ]);
       case 'budgets':
@@ -544,8 +544,7 @@ class SyncCoordinator {
           budget,
         ]);
       case 'user_preferences':
-        return _projectV2Preference(
-            state, UserPreference.fromJson(row));
+        return _projectV2Preference(state, UserPreference.fromJson(row));
       default:
         return state;
     }
@@ -553,16 +552,14 @@ class SyncCoordinator {
 
   /// Rolls one rejected/conflicted operation back to its captured baseline.
   /// Without a baseline (an optimistic create) the entity is discarded.
-  FinanceState _rollbackOperation(
-      FinanceState state, SyncOperation operation) {
+  FinanceState _rollbackOperation(FinanceState state, SyncOperation operation) {
     final base = operation.base;
     if (base != null) {
       switch (operation.entity) {
         case 'accounts':
           final account = Account.fromJson(base);
           return state.copyWith(accounts: [
-            ...state.accounts
-                .where((item) => item.id != operation.entityId),
+            ...state.accounts.where((item) => item.id != operation.entityId),
             account,
           ]);
         case 'transactions':
@@ -575,8 +572,7 @@ class SyncCoordinator {
         case 'categories':
           final category = Category.fromJson(base);
           return state.copyWith(categories: [
-            ...state.categories
-                .where((item) => item.id != operation.entityId),
+            ...state.categories.where((item) => item.id != operation.entityId),
             category,
           ]);
         case 'budgets':
@@ -586,8 +582,7 @@ class SyncCoordinator {
             budget,
           ]);
         case 'user_preferences':
-          return _projectV2Preference(
-              state, UserPreference.fromJson(base));
+          return _projectV2Preference(state, UserPreference.fromJson(base));
         default:
           return state;
       }
@@ -607,19 +602,23 @@ class SyncCoordinator {
                 : account,
         ]);
       case 'transactions':
-        return state.copyWith(transactions: state.transactions
-            .where((item) => item.id != operation.entityId)
-            .toList());
+        return state.copyWith(
+            transactions: state.transactions
+                .where((item) => item.id != operation.entityId)
+                .toList());
       case 'categories':
-        return state.copyWith(categories: state.categories
-            .where((item) => item.id != operation.entityId)
-            .toList());
+        return state.copyWith(
+            categories: state.categories
+                .where((item) => item.id != operation.entityId)
+                .toList());
       case 'budgets':
-        return state.copyWith(budgets: state.budgets
-            .where((item) => item.id != operation.entityId)
-            .toList());
+        return state.copyWith(
+            budgets: state.budgets
+                .where((item) => item.id != operation.entityId)
+                .toList());
       case 'user_preferences':
-        return _projectV2Preference(state.copyWith(clearPreference: true), const UserPreference());
+        return _projectV2Preference(
+            state.copyWith(clearPreference: true), const UserPreference());
       default:
         return state;
     }
@@ -741,12 +740,13 @@ class SyncCoordinator {
         return nextState.copyWith(
             financialSchemaVersion: 3,
             syncState: SyncState(
-          serverVersion: max(minimumServerVersion,
-              max(base.syncState.serverVersion, remote.serverVersion)),
-          lastSyncedAt: queue.pending().isEmpty && nextState.conflicts.isEmpty
-              ? DateTime.now().toIso8601String()
-              : base.syncState.lastSyncedAt,
-        ));
+              serverVersion: max(minimumServerVersion,
+                  max(base.syncState.serverVersion, remote.serverVersion)),
+              lastSyncedAt:
+                  queue.pending().isEmpty && nextState.conflicts.isEmpty
+                      ? DateTime.now().toIso8601String()
+                      : base.syncState.lastSyncedAt,
+            ));
       }, initialState: state);
       return next;
     } on ApiFailure catch (failure) {
@@ -761,19 +761,20 @@ class SyncCoordinator {
     return session.write((current) {
       final base = _mergeCurrentWithRequested(current, state);
       // 426 is sticky only when this build is actually below the server's
-      // requirement. A capable client keeps retrying; a stale persisted gate
-      // is cleared here instead of trapping the user forever.
-      final upgradeFailure =
-          failure?.kind == ApiFailureKind.upgradeRequired;
-      final needsClientUpgrade =
-          upgradeFailure && failure!.clientNeedsUpgrade;
+      // requirement (or the server did not name one). A capable client keeps
+      // retrying; a stale persisted gate is cleared here instead of trapping
+      // the user forever. A missing `min_protocol` stays null — it is an
+      // unknown requirement, never a fabricated version.
+      final upgradeFailure = failure?.kind == ApiFailureKind.upgradeRequired;
+      final needsClientUpgrade = upgradeFailure && failure!.clientNeedsUpgrade;
+      final requiredProtocol = needsClientUpgrade ? failure.minProtocol : null;
       return base.copyWith(
           syncState: base.syncState.copyWith(
               isSyncing: false,
               error: message,
-              upgradeRequiredProtocol: needsClientUpgrade
-                  ? (failure.minProtocol ?? 1)
-                  : null,
+              upgradeRequiredProtocol: requiredProtocol,
+              upgradeRequiredWithoutVersion:
+                  needsClientUpgrade ? requiredProtocol == null : null,
               clearUpgradeRequired: upgradeFailure && !needsClientUpgrade));
     }, initialState: state);
   }
