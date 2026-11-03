@@ -94,13 +94,23 @@ class SettingsPage extends StatelessWidget {
                   Card(
                       child: Column(children: [
                     ListTile(
-                        leading: const Icon(Icons.sync_rounded),
-                        title: const Text('同步状态'),
-                        subtitle: Text(store.state.syncState.error ??
-                            (store.state.syncState.lastSyncedAt == null
-                                ? '未同步 · 离线演示/待配置'
-                                : '最近同步 ${store.state.syncState.lastSyncedAt}')),
+                        leading: Icon(store.state.syncState.needsUpgrade
+                            ? Icons.system_update_alt_rounded
+                            : Icons.sync_rounded),
+                        title: Text(store.state.syncState.needsUpgrade
+                            ? '需要升级客户端后同步'
+                            : '同步状态'),
+                        subtitle: Text(store.state.syncState.needsUpgrade
+                            ? '服务器要求协议 v${store.state.syncState.upgradeRequiredProtocol} 或更高。'
+                                '本地数据与待同步队列已保留，升级应用后点右侧重试。'
+                            : (store.state.syncState.error ??
+                                (store.state.syncState.lastSyncedAt == null
+                                    ? '未同步 · 离线演示/待配置'
+                                    : '最近同步 ${store.state.syncState.lastSyncedAt}'))),
                         trailing: IconButton(
+                            tooltip: store.state.syncState.needsUpgrade
+                                ? '升级后重试同步'
+                                : '立即同步',
                             onPressed: store.sync,
                             icon: const Icon(Icons.refresh))),
                     const Divider(height: 1),

@@ -380,6 +380,14 @@ class QuickEntryRepository {
                 .firstWhere((row) => row.id == transaction.id)
                 .toJson(),
             createdAt: clock.toIso8601String(),
+            baseVersion: current.transactions
+                .where((row) => row.id == transaction.id)
+                .firstOrNull
+                ?.serverVersion,
+            base: current.transactions
+                .where((row) => row.id == transaction.id)
+                .firstOrNull
+                ?.toJson(),
           ),
       ],
       initialState: initialState,
@@ -528,6 +536,7 @@ class QuickEntryRepository {
       ApiFailureKind.validation =>
         '云端暂不可用（${failure.message}），已使用本地解析',
       ApiFailureKind.conflict ||
+      ApiFailureKind.upgradeRequired ||
       ApiFailureKind.server =>
         '云端解析暂时不可用，已使用本地解析',
       ApiFailureKind.cancelled => '云端解析已取消，已使用本地解析',

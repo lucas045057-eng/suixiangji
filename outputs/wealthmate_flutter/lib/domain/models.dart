@@ -547,23 +547,167 @@ class SyncState {
       {this.serverVersion = 0,
       this.lastSyncedAt,
       this.isSyncing = false,
-      this.error});
+      this.error,
+      this.upgradeRequiredProtocol});
 
   final int serverVersion;
   final String? lastSyncedAt;
   final bool isSyncing;
   final String? error;
 
+  /// Set when the server answers 426 `upgrade_required`. Automatic sync stays
+  /// gated until the app satisfies [upgradeRequiredProtocol] or the user taps
+  /// the explicit retry entry.
+  final int? upgradeRequiredProtocol;
+
+  bool get needsUpgrade => upgradeRequiredProtocol != null;
+
   SyncState copyWith(
           {int? serverVersion,
           String? lastSyncedAt,
           bool? isSyncing,
-          String? error}) =>
+          String? error,
+          int? upgradeRequiredProtocol,
+          bool clearUpgradeRequired = false}) =>
       SyncState(
         serverVersion: serverVersion ?? this.serverVersion,
         lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
         isSyncing: isSyncing ?? this.isSyncing,
         error: error,
+        upgradeRequiredProtocol: clearUpgradeRequired
+            ? null
+            : upgradeRequiredProtocol ?? this.upgradeRequiredProtocol,
+      );
+}
+
+/// A durable, user-facing record of one server-rejected sync operation.
+///
+/// Rejections never become retry loops: the operation leaves the queue and the
+/// local optimistic change is rolled back, while this issue stays readable and
+/// survives restarts.
+class SyncIssue {
+  const SyncIssue({
+    required this.clientOpId,
+    required this.entity,
+    required this.entityId,
+    required this.code,
+    this.detail = '',
+    this.field,
+    this.createdAt = '',
+  });
+
+  final String clientOpId;
+  final String entity;
+  final String entityId;
+  final String code;
+  final String detail;
+  final String? field;
+  final String createdAt;
+
+  String get entityLabel => switch (entity) {
+        'accounts' => '账户',
+        'categories' => '分类',
+        'transactions' => '账目',
+        'budgets' => '预算',
+        'user_preferences' => '默认账户',
+        _ => '数据',
+      };
+
+  String get userMessage {
+    final label = entityLabel;
+    return switch (code) {
+      'financial_conflict' ||
+      'base_field_missing' =>
+        '$label的财务字段已变化，修改未生效',
+      'read_only_field' => '该字段由系统维护，修改已跳过',
+      'duplicate_key' => '$label名称或唯一字段重复，修改未生效',
+      'dependency_rejected' => '依赖的数据未同步，$label修改已跳过',
+      'invalid_reference' ||
+      'inactive_reference' =>
+        '$label引用的数据不可用，已跳过',
+      'invalid_default_account' => '默认账户不可用，已跳过',
+      'version_conflict' => '数据已在其他设备更新，已采用服务器版本',
+      'balance_changed' => '账目已变化，请重新核对校准',
+      'conversion_pending' => '账户存在待换算账目，请先补充汇率',
+      'not_found' || 'forbidden' || 'entity_deleted' =>
+        '$label已不存在或无权访问，已跳过',
+      'immutable_adjustment' => '余额校准流水不可修改',
+      'operation_mismatch' => '同步操作重复，已跳过',
+      'unsupported_entity' || 'unsupported_field' =>
+        '$label包含不支持的字段，已跳过',
+      'invalid_field' ||
+      'invalid_amount' ||
+      'invalid_base' ||
+      'invalid_base_version' ||
+      'identity_mismatch' =>
+        '$label数据不合法，已跳过',
+      _ => '$label修改未生效（$code）',
+    };
+  }
+
+  Map<String, Object?> toJson() => {
+        'client_op_id': clientOpId,
+        'entity': entity,
+        'entity_id': entityId,
+        'code': code,
+        'detail': detail,
+        'field': field,
+        'created_at': createdAt,
+      };
+
+  factory SyncIssue.fromJson(Map<String, Object?> json) => SyncIssue(
+        clientOpId: json['client_op_id'] as String? ?? '',
+        entity: json['entity'] as String? ?? '',
+        entityId: json['entity_id'] as String? ?? '',
+        code: json['code'] as String? ?? 'validation_error',
+        detail: json['detail'] as String? ?? '',
+        field: json['field'] as String?,
+        createdAt: json['created_at'] as String? ?? '',
+      );
+}
+
+/// The authoritative per-user singleton preference row (`id = self`).
+///
+/// `null` in [FinanceState.preference] means "not established yet"; an empty
+/// `preferences` array in a pull response must not be read as "cleared".
+class UserPreference {
+  const UserPreference({
+    this.defaultAccountId,
+    this.serverVersion,
+    this.updatedAt,
+  });
+
+  static const singletonId = 'self';
+
+  final String? defaultAccountId;
+  final int? serverVersion;
+  final String? updatedAt;
+
+  UserPreference copyWith({
+    String? defaultAccountId,
+    bool clearDefaultAccount = false,
+    int? serverVersion,
+    String? updatedAt,
+  }) =>
+      UserPreference(
+        defaultAccountId: clearDefaultAccount
+            ? null
+            : defaultAccountId ?? this.defaultAccountId,
+        serverVersion: serverVersion ?? this.serverVersion,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
+  Map<String, Object?> toJson() => {
+        'id': singletonId,
+        'default_account_id': defaultAccountId,
+        'server_version': serverVersion,
+        'updated_at': updatedAt,
+      };
+
+  factory UserPreference.fromJson(Map<String, Object?> json) => UserPreference(
+        defaultAccountId: json['default_account_id'] as String?,
+        serverVersion: (json['server_version'] as num?)?.toInt(),
+        updatedAt: json['updated_at'] as String?,
       );
 }
 
@@ -628,6 +772,8 @@ class FinanceState {
     this.conflicts = const <String>[],
     this.quickMemories = const <QuickMemory>[],
     this.calibrationDrafts = const <CalibrationDraft>[],
+    this.syncIssues = const <SyncIssue>[],
+    this.preference,
     this.defaultAccountId,
     this.syncState = const SyncState(),
   });
@@ -646,6 +792,8 @@ class FinanceState {
   final List<String> conflicts;
   final List<QuickMemory> quickMemories;
   final List<CalibrationDraft> calibrationDrafts;
+  final List<SyncIssue> syncIssues;
+  final UserPreference? preference;
   final String? defaultAccountId;
   final SyncState syncState;
 
@@ -668,7 +816,11 @@ class FinanceState {
     List<String>? conflicts,
     List<QuickMemory>? quickMemories,
     List<CalibrationDraft>? calibrationDrafts,
+    List<SyncIssue>? syncIssues,
+    UserPreference? preference,
+    bool clearPreference = false,
     String? defaultAccountId,
+    bool clearDefaultAccountId = false,
     SyncState? syncState,
   }) {
     return FinanceState(
@@ -687,7 +839,11 @@ class FinanceState {
       conflicts: conflicts ?? this.conflicts,
       quickMemories: quickMemories ?? this.quickMemories,
       calibrationDrafts: calibrationDrafts ?? this.calibrationDrafts,
-      defaultAccountId: defaultAccountId ?? this.defaultAccountId,
+      syncIssues: syncIssues ?? this.syncIssues,
+      preference: clearPreference ? null : preference ?? this.preference,
+      defaultAccountId: clearDefaultAccountId
+          ? null
+          : defaultAccountId ?? this.defaultAccountId,
       syncState: syncState ?? this.syncState,
     );
   }
@@ -708,11 +864,15 @@ class FinanceState {
         'quick_memories': quickMemories.map((item) => item.toJson()).toList(),
         'calibration_drafts':
             calibrationDrafts.map((item) => item.toJson()).toList(),
+        'sync_issues': syncIssues.map((item) => item.toJson()).toList(),
+        'preference': preference?.toJson(),
         'default_account_id': defaultAccountId,
         'sync_state': {
           'server_version': syncState.serverVersion,
           if (syncState.lastSyncedAt != null)
             'last_synced_at': syncState.lastSyncedAt,
+          if (syncState.upgradeRequiredProtocol != null)
+            'upgrade_required_protocol': syncState.upgradeRequiredProtocol,
         },
       };
 
@@ -770,11 +930,25 @@ class FinanceState {
             .map((item) => CalibrationDraft.fromJson(
                 (item! as Map).cast<String, Object?>()))
             .toList(),
+        syncIssues: ((json['sync_issues'] as List<Object?>?) ??
+                const <Object?>[])
+            .map((item) =>
+                SyncIssue.fromJson((item! as Map).cast<String, Object?>()))
+            .toList(),
+        preference: json['preference'] is Map
+            ? UserPreference.fromJson(
+                (json['preference']! as Map).cast<String, Object?>())
+            : null,
         defaultAccountId: json['default_account_id'] as String?,
         syncState: SyncState(
             serverVersion: _serverVersionFromJson(json['sync_state']),
             lastSyncedAt: json['sync_state'] is Map
                 ? (json['sync_state'] as Map)['last_synced_at'] as String?
+                : null,
+            upgradeRequiredProtocol: json['sync_state'] is Map
+                ? ((json['sync_state'] as Map)['upgrade_required_protocol']
+                        as num?)
+                    ?.toInt()
                 : null),
       );
 }

@@ -10,6 +10,7 @@ enum ApiFailureKind {
   conflict,
   validation,
   network,
+  upgradeRequired,
   server
 }
 
@@ -21,6 +22,7 @@ class ApiFailure implements Exception {
     this.code,
     this.detail,
     this.retryAfter,
+    this.minProtocol,
   });
 
   final ApiFailureKind kind;
@@ -37,6 +39,10 @@ class ApiFailure implements Exception {
 
   /// Parsed `Retry-After` header, when the server sent a usable value.
   final Duration? retryAfter;
+
+  /// `min_protocol` from a 426 `upgrade_required` body. Drives the explainable
+  /// upgrade prompt; null when the server did not send a usable value.
+  final int? minProtocol;
 
   @override
   String toString() => message;
@@ -131,17 +137,18 @@ class ApiTransport {
   ApiFailure _failureForStatus(
     int statusCode,
     String path, {
-    ({String? code, String? detail})? error,
+    ({String? code, String? detail, int? minProtocol})? error,
     Duration? retryAfter,
   }) {
     final base = _baseFailureForStatus(statusCode, path);
     return ApiFailure(
       base.kind,
-      base.message,
+      upgradeMessage(base.kind, error?.minProtocol) ?? base.message,
       statusCode: statusCode,
       code: error?.code,
       detail: error?.detail,
       retryAfter: retryAfter,
+      minProtocol: error?.minProtocol,
     );
   }
 
@@ -157,12 +164,20 @@ class ApiTransport {
     final base = _baseFailureForStatus(statusCode, path);
     return ApiFailure(
       base.kind,
-      base.message,
+      upgradeMessage(base.kind, error?.minProtocol) ?? base.message,
       statusCode: statusCode,
       code: error?.code,
       detail: error?.detail,
       retryAfter: _retryAfter(headers),
+      minProtocol: error?.minProtocol,
     );
+  }
+
+  static String? upgradeMessage(ApiFailureKind kind, int? minProtocol) {
+    if (kind != ApiFailureKind.upgradeRequired) return null;
+    return minProtocol == null
+        ? '客户端协议版本过低，请升级应用后再同步'
+        : '客户端协议版本过低，请升级到支持协议 v$minProtocol 的版本后再同步';
   }
 
   static ApiFailure _baseFailureForStatus(int statusCode, String path) {
@@ -180,6 +195,10 @@ class ApiTransport {
     }
     if (statusCode == 429) {
       return const ApiFailure(ApiFailureKind.validation, '操作太频繁，请稍后再试');
+    }
+    if (statusCode == 426) {
+      return const ApiFailure(
+          ApiFailureKind.upgradeRequired, '客户端协议版本过低，请升级应用后再同步');
     }
     if (statusCode == 409 && (path == '/auth/register' || path == '/auth/me')) {
       return const ApiFailure(ApiFailureKind.conflict, '用户名已被使用，请换一个');
@@ -199,20 +218,28 @@ class ApiTransport {
     return const ApiFailure(ApiFailureKind.server, '同步服务暂时不可用');
   }
 
-  /// Reads the machine code and display detail from a `{"detail","code"}` body.
-  /// Anything unparseable is ignored: no raw body text ever reaches the UI.
-  static ({String? code, String? detail}) _errorBody(String body) {
+  /// Reads the machine code, display detail and (for 426) `min_protocol` from
+  /// the error body. Anything unparseable is ignored: no raw body text ever
+  /// reaches the UI.
+  static ({String? code, String? detail, int? minProtocol}) _errorBody(
+      String body) {
     try {
       final decoded = jsonDecode(body);
-      if (decoded is! Map) return (code: null, detail: null);
+      if (decoded is! Map) return (code: null, detail: null, minProtocol: null);
       final code = decoded['code'];
       final detail = decoded['detail'];
+      final minProtocol = decoded['min_protocol'];
       return (
         code: _safeCode(code),
         detail: detail is String ? _safeDetail(detail) : null,
+        minProtocol: minProtocol is num &&
+                minProtocol.toInt() > 0 &&
+                minProtocol.toInt() <= 1000
+            ? minProtocol.toInt()
+            : null,
       );
     } on FormatException {
-      return (code: null, detail: null);
+      return (code: null, detail: null, minProtocol: null);
     }
   }
 

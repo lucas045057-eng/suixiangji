@@ -5,6 +5,15 @@ import '../../../domain/models.dart';
 import '../domain/asset_rules.dart';
 import 'assets_remote_data_source.dart';
 
+/// Account payload as the V2 wire expects it: the default flag is read-only on
+/// the account entity and must be omitted, otherwise the server rejects a
+/// changed projection with `read_only_field`.
+Map<String, Object?> accountWirePayload(Account account) {
+  final json = account.toJson();
+  json.remove('is_default_payment');
+  return json;
+}
+
 class AssetsRepository {
   AssetsRepository({required this.session, this.remote});
 
@@ -19,17 +28,38 @@ class AssetsRepository {
   Future<FinanceState> saveAccount(Account account, {FinanceState? baseState}) {
     return session.write(
       (current) => AssetRules.upsertAccount(current, account),
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
-          entity: 'accounts',
-          entityId: account.id,
-          type: SyncOperationType.upsert,
-          payload: account.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
+      deriveOperations: (current, next) {
+        final previous = current.accounts
+            .where((item) => item.id == account.id)
+            .firstOrNull;
+        final saved = next.accounts
+            .where((item) => item.id == account.id)
+            .firstOrNull;
+        if (saved == null) return const <SyncOperation>[];
+        final timestamp = DateTime.now().toIso8601String();
+        final operations = <SyncOperation>[
+          SyncOperation(
+            clientOpId:
+                'account:${account.id}:${DateTime.now().microsecondsSinceEpoch}',
+            entity: 'accounts',
+            entityId: account.id,
+            type: SyncOperationType.upsert,
+            // `is_default_payment` is read-only on the account entity; the
+            // default account travels through the `user_preferences` singleton.
+            payload: accountWirePayload(saved),
+            createdAt: timestamp,
+            baseVersion: previous?.serverVersion,
+            base: previous?.toJson(),
+          ),
+        ];
+        // The local default changed (including clearing it): persist the
+        // preference entity so the server owns the authoritative choice.
+        if (next.defaultAccountId != current.defaultAccountId) {
+          operations.add(_preferenceOperation(
+              current, next.defaultAccountId, timestamp));
+        }
+        return operations;
+      },
       initialState: baseState,
     );
   }
@@ -38,7 +68,35 @@ class AssetsRepository {
       {FinanceState? baseState}) {
     return session.write(
       (current) => AssetRules.setDefaultAccount(current, accountId),
+      deriveOperations: (current, next) {
+        if (next.defaultAccountId == current.defaultAccountId) {
+          return const <SyncOperation>[];
+        }
+        return [
+          _preferenceOperation(current, next.defaultAccountId,
+              DateTime.now().toIso8601String()),
+        ];
+      },
       initialState: baseState,
+    );
+  }
+
+  /// Builds the singleton preference upsert. A null [defaultAccountId]
+  /// explicitly clears the preference; the base snapshot is the previously
+  /// known authoritative preference, never a fabricated one.
+  SyncOperation _preferenceOperation(
+      FinanceState current, String? defaultAccountId, String createdAt) {
+    final preference = current.preference;
+    return SyncOperation(
+      clientOpId:
+          'preference:${DateTime.now().microsecondsSinceEpoch}',
+      entity: 'user_preferences',
+      entityId: UserPreference.singletonId,
+      type: SyncOperationType.upsert,
+      payload: <String, Object?>{'default_account_id': defaultAccountId},
+      createdAt: createdAt,
+      baseVersion: preference?.serverVersion,
+      base: preference?.toJson(),
     );
   }
 
@@ -63,18 +121,39 @@ class AssetsRepository {
 
   /// Replaces the optimistic row with the authoritative adjustment and clears
   /// the account's pending draft in the same write.
+  ///
+  /// The authoritative adjustment may come back under a different ID than the
+  /// optimistic one. Remove the optimistic row first (matched by ID or client
+  /// operation ID) so a mismatch cannot leave two rows behind and double-count
+  /// the balance (Pi O-1).
   Future<FinanceState> adoptAdjustment(
     FinanceTransaction adjustment, {
     required String accountId,
+    String? optimisticAdjustmentId,
+    String? optimisticClientOpId,
     FinanceState? baseState,
   }) {
     return session.write(
-      (current) => AssetRules.upsertTransaction(
-        current,
-        adjustment,
-      ).copyWith(calibrationDrafts: current.calibrationDrafts
-          .where((draft) => draft.accountId != accountId)
-          .toList()),
+      (current) {
+        final retained = current.transactions.where((row) {
+          if (row.id == adjustment.id) return true;
+          if (optimisticAdjustmentId != null &&
+              row.id == optimisticAdjustmentId) {
+            return false;
+          }
+          if (optimisticClientOpId != null &&
+              row.clientOpId == optimisticClientOpId) {
+            return false;
+          }
+          return true;
+        }).toList();
+        return AssetRules.upsertTransaction(
+          current.copyWith(transactions: retained),
+          adjustment,
+        ).copyWith(calibrationDrafts: current.calibrationDrafts
+            .where((draft) => draft.accountId != accountId)
+            .toList());
+      },
       initialState: baseState,
     );
   }
@@ -121,8 +200,10 @@ class AssetsRepository {
                 entity: 'accounts',
                 entityId: account.id,
                 type: SyncOperationType.upsert,
-                payload: account.toJson(),
-                createdAt: DateTime.now().toIso8601String()));
+                payload: accountWirePayload(account),
+                createdAt: DateTime.now().toIso8601String(),
+                baseVersion: before[account.id]?.serverVersion,
+                base: before[account.id]?.toJson()));
       },
       initialState: baseState,
     );

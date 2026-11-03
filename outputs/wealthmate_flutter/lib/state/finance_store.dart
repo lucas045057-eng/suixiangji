@@ -182,6 +182,7 @@ class FinanceStore extends ChangeNotifier {
   bool _pendingDeletionCleanupStateUnknown = false;
   int _sessionGeneration = 0;
   (int, int)? _syncingSession;
+  bool _upgradeRetryRequested = false;
 
   /// Optional diagnostic/test observer. The callback is invoked only after a
   /// local SyncQueue mutation and its aggregate state have been persisted.
@@ -592,16 +593,43 @@ class FinanceStore extends ChangeNotifier {
     return _syncScheduler.request(reason: reason, immediate: immediate);
   }
 
-  Future<void> sync() => requestSync('manual', immediate: true);
+  Future<void> sync() {
+    // An explicit retry is the only way out of a 426 gate.
+    _upgradeRetryRequested = true;
+    return requestSync('manual', immediate: true);
+  }
 
   void _publishLocalMutation(String reason) {
     onLocalMutation?.call(reason);
-    if (repository.api != null) {
+    if (repository.api != null && !_state.syncState.needsUpgrade) {
       unawaited(requestSync(reason));
     }
   }
 
+  String _syncMessage() {
+    final upgrade = _state.syncState.upgradeRequiredProtocol;
+    if (upgrade != null) {
+      return '客户端协议版本过低，请升级到支持协议 v$upgrade 的版本后重试';
+    }
+    final error = _state.syncState.error;
+    if (error != null) return error;
+    final issue = _state.syncIssues.isEmpty ? null : _state.syncIssues.last;
+    if (issue != null) return issue.userMessage;
+    if (_state.conflicts.isNotEmpty) return '有冲突待处理';
+    if (repository.queue.pending().isNotEmpty) {
+      return '有 ${repository.queue.pending().length} 条待同步数据';
+    }
+    return _state.syncState.lastSyncedAt == null ? '离线演示/待配置' : '已完成同步';
+  }
+
   Future<bool> _runSyncPipeline() async {
+    if (_state.syncState.needsUpgrade && !_upgradeRetryRequested) {
+      // 426 gate: keep local data and the queue, stop automatic retries.
+      _message = _syncMessage();
+      notifyListeners();
+      return false;
+    }
+    _upgradeRetryRequested = false;
     final started = _session;
     _syncingSession = started;
     _state = _withSyncActivity(
@@ -616,14 +644,7 @@ class FinanceStore extends ChangeNotifier {
       );
       if (_session != started) return true;
       _state = synced;
-      _message = _state.syncState.error ??
-          (_state.conflicts.isNotEmpty
-              ? '有冲突待处理'
-              : repository.queue.pending().isNotEmpty
-                  ? '有 ${repository.queue.pending().length} 条待同步数据'
-                  : _state.syncState.lastSyncedAt == null
-                      ? '离线演示/待配置'
-                      : '已完成同步');
+      _message = _syncMessage();
       return _state.syncState.error == null;
     } on Object catch (error) {
       if (_session == started) {

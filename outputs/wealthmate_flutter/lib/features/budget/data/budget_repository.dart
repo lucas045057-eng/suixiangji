@@ -35,17 +35,23 @@ class BudgetRepository {
           ],
         );
       },
-      appendOperations: [
-        SyncOperation(
-          clientOpId:
-              'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}:${Random.secure().nextInt(1 << 32)}',
-          entity: 'budgets',
-          entityId: budget.id,
-          type: SyncOperationType.upsert,
-          payload: budget.toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        ),
-      ],
+      deriveOperations: (current, _) {
+        final previous =
+            current.budgets.where((item) => item.id == budget.id).firstOrNull;
+        return [
+          SyncOperation(
+            clientOpId:
+                'budget:${budget.id}:${DateTime.now().microsecondsSinceEpoch}:${Random.secure().nextInt(1 << 32)}',
+            entity: 'budgets',
+            entityId: budget.id,
+            type: SyncOperationType.upsert,
+            payload: budget.toJson(),
+            createdAt: DateTime.now().toIso8601String(),
+            baseVersion: previous?.serverVersion,
+            base: previous?.toJson(),
+          ),
+        ];
+      },
       initialState: baseState,
     );
   }

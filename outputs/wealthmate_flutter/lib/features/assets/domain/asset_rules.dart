@@ -23,7 +23,10 @@ class AssetRules {
       account,
     ]);
     if (account.isDefaultPayment && account.type == AccountType.asset) {
-      return next.copyWith(defaultAccountId: account.id);
+      return setDefaultAccount(next, account.id);
+    }
+    if (!account.isDefaultPayment && state.defaultAccountId == account.id) {
+      return _clearDefaultProjection(next);
     }
     return next;
   }
@@ -111,7 +114,40 @@ class AssetRules {
         item.id == accountId &&
         item.isActive &&
         item.type == AccountType.asset);
-    return eligible ? state.copyWith(defaultAccountId: accountId) : state;
+    if (!eligible) return state;
+    final preference = state.preference ?? const UserPreference();
+    return state.copyWith(
+      defaultAccountId: accountId,
+      preference: preference.copyWith(defaultAccountId: accountId),
+      accounts: [
+        for (final account in state.accounts)
+          account.isDefaultPayment == (account.id == accountId)
+              ? account
+              : account.copyWith(isDefaultPayment: account.id == accountId),
+      ],
+    );
+  }
+
+  /// Keeps `isDefaultPayment` as a pure projection of the singleton preference.
+  static FinanceState projectDefaultAccount(
+      FinanceState state, String? accountId) {
+    final next = accountId == null
+        ? state.copyWith(clearDefaultAccountId: true)
+        : state.copyWith(defaultAccountId: accountId);
+    return next.copyWith(accounts: [
+      for (final account in next.accounts)
+        account.isDefaultPayment == (account.id == accountId)
+            ? account
+            : account.copyWith(isDefaultPayment: account.id == accountId),
+    ]);
+  }
+
+  static FinanceState _clearDefaultProjection(FinanceState state) {
+    final preference = state.preference ?? const UserPreference();
+    return projectDefaultAccount(
+        state.copyWith(
+            preference: preference.copyWith(clearDefaultAccount: true)),
+        null);
   }
 
   static FinanceState applyExchangeRate(

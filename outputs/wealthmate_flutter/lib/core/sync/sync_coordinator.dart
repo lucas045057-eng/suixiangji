@@ -164,6 +164,10 @@ class SyncCoordinator {
           .toList();
       final result = await api!.push(operations);
       onWatermark?.call((result['server_version'] as num?)?.toInt() ?? 0);
+      if (result['results'] is List) {
+        return await _applyV2Push(state, operations, result,
+            isCurrent: isCurrent);
+      }
       final accepted =
           ((result['accepted'] as List<Object?>?) ?? const <Object?>[])
               .map((item) => (item! as Map).cast<String, Object?>())
@@ -313,13 +317,329 @@ class SyncCoordinator {
       }, initialState: state);
       return nextState;
     } on ApiFailure catch (failure) {
-      return _recordFailure(state, failure.message, isCurrent: isCurrent);
+      return _recordFailure(state, failure.message,
+          isCurrent: isCurrent, failure: failure);
     }
   }
 
   Future<FinanceState> pullChanges(FinanceState state,
           {bool Function()? isCurrent}) =>
       _pullChanges(state, isCurrent: isCurrent);
+
+  /// Applies a V2 `{results, rejected, conflicts}` push response.
+  ///
+  /// Every sent operation receives exactly one outcome. The queue must drain:
+  /// a rejected operation is rolled back locally, its intent is kept as a
+  /// durable [SyncIssue], and later operations still apply. Version races
+  /// adopt the authoritative row; field conflicts are already resolved by the
+  /// server and arrive as a normal `merged` result carrying the complete row.
+  Future<FinanceState> _applyV2Push(
+    FinanceState state,
+    List<SyncOperation> operations,
+    Map<String, Object?> result, {
+    bool Function()? isCurrent,
+  }) async {
+    if (isCurrent != null && !isCurrent()) return state;
+    Map<String, Map<String, Object?>> byOp(Object? value) => {
+          for (final item in ((value as List<Object?>?) ?? const <Object?>[])
+              .map((item) => (item! as Map).cast<String, Object?>()))
+            if (item['op_id'] is String) item['op_id']! as String: item,
+        };
+    final results = byOp(result['results']);
+    final rejected = byOp(result['rejected']);
+    final conflicts = byOp(result['conflicts']);
+    final nextState = await session.write((current) {
+      final base = _mergeCurrentWithRequested(current, state);
+      var next = base;
+      final issues = [...base.syncIssues];
+      final pendingAtResponse = queue.pending();
+
+      void addIssue(SyncOperation operation, Map<String, Object?> detail) {
+        final code = (detail['code'] as String?) ?? 'rejected';
+        if (code == 'no_change' || code == 'balance_unchanged') return;
+        if (issues.any((issue) =>
+            issue.clientOpId == operation.clientOpId && issue.code == code)) {
+          return;
+        }
+        issues.add(SyncIssue(
+          clientOpId: operation.clientOpId,
+          entity: operation.entity,
+          entityId: operation.entityId,
+          code: code,
+          detail: (detail['detail'] as String?) ?? '',
+          field: detail['field'] as String?,
+          createdAt: DateTime.now().toIso8601String(),
+        ));
+      }
+
+      for (final operation in operations) {
+        final resultItem = results[operation.clientOpId];
+        final rejectedItem = rejected[operation.clientOpId];
+        final conflictItem = conflicts[operation.clientOpId];
+        if (resultItem == null &&
+            rejectedItem == null &&
+            conflictItem == null) {
+          // No receipt for this operation: keep it queued instead of losing
+          // the local intent.
+          continue;
+        }
+        final pending = pendingAtResponse
+            .where((item) =>
+                item.entity == operation.entity &&
+                item.entityId == operation.entityId)
+            .firstOrNull;
+        // A local edit made while the push was in flight is a newer intent.
+        // Never overwrite it with a receipt for the preceding snapshot.
+        final canApply = pending != null &&
+            pending.clientOpId == operation.clientOpId &&
+            pending.type == operation.type &&
+            mapEquals(pending.payload, operation.payload) &&
+            _matchesSnapshot(
+                _entitySnapshot(base, operation), operation.payload);
+        final row = _rowOf(resultItem?['row']) ??
+            _rowOf(conflictItem?['authoritative_row']);
+        final rejectedCode = (rejectedItem?['code'] as String?) ??
+            (resultItem?['status'] == 'rejected' ? 'rejected' : null);
+
+        if (rejectedCode != null) {
+          if (canApply) next = _rollbackOperation(next, operation);
+          addIssue(
+              operation,
+              rejectedItem ??
+                  <String, Object?>{
+                    'code': rejectedCode,
+                    'detail': resultItem?['detail'],
+                  });
+          final newId = _retireV2Operation(operation, pending,
+              canApply: canApply, row: null);
+          if (newId != null) {
+            next = _relabelTransaction(next, operation.entityId, newId);
+          }
+        } else if (conflictItem != null) {
+          final reason =
+              (conflictItem['reason'] as String?) ?? 'version_conflict';
+          if (canApply) {
+            if (row != null) {
+              next = _adoptV2Row(next, operation, row);
+            } else if (reason == 'balance_changed') {
+              // The adjustment was never applied; drop the optimistic row so
+              // the local balance does not count it.
+              next = _rollbackOperation(next, operation);
+            }
+          }
+          addIssue(operation, {
+            'code': reason,
+            'detail': conflictItem['detail'],
+          });
+          final newId = _retireV2Operation(operation, pending,
+              canApply: canApply, row: row);
+          if (newId != null) {
+            next = _relabelTransaction(next, operation.entityId, newId);
+          }
+        } else {
+          if (canApply && row != null) {
+            next = _adoptV2Row(next, operation, row);
+          }
+          final newId = _retireV2Operation(operation, pending,
+              canApply: canApply, row: row);
+          if (newId != null) {
+            next = _relabelTransaction(next, operation.entityId, newId);
+          }
+        }
+      }
+
+      while (issues.length > 50) {
+        issues.removeAt(0);
+      }
+
+      return next.copyWith(
+        syncIssues: issues,
+        syncState: SyncState(
+          // A push receipt acknowledges writes, not downloaded records.
+          serverVersion: base.syncState.serverVersion,
+          lastSyncedAt: base.syncState.lastSyncedAt,
+        ),
+      );
+    }, initialState: state);
+    return nextState;
+  }
+
+  Map<String, Object?>? _rowOf(Object? value) =>
+      value is Map ? value.cast<String, Object?>() : null;
+
+  String _newOperationId() =>
+      'edit-${DateTime.now().microsecondsSinceEpoch}-${Random.secure().nextInt(1 << 32)}';
+
+  /// Completes the sent operation. When a newer local edit is still queued,
+  /// it is re-issued under a fresh operation ID (a V2 ID cannot be reused with
+  /// different contents) and rebased onto any authoritative row.
+  String? _retireV2Operation(
+    SyncOperation sent,
+    SyncOperation? pending, {
+    required bool canApply,
+    Map<String, Object?>? row,
+  }) {
+    if (pending == null || canApply) {
+      queue.complete(sent.clientOpId);
+      return null;
+    }
+    final sharesId = pending.clientOpId == sent.clientOpId;
+    final newId = sharesId ? _newOperationId() : pending.clientOpId;
+    final version = (row?['server_version'] as num?)?.toInt();
+    if (sharesId) queue.complete(pending.clientOpId);
+    queue.enqueue(SyncOperation(
+      clientOpId: newId,
+      entity: pending.entity,
+      entityId: pending.entityId,
+      type: pending.type,
+      payload: {
+        ...pending.payload,
+        if (version != null) 'server_version': version,
+        if (pending.entity == 'transactions') 'client_op_id': newId,
+      },
+      createdAt: pending.createdAt,
+      baseVersion: version ?? pending.baseVersion,
+      base: row ?? pending.base,
+    ));
+    return sharesId && pending.entity == 'transactions' ? newId : null;
+  }
+
+  FinanceState _relabelTransaction(
+      FinanceState state, String entityId, String clientOpId) {
+    return state.copyWith(transactions: [
+      for (final item in state.transactions)
+        item.id == entityId ? item.copyWith(clientOpId: clientOpId) : item,
+    ]);
+  }
+
+  FinanceState _adoptV2Row(
+      FinanceState state, SyncOperation operation, Map<String, Object?> row) {
+    switch (operation.entity) {
+      case 'accounts':
+        final account = Account.fromJson(row);
+        return state.copyWith(accounts: [
+          ...state.accounts.where(
+              (item) => item.id != operation.entityId && item.id != account.id),
+          account,
+        ]);
+      case 'transactions':
+        final transaction = FinanceTransaction.fromJson(row);
+        return state.copyWith(transactions: [
+          ...state.transactions.where((item) =>
+              item.id != operation.entityId && item.id != transaction.id),
+          transaction,
+        ]);
+      case 'categories':
+        final category = Category.fromJson(row);
+        return state.copyWith(categories: [
+          ...state.categories.where(
+              (item) => item.id != operation.entityId && item.id != category.id),
+          category,
+        ]);
+      case 'budgets':
+        final budget = Budget.fromJson(row);
+        return state.copyWith(budgets: [
+          ...state.budgets.where(
+              (item) => item.id != operation.entityId && item.id != budget.id),
+          budget,
+        ]);
+      case 'user_preferences':
+        return _projectV2Preference(
+            state, UserPreference.fromJson(row));
+      default:
+        return state;
+    }
+  }
+
+  /// Rolls one rejected/conflicted operation back to its captured baseline.
+  /// Without a baseline (an optimistic create) the entity is discarded.
+  FinanceState _rollbackOperation(
+      FinanceState state, SyncOperation operation) {
+    final base = operation.base;
+    if (base != null) {
+      switch (operation.entity) {
+        case 'accounts':
+          final account = Account.fromJson(base);
+          return state.copyWith(accounts: [
+            ...state.accounts
+                .where((item) => item.id != operation.entityId),
+            account,
+          ]);
+        case 'transactions':
+          final transaction = FinanceTransaction.fromJson(base);
+          return state.copyWith(transactions: [
+            ...state.transactions
+                .where((item) => item.id != operation.entityId),
+            transaction,
+          ]);
+        case 'categories':
+          final category = Category.fromJson(base);
+          return state.copyWith(categories: [
+            ...state.categories
+                .where((item) => item.id != operation.entityId),
+            category,
+          ]);
+        case 'budgets':
+          final budget = Budget.fromJson(base);
+          return state.copyWith(budgets: [
+            ...state.budgets.where((item) => item.id != operation.entityId),
+            budget,
+          ]);
+        case 'user_preferences':
+          return _projectV2Preference(
+              state, UserPreference.fromJson(base));
+        default:
+          return state;
+      }
+    }
+    switch (operation.entity) {
+      case 'accounts':
+        final remaining = state.accounts
+            .where((item) => item.id != operation.entityId)
+            .toList();
+        final cleared = state.defaultAccountId == operation.entityId
+            ? state.copyWith(clearDefaultAccountId: true)
+            : state;
+        return cleared.copyWith(accounts: [
+          for (final account in remaining)
+            account.isDefaultPayment && state.defaultAccountId == account.id
+                ? account.copyWith(isDefaultPayment: false)
+                : account,
+        ]);
+      case 'transactions':
+        return state.copyWith(transactions: state.transactions
+            .where((item) => item.id != operation.entityId)
+            .toList());
+      case 'categories':
+        return state.copyWith(categories: state.categories
+            .where((item) => item.id != operation.entityId)
+            .toList());
+      case 'budgets':
+        return state.copyWith(budgets: state.budgets
+            .where((item) => item.id != operation.entityId)
+            .toList());
+      case 'user_preferences':
+        return _projectV2Preference(state.copyWith(clearPreference: true), const UserPreference());
+      default:
+        return state;
+    }
+  }
+
+  /// `is_default_payment` is only a local projection of the singleton
+  /// preference row.
+  FinanceState _projectV2Preference(
+      FinanceState state, UserPreference preference) {
+    final id = preference.defaultAccountId;
+    final scoped = id == null
+        ? state.copyWith(clearDefaultAccountId: true, preference: preference)
+        : state.copyWith(defaultAccountId: id, preference: preference);
+    return scoped.copyWith(accounts: [
+      for (final account in scoped.accounts)
+        account.isDefaultPayment == (account.id == id)
+            ? account
+            : account.copyWith(isDefaultPayment: account.id == id),
+    ]);
+  }
 
   Future<FinanceState> _pullChanges(FinanceState state,
       {int minimumServerVersion = 0, bool Function()? isCurrent}) async {
@@ -401,6 +721,20 @@ class SyncCoordinator {
             nextState = nextState.copyWith(defaultAccountId: defaultAccount.id);
           }
         }
+        // `preferences: []` means "no preference written yet", not "cleared".
+        // A local preference op still in flight is the newer intent.
+        final remotePreference = remote.preference;
+        final preferencePending =
+            pending('user_preferences', UserPreference.singletonId);
+        if (remotePreference != null && !preferencePending) {
+          final localVersion = nextState.preference?.serverVersion;
+          if (localVersion == null ||
+              (remotePreference.serverVersion ?? 0) >= localVersion) {
+            nextState = _projectV2Preference(
+                nextState.copyWith(preference: remotePreference),
+                remotePreference);
+          }
+        }
         return nextState.copyWith(
             financialSchemaVersion: 2,
             syncState: SyncState(
@@ -413,17 +747,26 @@ class SyncCoordinator {
       }, initialState: state);
       return next;
     } on ApiFailure catch (failure) {
-      return _recordFailure(state, failure.message, isCurrent: isCurrent);
+      return _recordFailure(state, failure.message,
+          isCurrent: isCurrent, failure: failure);
     }
   }
 
   Future<FinanceState> _recordFailure(FinanceState state, String message,
-      {bool Function()? isCurrent}) {
+      {bool Function()? isCurrent, ApiFailure? failure}) {
     if (isCurrent != null && !isCurrent()) return Future.value(state);
     return session.write((current) {
       final base = _mergeCurrentWithRequested(current, state);
+      // 426 is sticky: automatic sync stays gated until an explicit retry
+      // succeeds. Other failures leave an existing gate untouched.
+      final minProtocol = failure?.kind == ApiFailureKind.upgradeRequired
+          ? (failure?.minProtocol ?? 1)
+          : null;
       return base.copyWith(
-          syncState: base.syncState.copyWith(isSyncing: false, error: message));
+          syncState: base.syncState.copyWith(
+              isSyncing: false,
+              error: message,
+              upgradeRequiredProtocol: minProtocol));
     }, initialState: state);
   }
 
@@ -445,6 +788,7 @@ class SyncCoordinator {
           .where((item) => item.id == op.entityId)
           .firstOrNull
           ?.toJson(),
+      'user_preferences' => state.preference?.toJson(),
       _ => null,
     };
   }

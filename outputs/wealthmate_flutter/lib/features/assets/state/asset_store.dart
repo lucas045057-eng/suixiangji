@@ -244,6 +244,8 @@ class AssetStore extends ChangeNotifier {
       if (!await _apply((baseState) => repository.adoptAdjustment(
             authoritative,
             accountId: current.id,
+            optimisticAdjustmentId: adjustmentId,
+            optimisticClientOpId: clientOpId,
             baseState: baseState,
           ))) {
         return;
@@ -362,6 +364,7 @@ class AssetStore extends ChangeNotifier {
     }
     _message = '默认支付账户已更新';
     _notifyChanged();
+    onLocalMutation?.call('assets.account.default');
   }
 
   Future<void> saveManualExchangeRate({

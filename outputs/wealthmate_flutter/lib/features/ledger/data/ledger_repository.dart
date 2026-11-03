@@ -42,35 +42,52 @@ class LedgerRepository {
     return session.write(
       (current) => LedgerRules.upsertTransaction(
           current, LedgerRules.prepareConversion(current, transaction)),
-      deriveOperations: (_, next) => [
-        SyncOperation(
-          clientOpId: transaction.clientOpId,
-          entity: 'transactions',
-          entityId: transaction.id,
-          type: SyncOperationType.upsert,
-          payload: next.transactions
-              .firstWhere((row) => row.id == transaction.id)
-              .toJson(),
-          createdAt: DateTime.now().toIso8601String(),
-        )
-      ],
+      deriveOperations: (current, next) {
+        final previous = current.transactions
+            .where((row) => row.id == transaction.id)
+            .firstOrNull;
+        return [
+          SyncOperation(
+            clientOpId: transaction.clientOpId,
+            entity: 'transactions',
+            entityId: transaction.id,
+            type: SyncOperationType.upsert,
+            payload: next.transactions
+                .firstWhere((row) => row.id == transaction.id)
+                .toJson(),
+            createdAt: DateTime.now().toIso8601String(),
+            baseVersion: previous?.serverVersion,
+            base: previous?.toJson(),
+          )
+        ];
+      },
       initialState: baseState,
     );
   }
 
   Future<FinanceState> saveCategory(Category category,
       {FinanceState? baseState}) {
-    return applyTransaction(
+    return session.write(
       (current) => LedgerRules.upsertCategory(current, category),
-      operation: SyncOperation(
-        clientOpId:
-            'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
-        entity: 'categories',
-        entityId: category.id,
-        type: SyncOperationType.upsert,
-        payload: category.toJson(),
-        createdAt: DateTime.now().toIso8601String(),
-      ),
+      deriveOperations: (current, _) {
+        final previous = current.categories
+            .where((row) => row.id == category.id)
+            .firstOrNull;
+        return [
+          SyncOperation(
+            clientOpId:
+                'category:${category.id}:${DateTime.now().microsecondsSinceEpoch}',
+            entity: 'categories',
+            entityId: category.id,
+            type: SyncOperationType.upsert,
+            payload: category.toJson(),
+            createdAt: DateTime.now().toIso8601String(),
+            // Categories carry no per-record version locally; never fabricate
+            // one. The field snapshot still lets a rejection roll back.
+            base: previous?.toJson(),
+          ),
+        ];
+      },
       initialState: baseState,
     );
   }
@@ -93,6 +110,8 @@ class LedgerRepository {
         type: SyncOperationType.delete,
         payload: deleted.toJson(),
         createdAt: timestamp,
+        baseVersion: existing.serverVersion,
+        base: existing.toJson(),
       ),
       initialState: baseState,
     );

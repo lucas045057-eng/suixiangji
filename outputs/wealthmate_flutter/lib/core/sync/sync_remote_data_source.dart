@@ -29,6 +29,9 @@ class SyncRemoteDataSource {
     final accountItems = _mapItems(json['accounts']);
     final categoryItems = _mapItems(json['categories']);
     final budgetItems = _mapItems(json['budgets']);
+    // `preferences` is a singleton list: [] means "the user has not written a
+    // preference yet", not an error and not a deletion.
+    final preferenceItems = _mapItems(json['preferences']);
     return PullResult(
       transactions: transactionItems
           .map((item) => FinanceTransaction.fromJson(item))
@@ -36,6 +39,9 @@ class SyncRemoteDataSource {
       accounts: accountItems.map((item) => Account.fromJson(item)).toList(),
       categories: categoryItems.map((item) => Category.fromJson(item)).toList(),
       budgets: budgetItems.map((item) => Budget.fromJson(item)).toList(),
+      preference: preferenceItems.isEmpty
+          ? null
+          : UserPreference.fromJson(preferenceItems.first),
       serverVersion: (json['server_version'] as num?)?.toInt() ?? sinceVersion,
     );
   }
@@ -53,6 +59,7 @@ class PullResult {
     required this.accounts,
     this.categories = const [],
     this.budgets = const [],
+    this.preference,
     required this.serverVersion,
   });
 
@@ -60,5 +67,9 @@ class PullResult {
   final List<Account> accounts;
   final List<Category> categories;
   final List<Budget> budgets;
+
+  /// Authoritative `user_preferences` row, or null when the pull carried an
+  /// empty `preferences` list (nothing written yet).
+  final UserPreference? preference;
   final int serverVersion;
 }
