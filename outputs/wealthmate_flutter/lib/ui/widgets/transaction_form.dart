@@ -45,6 +45,7 @@ class _TransactionFormState extends State<TransactionForm> {
   late String date;
   late String occurredAt;
   late String currency;
+  String? _smartNotice;
 
   @override
   void initState() {
@@ -54,6 +55,7 @@ class _TransactionFormState extends State<TransactionForm> {
         text: initial == null ? '' : initial.amount.toString());
     noteController = TextEditingController(text: initial?.note ?? '');
     smartController = TextEditingController();
+    smartController.addListener(_clearStaleSmartNotice);
     type = initial?.type.name ?? TransactionType.expense.name;
     final transactionType = initial?.type ?? TransactionType.expense;
     categoryId = LedgerRules.validCategoryIdForType(
@@ -72,10 +74,19 @@ class _TransactionFormState extends State<TransactionForm> {
 
   @override
   void dispose() {
+    smartController.removeListener(_clearStaleSmartNotice);
     amountController.dispose();
     noteController.dispose();
     smartController.dispose();
     super.dispose();
+  }
+
+  /// Drops the "candidate not chosen yet" hint once the IME commits the word.
+  void _clearStaleSmartNotice() {
+    if (_smartNotice == null) return;
+    if (!_hasUncommittedLatinComposition(smartController)) {
+      setState(() => _smartNotice = null);
+    }
   }
 
   @override
@@ -203,9 +214,13 @@ class _TransactionFormState extends State<TransactionForm> {
         controller: smartController,
         maxLines: 4,
         keyboardType: TextInputType.multiline,
+        // Do not set hintLocales here. On Android it maps to
+        // EditorInfo.hintLocales, which asks the IME to switch languages
+        // regardless of the subtype the user is on. Advertising en-US can
+        // leave nine-key keyboards in English, which commits raw T9 letters
+        // ("wsm" instead of 外卖吗). Leaving it null keeps the language the
+        // user picked, exactly like the account/category text fields.
         enableSuggestions: true,
-        hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
-        autocorrect: false,
         decoration: const InputDecoration(
             labelText: '刚刚发生了什么？', hintText: '例如：今天中午外卖 32 元，支付宝'),
         validator: (value) =>
@@ -214,12 +229,28 @@ class _TransactionFormState extends State<TransactionForm> {
       const SizedBox(height: 8),
       const Text('支持金额、分类、支付账户和“昨天/今天”等时间描述。',
           style: TextStyle(color: paInkSub, fontSize: 10)),
+      if (_smartNotice != null) ...[
+        const SizedBox(height: 6),
+        Text(_smartNotice!,
+            style: const TextStyle(color: paWarn, fontSize: 10)),
+      ],
       const SizedBox(height: 18),
       SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
+              // Nine-key IMEs keep the pressed letters in the composing
+              // region until a candidate is chosen. Reading the controller
+              // now would hand the parser "wsm" instead of 外卖吗.
+              if (_hasUncommittedLatinComposition(smartController)) {
+                setState(() => _smartNotice =
+                    '输入法还在拼写中，请先选择候选字（例如“外卖吗”），再生成草稿');
+                return;
+              }
+              if (_smartNotice != null) {
+                setState(() => _smartNotice = null);
+              }
               final quickEntry = widget.quickEntry;
               if (quickEntry != null && quickEntry.batchSupported) {
                 await quickEntry.createBatch(smartController.text);
@@ -323,9 +354,8 @@ class _TransactionFormState extends State<TransactionForm> {
       TextFormField(
           controller: noteController,
           keyboardType: TextInputType.multiline,
+          // Same reason as the smart composer: no hintLocales override.
           enableSuggestions: true,
-          hintLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
-          autocorrect: false,
           decoration:
               const InputDecoration(labelText: '备注', hintText: '例如：午餐、通勤或房租')),
       const SizedBox(height: 20),
@@ -413,6 +443,21 @@ class _TransactionFormState extends State<TransactionForm> {
 
   static double _roundCurrencyAmount(double value) =>
       (value * 100).roundToDouble() / 100;
+
+  /// Whether the IME is still holding raw Latin letters (pinyin/T9) in its
+  /// composing region. Those letters are not the user's chosen text yet, so
+  /// feeding them to the quick-entry parser would record "wsm" instead of
+  /// 外卖吗. Non-Latin compositions are left alone: if the IME already shows
+  /// Chinese in the composing region there is nothing to wait for.
+  static bool _hasUncommittedLatinComposition(
+      TextEditingController controller) {
+    final composing = controller.value.composing;
+    if (!composing.isValid || composing.isCollapsed) return false;
+    final text = controller.value.text;
+    if (composing.end > text.length) return false;
+    return RegExp(r'[A-Za-z]')
+        .hasMatch(text.substring(composing.start, composing.end));
+  }
 
   static String _dateKey(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
