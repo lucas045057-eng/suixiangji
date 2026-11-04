@@ -96,6 +96,8 @@ class DashboardPage extends StatelessWidget {
       listenable: listenable,
       builder: (context, _) {
         final metrics = insights?.metrics ?? ledger.metrics;
+        final netWorthPending = metrics.hasPendingBalances;
+        final netWorthText = netWorthPending ? '待换算' : money(metrics.netWorth);
         final state = ledger.state;
         final alerts = budget?.alerts ?? budgetAlerts;
         final progress = budget?.progress ?? metrics.budgetProgress;
@@ -150,7 +152,7 @@ class DashboardPage extends StatelessWidget {
               ]),
               const SizedBox(height: 12),
               Text(
-                  '储蓄率 ${(metrics.savingsRate * 100).round()}% · 当前净资产 ${money(metrics.netWorth)}${isDemoMode ? ' · 本地演示' : ''}',
+                  '储蓄率 ${(metrics.savingsRate * 100).round()}% · 当前净资产 $netWorthText${isDemoMode ? ' · 本地演示' : ''}',
                   style: const TextStyle(
                       color: paInkFaint, fontSize: 11, height: 1.5)),
               const SizedBox(height: 20),
@@ -208,8 +210,9 @@ class DashboardPage extends StatelessWidget {
                           label: '当前净资产',
                           value: metrics.netWorth,
                           icon: Icons.account_balance_wallet_outlined,
-                          caption: '资产 − 负债',
-                          positive: metrics.netWorth >= 0)),
+                          caption: netWorthPending ? '部分账户待换算' : '资产 − 负债',
+                          pending: netWorthPending,
+                          positive: !netWorthPending && metrics.netWorth >= 0)),
                 ]);
               }),
               const SizedBox(height: 16),
@@ -310,8 +313,7 @@ class DashboardPage extends StatelessWidget {
 
   Widget _inlineAmount(String label, String value, Color color) {
     return Row(mainAxisSize: MainAxisSize.min, children: [
-      Text(label,
-          style: const TextStyle(color: paInkSub, fontSize: 11.5)),
+      Text(label, style: const TextStyle(color: paInkSub, fontSize: 11.5)),
       const SizedBox(width: 5),
       Text(value,
           style: TextStyle(
@@ -346,8 +348,7 @@ class DashboardPage extends StatelessWidget {
   }
 
   /// 1px 发丝线行；收入是唯一带色的金额。
-  Widget _transactionRow(
-      BuildContext context, FinanceTransaction transaction) {
+  Widget _transactionRow(BuildContext context, FinanceTransaction transaction) {
     final adjustment = transaction.isAdjustment;
     final income = transaction.type == TransactionType.income;
     final positive = adjustment ? transaction.amount >= 0 : income;
@@ -362,9 +363,7 @@ class DashboardPage extends StatelessWidget {
     return InkWell(
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => TransactionDetailPage(
-              ledger: ledger,
-              assets: assets,
-              transaction: transaction))),
+              ledger: ledger, assets: assets, transaction: transaction))),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 11),
         decoration: const BoxDecoration(
@@ -372,7 +371,8 @@ class DashboardPage extends StatelessWidget {
         ),
         child: Row(children: [
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

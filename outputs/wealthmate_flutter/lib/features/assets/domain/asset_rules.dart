@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import '../../../domain/models.dart';
+import '../../../domain/transaction_query.dart' as finance;
 
 /// Pure account, exchange-rate, and net-worth decisions for Assets.
 class AssetRules {
@@ -183,30 +184,99 @@ class AssetRules {
     return state.copyWith(exchangeRates: rates, accounts: accounts);
   }
 
+  /// Frozen CNY opening for [account], or null while no conversion is known.
+  ///
+  /// The account snapshot wins. When it is absent but the account still
+  /// carries the dated rate it was opened with, replay that stored rate, the
+  /// same fallback the backend replay uses. Today's rate is never substituted:
+  /// an unknown opening stays unknown so callers can show 「待换算」 instead of
+  /// a false zero.
+  static double? openingCnyAmountFor(Account account) {
+    if (account.currency.toUpperCase() == 'CNY') return account.openingBalance;
+    final snapshot = account.openingCnyAmount;
+    if (snapshot != null) return snapshot;
+    final rate = account.exchangeRate;
+    final rateDate = account.exchangeRateDate;
+    if (rate == null ||
+        !rate.isFinite ||
+        rate <= 0 ||
+        rateDate == null ||
+        DateTime.tryParse(rateDate) == null) {
+      return null;
+    }
+    return _round(account.openingBalance * rate, 6);
+  }
+
+  /// Newest stored CNY rate for [currency].
+  ///
+  /// Used when a foreign account is created or its currency changes: freezing
+  /// the already-stored, dated snapshot is deterministic and mirrors the
+  /// backend's account-creation path. It is not a live quotation and it never
+  /// rewrites an existing snapshot.
+  static ExchangeRateSnapshot? latestStoredRate(
+      FinanceState state, String currency) {
+    final base = currency.toUpperCase();
+    if (base == 'CNY') return null;
+    ExchangeRateSnapshot? latest;
+    for (final rate in state.exchangeRates) {
+      if (rate.baseCurrency.toUpperCase() != base ||
+          rate.quoteCurrency.toUpperCase() != 'CNY' ||
+          !rate.rate.isFinite ||
+          rate.rate <= 0 ||
+          DateTime.tryParse(rate.rateDate) == null) {
+        continue;
+      }
+      if (latest == null || rate.rateDate.compareTo(latest.rateDate) >= 0) {
+        latest = rate;
+      }
+    }
+    return latest;
+  }
+
   static List<AccountBalance> accountBalances(
     FinanceState state,
     List<FinanceTransaction> visibleTransactions,
   ) {
-    return state.accounts
-        .where((item) => item.isActive)
-        .map((account) => AccountBalance(
-              account: account,
-              balance: _accountBalance(account, visibleTransactions),
-            ))
-        .toList(growable: false);
+    return state.accounts.where((item) => item.isActive).map((account) {
+      final replay = _accountBalance(account, visibleTransactions);
+      return AccountBalance(
+        account: account,
+        balance: replay.balance,
+        isPending: replay.pending > 0,
+        pendingConversionCount: replay.pending,
+      );
+    }).toList(growable: false);
   }
 
-  static double _accountBalance(
+  static ({double balance, int pending}) _accountBalance(
       Account account, List<FinanceTransaction> transactions) {
-    var balance = account.currency.toUpperCase() == 'CNY'
-        ? account.openingBalance
-        : (account.openingCnyAmount ?? 0);
+    final opening = openingCnyAmountFor(account);
+    var balance = opening ?? 0;
+    var pending = opening == null ? 1 : 0;
     for (final transaction in transactions) {
+      if (!_affectsAccount(account, transaction)) continue;
       final amount = _cnyAmount(transaction);
-      if (amount == null) continue;
+      if (amount == null) {
+        pending += 1;
+        continue;
+      }
       balance = _applyTransaction(account, balance, transaction, amount);
     }
-    return _round(balance);
+    return (balance: _round(balance), pending: pending);
+  }
+
+  /// Whether [transaction] moves this account's balance at all.
+  ///
+  /// Missing conversions on unrelated entries must not mark every account as
+  /// pending; only entries that actually land here can make its balance
+  /// incomplete.
+  static bool _affectsAccount(Account account, FinanceTransaction transaction) {
+    if (transaction.isAdjustment) return transaction.accountId == account.id;
+    if (transaction.type == TransactionType.transfer) {
+      return transaction.fromAccountId == account.id ||
+          transaction.toAccountId == account.id;
+    }
+    return transaction.accountId == account.id;
   }
 
   /// Raw six-decimal replay used as the calibration basis.
@@ -221,9 +291,7 @@ class AssetRules {
     Account account, {
     String? asOfDate,
   }) {
-    final opening = account.currency.toUpperCase() == 'CNY'
-        ? account.openingBalance
-        : account.openingCnyAmount;
+    final opening = openingCnyAmountFor(account);
     var balance = opening ?? 0;
     var pending = opening == null ? 1 : 0;
     for (final transaction in state.transactions) {
@@ -265,12 +333,8 @@ class AssetRules {
         (transaction.type == TransactionType.income ? amount : -amount);
   }
 
-  static double? _cnyAmount(FinanceTransaction transaction) {
-    if (transaction.currency == 'CNY') {
-      return transaction.cnyAmount ?? transaction.amount;
-    }
-    return transaction.cnyAmount;
-  }
+  static double? _cnyAmount(FinanceTransaction transaction) =>
+      finance.cnyAmount(transaction);
 
   /// Raw money scale used by the backend replay and adjustment amounts.
   static double round6(double value) => _round(value, 6);

@@ -123,13 +123,22 @@ class AssetStore extends ChangeNotifier {
       _notifyMessageChanged();
       return;
     }
+    final normalizedCurrency = currency.toUpperCase();
+    // A new foreign account freezes the newest already-stored, dated rate.
+    // Waiting for the user to open 管理汇率 and refresh again was why a fresh
+    // account could sit at 0 even though the app already knew a usable rate.
+    final stored = AssetRules.latestStoredRate(_state, normalizedCurrency);
     final account = Account(
       id: 'account-${DateTime.now().microsecondsSinceEpoch}',
       name: name,
       type: type,
       accountKind: accountKind,
-      currency: currency.toUpperCase(),
+      currency: normalizedCurrency,
       openingBalance: openingBalance,
+      openingCnyAmount: stored == null ? null : openingBalance * stored.rate,
+      exchangeRate: stored?.rate,
+      exchangeRateDate: stored?.rateDate,
+      exchangeRateSource: stored?.source,
     );
     if (!await _apply(
         (baseState) => repository.saveAccount(account, baseState: baseState))) {
@@ -141,7 +150,9 @@ class AssetStore extends ChangeNotifier {
   }
 
   Future<void> updateAccount(Account account) async {
-    if (!_state.accounts.any((item) => item.id == account.id)) return;
+    final existing =
+        _state.accounts.where((item) => item.id == account.id).firstOrNull;
+    if (existing == null) return;
     if (AssetRules.hasDuplicateAccountName(
       _state,
       account.name,
@@ -151,13 +162,59 @@ class AssetStore extends ChangeNotifier {
       _notifyMessageChanged();
       return;
     }
+    var next = account;
+    final currencyChanged =
+        existing.currency.toUpperCase() != account.currency.toUpperCase();
+    if (currencyChanged) {
+      // Never carry one currency's snapshot into another.
+      next = _refreezeOpening(account);
+    } else if (existing.openingBalance != account.openingBalance) {
+      // An edited opening amount is re-frozen at the account's own dated rate;
+      // today's quote must not silently revalue it.
+      next = _refreezeOpening(account, preferAccountRate: true);
+    }
     if (!await _apply(
-        (baseState) => repository.saveAccount(account, baseState: baseState))) {
+        (baseState) => repository.saveAccount(next, baseState: baseState))) {
       return;
     }
     _message = '账户配置已保存';
     _notifyChanged();
     onLocalMutation?.call('assets.account.update');
+  }
+
+  /// Rebuilds a foreign opening snapshot from dated stored rates.
+  ///
+  /// [preferAccountRate] keeps the rate the account was already frozen with
+  /// (an edited opening amount); otherwise the newest stored rate for the
+  /// current currency is used. No usable rate leaves the opening pending, so
+  /// the UI can show 「待换算」 instead of 0.
+  Account _refreezeOpening(Account account, {bool preferAccountRate = false}) {
+    final previousRate = account.exchangeRate;
+    final previousDate = account.exchangeRateDate;
+    final previousSource = account.exchangeRateSource;
+    final cleared = account.copyWith(clearOpeningConversion: true);
+    if (cleared.currency.toUpperCase() == 'CNY') return cleared;
+    if (preferAccountRate &&
+        previousRate != null &&
+        previousRate.isFinite &&
+        previousRate > 0 &&
+        previousDate != null &&
+        DateTime.tryParse(previousDate) != null) {
+      return cleared.copyWith(
+        openingCnyAmount: cleared.openingBalance * previousRate,
+        exchangeRate: previousRate,
+        exchangeRateDate: previousDate,
+        exchangeRateSource: previousSource,
+      );
+    }
+    final stored = AssetRules.latestStoredRate(_state, cleared.currency);
+    if (stored == null) return cleared;
+    return cleared.copyWith(
+      openingCnyAmount: cleared.openingBalance * stored.rate,
+      exchangeRate: stored.rate,
+      exchangeRateDate: stored.rateDate,
+      exchangeRateSource: stored.source,
+    );
   }
 
   Future<void> archiveAccount(String id) async {

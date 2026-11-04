@@ -119,6 +119,7 @@ class Account {
     String? note,
     String? archivedAt,
     bool clearArchivedAt = false,
+    bool clearOpeningConversion = false,
     String? deletedAt,
     int? serverVersion,
     String? updatedAt,
@@ -130,10 +131,17 @@ class Account {
       accountKind: accountKind ?? this.accountKind,
       openingBalance: openingBalance ?? this.openingBalance,
       currency: currency ?? this.currency,
-      openingCnyAmount: openingCnyAmount ?? this.openingCnyAmount,
-      exchangeRate: exchangeRate ?? this.exchangeRate,
-      exchangeRateDate: exchangeRateDate ?? this.exchangeRateDate,
-      exchangeRateSource: exchangeRateSource ?? this.exchangeRateSource,
+      openingCnyAmount: clearOpeningConversion
+          ? null
+          : openingCnyAmount ?? this.openingCnyAmount,
+      exchangeRate:
+          clearOpeningConversion ? null : exchangeRate ?? this.exchangeRate,
+      exchangeRateDate: clearOpeningConversion
+          ? null
+          : exchangeRateDate ?? this.exchangeRateDate,
+      exchangeRateSource: clearOpeningConversion
+          ? null
+          : exchangeRateSource ?? this.exchangeRateSource,
       isLiquid: isLiquid ?? this.isLiquid,
       isDefaultPayment: isDefaultPayment ?? this.isDefaultPayment,
       note: note ?? this.note,
@@ -1329,10 +1337,27 @@ class UserProfile {
 }
 
 class AccountBalance {
-  const AccountBalance({required this.account, required this.balance});
+  const AccountBalance({
+    required this.account,
+    required this.balance,
+    this.isPending = false,
+    this.pendingConversionCount = 0,
+  });
 
   final Account account;
+
+  /// Known CNY book value. When [isPending] is true this is only the partial
+  /// sum of the entries that do have a frozen CNY snapshot; it must never be
+  /// presented as the account's actual balance.
   final double balance;
+
+  /// True when the opening amount or any related entry still lacks a usable
+  /// CNY snapshot. The UI shows 「待换算」 instead of [balance] in that case:
+  /// an unknown conversion is not the same thing as zero.
+  final bool isPending;
+
+  /// How many opening/transaction snapshots are missing for this account.
+  final int pendingConversionCount;
 }
 
 class BudgetProgress {
@@ -1380,11 +1405,22 @@ class FinanceMetrics {
   final double savings;
   final double savingsRate;
   final List<AccountBalance> accountBalances;
+
+  /// Totals are complete only while [hasPendingBalances] is false. Otherwise
+  /// they are the partial sum of the accounts that do have a frozen snapshot,
+  /// and the UI must label them as pending rather than show them as complete.
   final double assetTotal;
   final double liabilityTotal;
   final double netWorth;
   final List<BudgetProgress> budgetProgress;
   final int pendingConversionCount;
+
+  /// Number of active accounts whose opening/entries still lack a CNY
+  /// snapshot. A balance that is unknown is never reported as zero.
+  int get pendingAccountCount =>
+      accountBalances.where((item) => item.isPending).length;
+
+  bool get hasPendingBalances => pendingAccountCount > 0;
 
   /// Backward-compatible alias for consumers that used the original name.
   double get liabilities => liabilityTotal;

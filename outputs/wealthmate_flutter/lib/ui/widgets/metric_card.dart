@@ -11,6 +11,7 @@ class MetricCard extends StatelessWidget {
       required this.icon,
       this.caption,
       this.positive = false,
+      this.pending = false,
       this.valueSuffix,
       super.key});
 
@@ -20,11 +21,16 @@ class MetricCard extends StatelessWidget {
   final String? caption;
   final bool positive;
 
+  /// Renders 「待换算」 instead of [value]: the figure is incomplete because a
+  /// conversion snapshot is still missing, and an unknown is not zero.
+  final bool pending;
+
   /// Non-null renders the number with this suffix instead of the ¥ amount
   /// format (e.g. `%` for 储蓄率); the money format stays the default.
   final String? valueSuffix;
 
   String get _valueText {
+    if (pending) return '待换算';
     final suffix = valueSuffix;
     if (suffix == null) return money(value);
     final whole = value.truncateToDouble() == value;

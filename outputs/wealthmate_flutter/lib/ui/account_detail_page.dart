@@ -57,11 +57,20 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       body: ListenableBuilder(
         listenable: widget.store,
         builder: (context, _) {
-          final balance = widget.store.metrics.accountBalances
-                  .where((item) => item.account.id == widget.account.id)
-                  .firstOrNull
-                  ?.balance ??
-              0;
+          final entry = widget.store.metrics.accountBalances
+              .where((item) => item.account.id == widget.account.id)
+              .firstOrNull;
+          // Archived accounts are absent from the active balance list. Fall
+          // back to their frozen opening rather than labelling a known CNY
+          // account as pending.
+          final archived = widget.store.accounts
+                  .where((item) => item.id == widget.account.id)
+                  .firstOrNull ??
+              widget.account;
+          final isCny = archived.currency.toUpperCase() == 'CNY';
+          final balance = entry?.balance ??
+              (isCny ? archived.openingBalance : archived.openingCnyAmount);
+          final pending = entry?.isPending ?? (!isCny && balance == null);
           return ListView(
             padding: const EdgeInsets.fromLTRB(22, 10, 22, 32),
             children: [
@@ -76,11 +85,18 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                       FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerLeft,
-                          child: Text(money(balance),
-                              style: paNumberLarge.copyWith(fontSize: 34))),
+                          child: Text(pending ? '待换算' : money(balance ?? 0),
+                              style: paNumberLarge.copyWith(
+                                  fontSize: 34,
+                                  color: pending ? paWarn : paInk))),
                       const SizedBox(height: 6),
-                      const Text('余额由初始余额和已确认账目计算，可通过校准修正。',
-                          style: TextStyle(color: paInkFaint, fontSize: 10)),
+                      if (pending)
+                        const Text(
+                            '该账户缺少人民币汇率快照或存在待换算账目；请到「财富 → 管理汇率」保存对应币种汇率后自动换算。',
+                            style: TextStyle(color: paWarn, fontSize: 10))
+                      else
+                        const Text('余额由初始余额和已确认账目计算，可通过校准修正。',
+                            style: TextStyle(color: paInkFaint, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -201,20 +217,18 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
         .firstOrNull;
     if (currentAccount == null) return;
     final expected = widget.store.expectedBalanceFor(currentAccount);
-    final pendingDraft =
-        widget.store.calibrationDraftFor(currentAccount.id);
+    final pendingDraft = widget.store.calibrationDraftFor(currentAccount.id);
     final isForeign = currentAccount.currency.toUpperCase() != 'CNY';
     var input = '';
     final targetCny = await showDialog<double>(
         context: context,
-        builder: (dialogContext) => StatefulBuilder(
-            builder: (dialogContext, setDialogState) {
+        builder: (dialogContext) =>
+            StatefulBuilder(builder: (dialogContext, setDialogState) {
               final parsed = double.tryParse(input.trim());
               final valid = parsed != null && parsed.isFinite;
               final target = valid ? parsed : null;
-              final delta = target != null && expected != null
-                  ? target - expected
-                  : null;
+              final delta =
+                  target != null && expected != null ? target - expected : null;
               return AlertDialog(
                   title: const Text('余额校准'),
                   content: Column(
@@ -237,12 +251,12 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                       TextField(
                           autofocus: true,
                           enabled: expected != null,
-                          onChanged: (value) => setDialogState(() => input = value),
+                          onChanged: (value) =>
+                              setDialogState(() => input = value),
                           keyboardType: const TextInputType.numberWithOptions(
                               decimal: true, signed: true),
                           decoration: const InputDecoration(
-                              labelText: '校准后账面余额',
-                              hintText: '请输入实际人民币账面余额')),
+                              labelText: '校准后账面余额', hintText: '请输入实际人民币账面余额')),
                       if (delta != null && target != null) ...[
                         const SizedBox(height: 12),
                         Text('差额 ${signedMoney(delta)}',

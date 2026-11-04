@@ -59,8 +59,28 @@ class TransactionQuery {
 DateTime day(DateTime date) => DateTime(date.year, date.month, date.day);
 DateTime? businessDate(FinanceTransaction row) => DateTime.tryParse(
     row.date.substring(0, row.date.length < 10 ? row.date.length : 10));
-double? cnyAmount(FinanceTransaction row) =>
-    row.currency == 'CNY' ? row.cnyAmount ?? row.amount : row.cnyAmount;
+
+/// Frozen CNY value of one entry.
+///
+/// A foreign entry keeps its posted [FinanceTransaction.cnyAmount]. When that
+/// snapshot is missing but the entry carries the dated rate it was recorded
+/// with, replay from that stored rate — never from today's quotation. Only a
+/// genuinely rateless entry returns null (a pending conversion, not zero).
+double? cnyAmount(FinanceTransaction row) {
+  if (row.currency == 'CNY') return row.cnyAmount ?? row.amount;
+  if (row.cnyAmount != null) return row.cnyAmount;
+  final rate = row.exchangeRate;
+  final rateDate = row.exchangeRateDate;
+  if (rate == null ||
+      !rate.isFinite ||
+      rate <= 0 ||
+      rateDate == null ||
+      DateTime.tryParse(rateDate) == null) {
+    return null;
+  }
+  return row.amount * rate;
+}
+
 double knownTotal(Iterable<FinanceTransaction> rows) =>
     (rows.fold<double>(0, (sum, row) => sum + (cnyAmount(row) ?? 0)) * 100)
         .round() /

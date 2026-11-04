@@ -26,6 +26,9 @@ class WealthPage extends StatelessWidget {
           final liabilities = metrics.accountBalances
               .where((item) => item.account.type == AccountType.liability)
               .toList();
+          final assetsPending = assets.any((item) => item.isPending);
+          final liabilitiesPending = liabilities.any((item) => item.isPending);
+          final balancesPending = metrics.hasPendingBalances;
           return SafeArea(
               child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 100),
@@ -52,13 +55,29 @@ class WealthPage extends StatelessWidget {
                                       FittedBox(
                                           fit: BoxFit.scaleDown,
                                           alignment: Alignment.centerLeft,
-                                          child: Text(money(metrics.netWorth),
+                                          child: Text(
+                                              balancesPending
+                                                  ? '待换算'
+                                                  : money(metrics.netWorth),
                                               style: paNumberLarge)),
+                                      if (balancesPending) ...[
+                                        const SizedBox(height: 6),
+                                        const Text(
+                                            '部分账户缺少人民币汇率快照，合计暂不可用；不会按 0 计入。',
+                                            style: TextStyle(
+                                                color: paWarn, fontSize: 10)),
+                                        const SizedBox(height: 2),
+                                        Text('已知部分 ${money(metrics.netWorth)}',
+                                            style: const TextStyle(
+                                                color: paInkSub, fontSize: 10)),
+                                      ],
                                       const SizedBox(height: 17),
                                       Row(children: [
-                                        _summary('资产', metrics.assetTotal),
+                                        _summary('资产', metrics.assetTotal,
+                                            pending: assetsPending),
                                         const SizedBox(width: 32),
-                                        _summary('负债', metrics.liabilityTotal)
+                                        _summary('负债', metrics.liabilityTotal,
+                                            pending: liabilitiesPending)
                                       ]),
                                     ]))),
                         if (store.wealthView != null) ...[
@@ -126,13 +145,13 @@ class WealthPage extends StatelessWidget {
             ],
           ])));
 
-  Widget _summary(String label, double value) =>
+  Widget _summary(String label, double value, {bool pending = false}) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, style: const TextStyle(color: paInkSub, fontSize: 10)),
         const SizedBox(height: 5),
-        Text(money(value),
-            style: const TextStyle(
-                color: paInk,
+        Text(pending ? '待换算' : money(value),
+            style: TextStyle(
+                color: pending ? paWarn : paInk,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
                 fontFeatures: paTabularFigures))
@@ -191,9 +210,9 @@ class WealthPage extends StatelessWidget {
                                         color: paInkFaint, fontSize: 10)),
                               ])),
                           const SizedBox(width: 8),
-                          Text(money(item.balance),
-                              style: const TextStyle(
-                                  color: paInk,
+                          Text(item.isPending ? '待换算' : money(item.balance),
+                              style: TextStyle(
+                                  color: item.isPending ? paWarn : paInk,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   fontFeatures: paTabularFigures)),
