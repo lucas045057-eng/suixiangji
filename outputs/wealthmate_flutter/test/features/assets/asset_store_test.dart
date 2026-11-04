@@ -117,6 +117,10 @@ void main() {
       amount: 10,
       currency: 'USD',
       accountId: 'usd',
+      // Already converted by an earlier rate: a later manual FX save must
+      // leave landed history alone.
+      cnyAmount: 70,
+      exchangeRate: 7,
     );
     final store = _assetStore(
       memory,

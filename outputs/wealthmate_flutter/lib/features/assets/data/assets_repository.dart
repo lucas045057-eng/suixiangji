@@ -214,15 +214,28 @@ class AssetsRepository {
   Future<FinanceState> saveExchangeRate(ExchangeRateSnapshot snapshot,
       {FinanceState? baseState}) {
     final base = snapshot.baseCurrency.toUpperCase();
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    var sequence = 0;
     return session.write(
-      (current) => AssetRules.applyExchangeRate(current, snapshot),
+      (current) {
+        final withAccounts = AssetRules.applyExchangeRate(current, snapshot);
+        return AssetRules.applyExchangeRateToPendingTransactions(
+          withAccounts,
+          snapshot,
+          // A converted row is a new edit, never a replay of the original
+          // create: reusing an accepted client_op_id would make the server
+          // treat the payload as an idempotent duplicate and ignore it.
+          operationId: (transaction) =>
+              'fx-${transaction.id}-$stamp-${sequence++}',
+        );
+      },
       deriveOperations: (current, next) {
         final before = {
           for (final account in current.accounts) account.id: account,
         };
         // Only accounts whose CNY opening snapshot is filled for the first
         // time produce an operation; a refresh never rewrites landed values.
-        return next.accounts
+        final operations = next.accounts
             .where((account) =>
                 account.isActive &&
                 account.currency.toUpperCase() == base &&
@@ -238,7 +251,35 @@ class AssetsRepository {
                 payload: accountWirePayload(account),
                 createdAt: DateTime.now().toIso8601String(),
                 baseVersion: before[account.id]?.serverVersion,
-                base: before[account.id]?.toJson()));
+                base: before[account.id]?.toJson()))
+            .toList();
+        // Pending foreign entries are converted in the same write, so their
+        // first CNY snapshot must travel to the server too. Without this the
+        // account would look converted locally but return to 「待换算」 after
+        // the next full pull.
+        final beforeTransactions = {
+          for (final transaction in current.transactions)
+            transaction.id: transaction,
+        };
+        for (final transaction in next.transactions) {
+          final previous = beforeTransactions[transaction.id];
+          if (previous == null ||
+              !AssetRules.shouldConvertWithRate(previous, snapshot) ||
+              transaction.cnyAmount == null) {
+            continue;
+          }
+          operations.add(SyncOperation(
+            clientOpId: transaction.clientOpId,
+            entity: 'transactions',
+            entityId: transaction.id,
+            type: SyncOperationType.upsert,
+            payload: transaction.toJson(),
+            createdAt: DateTime.now().toIso8601String(),
+            baseVersion: previous.serverVersion,
+            base: previous.toJson(),
+          ));
+        }
+        return operations;
       },
       initialState: baseState,
     );

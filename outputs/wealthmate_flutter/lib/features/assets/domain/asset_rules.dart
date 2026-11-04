@@ -184,6 +184,67 @@ class AssetRules {
     return state.copyWith(exchangeRates: rates, accounts: accounts);
   }
 
+  /// Whether [transaction] still needs its first CNY snapshot and this rate
+  /// can supply it.
+  ///
+  /// Only entries that never carried a CNY value or a dated rate qualify.
+  /// Anything already converted stays frozen: a later rate must not revalue
+  /// landed history.
+  static bool shouldConvertWithRate(
+      FinanceTransaction transaction, ExchangeRateSnapshot snapshot) {
+    final base = snapshot.baseCurrency.toUpperCase();
+    return base != 'CNY' &&
+        transaction.deletedAt == null &&
+        transaction.currency.toUpperCase() == base &&
+        transaction.cnyAmount == null &&
+        transaction.exchangeRate == null;
+  }
+
+  /// First conversion of one pending entry with a dated, just-saved snapshot.
+  ///
+  /// [clientOpId] must be a fresh operation identity: the converted row is a
+  /// new server-side edit, never a re-submission of the original create.
+  static FinanceTransaction convertPendingTransaction(
+    FinanceTransaction transaction,
+    ExchangeRateSnapshot snapshot, {
+    required String clientOpId,
+  }) {
+    return transaction.copyWith(
+      cnyAmount: _round(transaction.amount * snapshot.rate),
+      exchangeRate: snapshot.rate,
+      exchangeRateDate: snapshot.rateDate,
+      exchangeRateSource: snapshot.source,
+      conversionStatus: 'ready',
+      clientOpId: clientOpId,
+    );
+  }
+
+  /// Fills every rateless pending entry of the snapshot's currency.
+  ///
+  /// Saving a rate previously only filled account openings, so foreign
+  /// entries recorded before any rate existed stayed pending forever: the
+  /// account kept showing 「待换算」 and re-entering the same rate changed
+  /// nothing. This is a first conversion, not a revaluation.
+  static FinanceState applyExchangeRateToPendingTransactions(
+    FinanceState state,
+    ExchangeRateSnapshot snapshot, {
+    required String Function(FinanceTransaction transaction) operationId,
+  }) {
+    if (!state.transactions
+        .any((transaction) => shouldConvertWithRate(transaction, snapshot))) {
+      // Nothing qualified: keep the same list so callers that compare
+      // identity (a rate refresh must not touch landed entries) stay true.
+      return state;
+    }
+    return state.copyWith(transactions: [
+      for (final transaction in state.transactions)
+        shouldConvertWithRate(transaction, snapshot)
+            ? convertPendingTransaction(transaction, snapshot,
+                clientOpId: operationId(transaction))
+            : transaction,
+    ]);
+  }
+
   /// Frozen CNY opening for [account], or null while no conversion is known.
   ///
   /// The account snapshot wins. When it is absent but the account still

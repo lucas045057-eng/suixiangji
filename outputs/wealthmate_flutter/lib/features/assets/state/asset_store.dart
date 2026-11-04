@@ -652,11 +652,12 @@ class AssetStore extends ChangeNotifier {
       source: source.trim(),
       updatedAt: DateTime.now().toIso8601String(),
     );
+    final pendingBefore = _pendingConversionCountFor(base);
     if (!await _apply((baseState) =>
         repository.saveExchangeRate(snapshot, baseState: baseState))) {
       return;
     }
-    _message = '汇率已保存到本地，账户快照将随账目同步';
+    _message = _rateSavedMessage(pendingBefore, base);
     _notifyChanged();
     onLocalMutation?.call('assets.rate.manual');
   }
@@ -674,19 +675,38 @@ class AssetStore extends ChangeNotifier {
       if (!snapshot.rate.isFinite || snapshot.rate <= 0) {
         throw const ApiFailure(ApiFailureKind.validation, '公开汇率无效');
       }
+      final base = baseCurrency.toUpperCase();
+      final pendingBefore = _pendingConversionCountFor(base);
       if (!await _apply((baseState) =>
           repository.saveExchangeRate(snapshot, baseState: baseState))) {
         return;
       }
+      final saved = _rateSavedMessage(pendingBefore, base);
       _message = json['stale'] == true
-          ? '汇率服务暂不可用，使用 ${snapshot.rateDate} 的缓存汇率'
-          : '已获取并保存 ${snapshot.baseCurrency}/CNY 汇率';
+          ? '汇率服务暂不可用，使用 ${snapshot.rateDate} 的缓存汇率；$saved'
+          : '已获取 ${snapshot.baseCurrency}/CNY 汇率；$saved';
       _notifyChanged();
       onLocalMutation?.call('assets.rate.refresh');
     } on Object {
       _message = '获取汇率失败，已保留上一次可靠汇率';
       _notifyMessageChanged();
     }
+  }
+
+  int _pendingConversionCountFor(String base) => _state.transactions
+      .where((transaction) =>
+          transaction.deletedAt == null &&
+          transaction.currency.toUpperCase() == base &&
+          transaction.cnyAmount == null &&
+          transaction.exchangeRate == null)
+      .length;
+
+  /// Tells the user whether saving this rate actually resolved pending
+  /// entries. "Saved" alone previously looked like a conversion even when only
+  /// frozen values remained.
+  String _rateSavedMessage(int pendingBefore, String base) {
+    final converted = pendingBefore - _pendingConversionCountFor(base);
+    return converted > 0 ? '已按该汇率折算 $converted 笔待换算账目' : '已冻结的账户与历史金额不会被重估';
   }
 
   static String _dayKey(DateTime value) =>
