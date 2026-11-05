@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../domain/date_text.dart';
 import '../domain/models.dart';
 import 'drift_database.dart';
 import 'sync_queue.dart';
@@ -236,12 +237,43 @@ class LocalRepository {
     }
     try {
       final decoded = jsonDecode(raw) as Map;
-      return FinanceState.fromJson(decoded.cast<String, Object?>());
+      final normalized = _normalizeTransactionDates(decoded);
+      final state = FinanceState.fromJson(decoded.cast<String, Object?>());
+      if (normalized) {
+        // Persist the one-time repair so every later launch (and the next
+        // sync payload) uses the canonical date text. A failed repair must
+        // not prevent the (already normalized) in-memory state from loading.
+        try {
+          await _write(storageKey, jsonEncode(decoded));
+        } on Object {
+          // Retry on the next load.
+        }
+      }
+      return state;
     } on FormatException {
       return null;
     } on TypeError {
       return null;
     }
+  }
+
+  /// Rewrites legacy human date text (for example `2026年11月4日`,
+  /// `2026/11/4`, `2026.11.4`) to `YYYY-MM-DD` in the decoded aggregate.
+  /// Returns whether anything changed.
+  bool _normalizeTransactionDates(Map<dynamic, dynamic> decoded) {
+    final transactions = decoded['transactions'];
+    if (transactions is! List) return false;
+    var changed = false;
+    for (final item in transactions) {
+      if (item is! Map) continue;
+      final raw = item['date'];
+      final normalized = normalizeDateText(raw);
+      if (normalized != null && normalized != raw) {
+        item['date'] = normalized;
+        changed = true;
+      }
+    }
+    return changed;
   }
 
   /// Reports whether this partition has a persisted aggregate snapshot.

@@ -32,15 +32,21 @@ class _LedgerPageState extends State<LedgerPage> {
   String query = '';
   TransactionType? filter;
   String? category;
+  Set<String>? categoryIds;
+  String? accountId;
+  DateTime? rangeStart;
+  DateTime? rangeEnd;
 
   @override
   void initState() {
     super.initState();
     filter = widget.initialQuery.type;
     query = widget.initialQuery.search;
-    category = widget.initialQuery.categoryIds?.length == 1
-        ? widget.initialQuery.categoryIds!.single
-        : null;
+    categoryIds = widget.initialQuery.categoryIds;
+    accountId = widget.initialQuery.accountId;
+    rangeStart = widget.initialQuery.start;
+    rangeEnd = widget.initialQuery.end;
+    category = categoryIds?.length == 1 ? categoryIds!.single : null;
   }
 
   @override
@@ -49,14 +55,13 @@ class _LedgerPageState extends State<LedgerPage> {
       listenable: widget.ledger,
       builder: (context, _) {
         final transactions = TransactionQuery(
-                start: widget.initialQuery.start,
-                end: widget.initialQuery.end,
+                start: rangeStart,
+                end: rangeEnd,
                 type: filter,
                 search: query,
-                accountId: widget.initialQuery.accountId,
-                categoryIds: category == null
-                    ? widget.initialQuery.categoryIds
-                    : {category!})
+                accountId: accountId,
+                categoryIds:
+                    category == null ? categoryIds : {category!})
             .select(widget.ledger.state);
         return SafeArea(
             child:
@@ -93,10 +98,19 @@ class _LedgerPageState extends State<LedgerPage> {
               child: Row(children: [
                 FilterChip(
                     label: const Text('全部'),
-                    selected: filter == null,
+                    selected: filter == null &&
+                        category == null &&
+                        categoryIds == null &&
+                        accountId == null &&
+                        rangeStart == null &&
+                        rangeEnd == null,
                     onSelected: (_) => setState(() {
                           filter = null;
                           category = null;
+                          categoryIds = null;
+                          accountId = null;
+                          rangeStart = null;
+                          rangeEnd = null;
                         })),
                 const SizedBox(width: 8),
                 FilterChip(
@@ -117,18 +131,16 @@ class _LedgerPageState extends State<LedgerPage> {
                   isExpanded: true,
                   value: category,
                   hint: const Text('筛选分类'),
-                  items: [
-                    const DropdownMenuItem(
-                        value: 'uncategorized', child: Text('未分类')),
-                    for (final item in widget.ledger.state.categories)
-                      DropdownMenuItem(value: item.id, child: Text(item.name)),
-                  ],
-                  onChanged: (value) => setState(() => category = value))),
-          if (widget.initialQuery.start != null)
+                  items: _categoryItems(),
+                  onChanged: (value) => setState(() {
+                        category = value;
+                        categoryIds = value == null ? null : {value};
+                      }))),
+          if (rangeStart != null && rangeEnd != null)
             Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 22),
                 child: Text(
-                    '${widget.initialQuery.start!.toIso8601String().substring(0, 10)} 至 ${widget.initialQuery.end!.toIso8601String().substring(0, 10)} · ${transactions.length} 笔',
+                    '${rangeStart!.toIso8601String().substring(0, 10)} 至 ${rangeEnd!.toIso8601String().substring(0, 10)} · ${transactions.length} 笔',
                     style: const TextStyle(fontSize: 11))),
           Expanded(
               child: transactions.isEmpty
@@ -144,6 +156,24 @@ class _LedgerPageState extends State<LedgerPage> {
         ]));
       },
     );
+  }
+
+  /// Includes the inherited drilldown category even when it is a synthetic
+  /// key (for example stats' `other`) that is absent from the local category
+  /// list. Otherwise DropdownButton asserts on a value with no matching item.
+  List<DropdownMenuItem<String>> _categoryItems() {
+    final items = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(value: 'uncategorized', child: Text('未分类')),
+      for (final item in widget.ledger.state.categories)
+        DropdownMenuItem(value: item.id, child: Text(item.name)),
+    ];
+    final selected = category;
+    if (selected != null && !items.any((item) => item.value == selected)) {
+      items.add(DropdownMenuItem(
+          value: selected,
+          child: Text(selected == 'other' ? '其他' : selected)));
+    }
+    return items;
   }
 
   Widget _row(BuildContext context, FinanceTransaction transaction) {

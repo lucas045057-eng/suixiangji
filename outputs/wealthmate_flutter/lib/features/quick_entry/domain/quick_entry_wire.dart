@@ -1,9 +1,10 @@
 import 'dart:convert';
 
+export '../../../domain/date_text.dart' show isIsoDate;
+
 /// Small, dependency-free helpers for the `/agent/drafts` wire contract.
 /// Money crosses the wire as decimal strings, never as binary floats.
 final RegExp _moneyPattern = RegExp(r'^[0-9]{1,20}(?:\.[0-9]{1,6})?$');
-final RegExp _isoDatePattern = RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
 
 double? parseMoneyText(Object? value) {
   if (value is! String || !_moneyPattern.hasMatch(value)) return null;
@@ -27,11 +28,6 @@ BigInt? moneyUnits(Object? value) {
   final fraction = dot < 0 ? '' : value.substring(dot + 1);
   return BigInt.parse(whole) * BigInt.from(1000000) +
       BigInt.parse(fraction.padRight(6, '0'));
-}
-
-bool isIsoDate(Object? value) {
-  if (value is! String || !_isoDatePattern.hasMatch(value)) return false;
-  return DateTime.tryParse(value) != null;
 }
 
 String dateKey(DateTime value) =>

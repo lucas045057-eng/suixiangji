@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/date_text.dart';
 import '../../domain/models.dart';
 import '../../features/ledger/domain/ledger_rules.dart';
 
@@ -139,7 +140,7 @@ class _DraftEditorDialogState extends State<DraftEditorDialog> {
     if (amount <= 0) missingFacts.add('请输入金额');
     if (categoryId == null) missingFacts.add('请选择分类');
     if (accountId == null) missingFacts.add('请选择支付账户');
-    if (date.length != 10) missingFacts.add('请输入正确日期');
+    if (!isIsoDate(date)) missingFacts.add('请输入正确日期');
     final amountChanged = amount != widget.draft.amount;
     Navigator.pop(
         context,

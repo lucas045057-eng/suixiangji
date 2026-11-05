@@ -1,3 +1,4 @@
+import 'date_text.dart';
 import 'models.dart';
 
 /// Shared ledger, chart and budget selection. Business date determines the
@@ -57,8 +58,7 @@ class TransactionQuery {
 }
 
 DateTime day(DateTime date) => DateTime(date.year, date.month, date.day);
-DateTime? businessDate(FinanceTransaction row) => DateTime.tryParse(
-    row.date.substring(0, row.date.length < 10 ? row.date.length : 10));
+DateTime? businessDate(FinanceTransaction row) => parseLooseDate(row.date);
 
 /// Frozen CNY value of one entry.
 ///

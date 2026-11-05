@@ -156,6 +156,9 @@ class FinanceStore extends ChangeNotifier {
       ledger.adoptState(next);
       budget.adoptState(next);
       insights.adoptState(next, notify: true);
+      ledger.notifyListeners();
+      assets.notifyListeners();
+      budget.notifyListeners();
       notifyListeners();
     };
     ledger.onLocalMutation = _publishLocalMutation;
@@ -373,6 +376,9 @@ class FinanceStore extends ChangeNotifier {
     await repository.save(_state);
     if (_session != started) return;
     _message = null;
+    ledger.notifyListeners();
+    assets.notifyListeners();
+    budget.notifyListeners();
     notifyListeners();
   }
 

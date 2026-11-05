@@ -405,6 +405,7 @@ class QuickEntryRepository {
     return FinanceTransaction(
       id: id,
       date: draft.date,
+      occurredAt: LedgerRules.occurredAtFor(draft.date, DateTime.now()),
       type: draft.type,
       amount: draft.amount,
       currency: draft.currency,

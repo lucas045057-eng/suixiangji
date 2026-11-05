@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../features/insights/domain/insight_rules.dart';
+import 'date_text.dart';
 import 'models.dart';
 
 export '../features/insights/domain/insight_rules.dart' show PeriodPoint;
@@ -101,6 +102,7 @@ class FinanceRules {
     return draft.amount > 0 &&
         draft.categoryId != null &&
         draft.accountId != null &&
+        isIsoDate(draft.date) &&
         draft.missingFacts.isEmpty &&
         draft.confidence >= confirmationThreshold;
   }

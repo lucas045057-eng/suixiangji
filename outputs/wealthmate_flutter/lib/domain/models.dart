@@ -1,3 +1,5 @@
+import 'date_text.dart';
+
 enum AccountType { asset, liability }
 
 enum AccountKind {
@@ -381,7 +383,7 @@ class FinanceTransaction {
   factory FinanceTransaction.fromJson(Map<String, Object?> json) =>
       FinanceTransaction(
         id: json['id']! as String,
-        date: json['date']! as String,
+        date: normalizeDateText(json['date']) ?? json['date']! as String,
         occurredAt: json['occurred_at'] as String?,
         type: transactionTypeFromJson(json['type']),
         amount: _jsonDouble(json['amount']) ?? 0,
